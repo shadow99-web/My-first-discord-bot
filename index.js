@@ -1,49 +1,52 @@
-const { Client, GatewayIntentBits, REST, Routes } = require("discord.js");
-require("dotenv").config();
+require('dotenv').config();
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 
+// Create client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Register slash commands
+// Define your commands
 const commands = [
-  {
-    name: "ping",
-    description: "Replies with Pong!",
-  },
-  {
-    name: "avatar",
-    description: "Shows your avatar!",
-  },
-];
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('Replies with Pong!'),
+  new SlashCommandBuilder()
+    .setName('avatar')
+    .setDescription('Shows your avatar')
+].map(command => command.toJSON());
 
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+// Register guild commands
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log("Started refreshing application (/) commands.");
-
+    console.log('Registering guild commands...');
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: commands },
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), // Replace GUILD_ID in .env
+      { body: commands }
     );
-
-    console.log("Successfully reloaded application (/) commands.");
+    console.log('✅ Guild commands registered!');
   } catch (error) {
     console.error(error);
   }
 })();
 
-client.on("ready", () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+// Event when bot is ready
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}!`);
 });
 
-client.on("interactionCreate", async interaction => {
+// Event to handle slash commands
+client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === "ping") {
-    await interaction.reply("🏓 Pong!");
-  } else if (interaction.commandName === "avatar") {
-    await interaction.reply(interaction.user.displayAvatarURL());
+  const { commandName } = interaction;
+
+  if (commandName === 'ping') {
+    await interaction.reply('Pong!');
+  } else if (commandName === 'avatar') {
+    await interaction.reply({ content: interaction.user.displayAvatarURL({ dynamic: true }) });
   }
 });
 
+// Login bot
 client.login(process.env.TOKEN);
