@@ -206,3 +206,36 @@ client.on('interactionCreate', async interaction => {
       await channel.bulkDelete(await channel.messages.fetch({ limit: 100 }));
       return interaction.reply({ content: '💣 Channel nuked!', ephemeral: true });
     }
+// ---------------- LOCK / UNLOCK / HIDE / UNHIDE ----------------
+    // Single channel
+    if (commandName === 'lock') await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }) && interaction.reply('🔒 Channel locked!');
+    if (commandName === 'unlock') await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: true }) && interaction.reply('🔓 Channel unlocked!');
+    if (commandName === 'hide') await channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }) && interaction.reply('🙈 Channel hidden!');
+    if (commandName === 'unhide') await channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true }) && interaction.reply('👀 Channel unhidden!');
+
+    // All channels
+    if (commandName === 'lockall') {
+      guild.channels.cache.forEach(ch => ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }));
+      return interaction.reply('🔒 All channels locked!');
+    }
+    if (commandName === 'unlockall') {
+      guild.channels.cache.forEach(ch => ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: true }));
+      return interaction.reply('🔓 All channels unlocked!');
+    }
+    if (commandName === 'hideall') {
+      guild.channels.cache.forEach(ch => ch.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }));
+      return interaction.reply('🙈 All channels hidden!');
+    }
+    if (commandName === 'unhideall') {
+      guild.channels.cache.forEach(ch => ch.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true }));
+      return interaction.reply('👀 All channels unhidden!');
+    }
+
+  } catch (err) {
+    console.error(err);
+    return interaction.reply('❌ An error occurred while executing the command.');
+  }
+});
+
+// ---------------- BOT LOGIN ----------------
+client.login(process.env.TOKEN);
