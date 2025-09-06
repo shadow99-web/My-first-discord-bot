@@ -10,50 +10,85 @@ const client = new Client({
   ]
 });
 
-// ----------------- DEFINE COMMANDS -----------------
+// ----------------- COMMAND DEFINITIONS -----------------
 const commands = [
-  // Single-user commands
+  // ---------- Moderation / Single Member ----------
   new SlashCommandBuilder().setName('ping').setDescription('Replies with Pong!'),
   new SlashCommandBuilder().setName('ban').setDescription('Ban a member')
-    .addUserOption(option => option.setName('user').setDescription('User to ban').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User to ban').setRequired(true)),
   new SlashCommandBuilder().setName('unban').setDescription('Unban a member')
-    .addUserOption(option => option.setName('user').setDescription('User to unban').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User to unban').setRequired(true)),
   new SlashCommandBuilder().setName('kick').setDescription('Kick a member')
-    .addUserOption(option => option.setName('user').setDescription('User to kick').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User to kick').setRequired(true)),
   new SlashCommandBuilder().setName('timeout').setDescription('Timeout a member (seconds)')
-    .addUserOption(option => option.setName('user').setDescription('User to timeout').setRequired(true))
-    .addIntegerOption(option => option.setName('duration').setDescription('Duration in seconds').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User to timeout').setRequired(true))
+    .addIntegerOption(o => o.setName('duration').setDescription('Duration in seconds').setRequired(true)),
   new SlashCommandBuilder().setName('untimeout').setDescription('Remove timeout from a member')
-    .addUserOption(option => option.setName('user').setDescription('User to untimeout').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User to untimeout').setRequired(true)),
   new SlashCommandBuilder().setName('role').setDescription('Add role to a member')
-    .addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
-    .addRoleOption(option => option.setName('role').setDescription('Role to give').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+    .addRoleOption(o => o.setName('role').setDescription('Role to give').setRequired(true)),
   new SlashCommandBuilder().setName('unrole').setDescription('Remove role from a member')
-    .addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
-    .addRoleOption(option => option.setName('role').setDescription('Role to remove').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+    .addRoleOption(o => o.setName('role').setDescription('Role to remove').setRequired(true)),
   new SlashCommandBuilder().setName('purge').setDescription('Delete a number of messages')
-    .addIntegerOption(option => option.setName('amount').setDescription('Number of messages').setRequired(true)),
+    .addIntegerOption(o => o.setName('amount').setDescription('Number of messages').setRequired(true)),
   new SlashCommandBuilder().setName('nick').setDescription('Change nickname')
-    .addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
-    .addStringOption(option => option.setName('nickname').setDescription('New nickname').setRequired(true)),
+    .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+    .addStringOption(o => o.setName('nickname').setDescription('New nickname').setRequired(true)),
   new SlashCommandBuilder().setName('nuke').setDescription('Delete all messages in the channel'),
 
-  // Bulk commands
+  // ---------- Bulk ----------
   new SlashCommandBuilder().setName('roleall').setDescription('Give a role to all members')
-    .addRoleOption(option => option.setName('role').setDescription('Role to give').setRequired(true)),
+    .addRoleOption(o => o.setName('role').setDescription('Role to give').setRequired(true)),
   new SlashCommandBuilder().setName('unroleall').setDescription('Remove a role from all members')
-    .addRoleOption(option => option.setName('role').setDescription('Role to remove').setRequired(true)),
+    .addRoleOption(o => o.setName('role').setDescription('Role to remove').setRequired(true)),
   new SlashCommandBuilder().setName('lockall').setDescription('Lock all text channels'),
   new SlashCommandBuilder().setName('unlockall').setDescription('Unlock all text channels'),
   new SlashCommandBuilder().setName('hideall').setDescription('Hide all channels'),
   new SlashCommandBuilder().setName('unhideall').setDescription('Unhide all channels'),
   new SlashCommandBuilder().setName('untimeoutall').setDescription('Remove timeout from all members'),
-  new SlashCommandBuilder().setName('unbanall').setDescription('Unban all banned users')
-].map(command => command.toJSON());
+  new SlashCommandBuilder().setName('unbanall').setDescription('Unban all banned users'),
+
+  // ---------- Info / Utility ----------
+  new SlashCommandBuilder().setName('teaminfo').setDescription('Show info about team'),
+  new SlashCommandBuilder().setName('serverinfo').setDescription('Show server info'),
+  new SlashCommandBuilder().setName('servericon').setDescription('Show server icon'),
+  new SlashCommandBuilder().setName('serverbanner').setDescription('Show server banner'),
+  new SlashCommandBuilder().setName('roleinfo').setDescription('Show role info')
+    .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true)),
+  new SlashCommandBuilder().setName('userinfo').setDescription('Show user info')
+    .addUserOption(o => o.setName('user').setDescription('User').setRequired(true)),
+  new SlashCommandBuilder().setName('membercount').setDescription('Show total members'),
+  new SlashCommandBuilder().setName('boostcount').setDescription('Show server boosts'),
+  new SlashCommandBuilder().setName('steal').setDescription('Steal an emoji')
+    .addStringOption(o => o.setName('emoji').setDescription('Emoji to steal').setRequired(true)),
+  new SlashCommandBuilder().setName('afk').setDescription('Set AFK status')
+    .addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(false)),
+  new SlashCommandBuilder().setName('translate').setDescription('Translate a message')
+    .addStringOption(o => o.setName('text').setDescription('Text to translate').setRequired(true)),
+  new SlashCommandBuilder().setName('slowmode').setDescription('Set slowmode')
+    .addIntegerOption(o => o.setName('duration').setDescription('Seconds').setRequired(true)),
+  new SlashCommandBuilder().setName('slowmode_disable').setDescription('Disable slowmode'),
+  new SlashCommandBuilder().setName('serverrename').setDescription('Rename server')
+    .addStringOption(o => o.setName('name').setDescription('New server name').setRequired(true)),
+  new SlashCommandBuilder().setName('setprefix').setDescription('Set bot prefix')
+    .addStringOption(o => o.setName('prefix').setDescription('New prefix').setRequired(true)),
+  new SlashCommandBuilder().setName('stats').setDescription('Bot stats'),
+  new SlashCommandBuilder().setName('uptime').setDescription('Bot uptime'),
+  new SlashCommandBuilder().setName('invite').setDescription('Bot invite link'),
+
+  // ---------- Listing ----------
+  new SlashCommandBuilder().setName('list_roles').setDescription('List all roles'),
+  new SlashCommandBuilder().setName('list_boosters').setDescription('List all boosters'),
+  new SlashCommandBuilder().setName('list_bots').setDescription('List all bots'),
+  new SlashCommandBuilder().setName('list_banned').setDescription('List all banned users'),
+  new SlashCommandBuilder().setName('list_admins').setDescription('List all admins'),
+  new SlashCommandBuilder().setName('list_moderators').setDescription('List all moderators')
+].map(c => c.toJSON());
 
 // ----------------- REGISTER COMMANDS -----------------
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
 (async () => {
   try {
     console.log('Registering guild commands...');
@@ -62,87 +97,77 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
       { body: commands }
     );
     console.log('✅ Commands registered!');
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
   }
 })();
 
 // ----------------- BOT EVENTS -----------------
-client.once('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-});
+client.once('ready', () => console.log(`Logged in as ${client.user.tag}!`));
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
   const { commandName, options, member, guild } = interaction;
 
   try {
-    // ---------- PING ----------
+    // ----------------- Moderation -----------------
     if (commandName === 'ping') return interaction.reply('Pong!');
 
-    // ---------- SINGLE MEMBER COMMANDS ----------
     if (commandName === 'ban') {
-      if (!member.permissions.has(PermissionFlagsBits.BanMembers))
-        return interaction.reply('❌ You do not have permission to ban members.');
+      if (!member.permissions.has(PermissionFlagsBits.BanMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const target = guild.members.cache.get(user.id);
       if (!target) return interaction.reply('User not found.');
       await target.ban({ reason: `Banned by ${member.user.tag}` });
-      return interaction.reply(`✅ ${user.tag} has been banned.`);
+      return interaction.reply(`✅ ${user.tag} banned.`);
     }
 
     if (commandName === 'unban') {
-      if (!member.permissions.has(PermissionFlagsBits.BanMembers))
-        return interaction.reply('❌ You do not have permission to unban members.');
+      if (!member.permissions.has(PermissionFlagsBits.BanMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       await guild.bans.remove(user.id);
-      return interaction.reply(`✅ ${user.tag} has been unbanned.`);
+      return interaction.reply(`✅ ${user.tag} unbanned.`);
     }
 
     if (commandName === 'kick') {
-      if (!member.permissions.has(PermissionFlagsBits.KickMembers))
-        return interaction.reply('❌ You do not have permission to kick members.');
+      if (!member.permissions.has(PermissionFlagsBits.KickMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const target = guild.members.cache.get(user.id);
       if (!target) return interaction.reply('User not found.');
       await target.kick(`Kicked by ${member.user.tag}`);
-      return interaction.reply(`✅ ${user.tag} has been kicked.`);
+      return interaction.reply(`✅ ${user.tag} kicked.`);
     }
 
     if (commandName === 'timeout') {
-      if (!member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return interaction.reply('❌ You do not have permission to timeout members.');
+      if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const duration = options.getInteger('duration') * 1000;
       const target = guild.members.cache.get(user.id);
       if (!target) return interaction.reply('User not found.');
       await target.timeout(duration, `Timed out by ${member.user.tag}`);
-      return interaction.reply(`✅ ${user.tag} timed out for ${options.getInteger('duration')} seconds.`);
+      return interaction.reply(`✅ ${user.tag} timed out for ${options.getInteger('duration')}s.`);
     }
 
     if (commandName === 'untimeout') {
-      if (!member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return interaction.reply('❌ You do not have permission to remove timeout.');
+      if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const target = guild.members.cache.get(user.id);
       if (!target) return interaction.reply('User not found.');
       await target.timeout(null);
-      return interaction.reply(`✅ ${user.tag} is no longer timed out.`);
+      return interaction.reply(`✅ ${user.tag} un-timed out.`);
     }
 
     if (commandName === 'role') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return interaction.reply('❌ You do not have permission to manage roles.');
+      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const role = options.getRole('role');
       const target = guild.members.cache.get(user.id);
       await target.roles.add(role);
-      return interaction.reply(`✅ ${user.tag} has been given the role ${role.name}.`);
+      return interaction.reply(`✅ ${user.tag} given role ${role.name}.`);
     }
 
     if (commandName === 'unrole') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return interaction.reply('❌ You do not have permission to manage roles.');
+      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const role = options.getRole('role');
       const target = guild.members.cache.get(user.id);
@@ -151,97 +176,37 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (commandName === 'purge') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return interaction.reply('❌ You do not have permission to purge messages.');
+      if (!member.permissions.has(PermissionFlagsBits.ManageMessages)) return interaction.reply('❌ No permission.');
       const amount = options.getInteger('amount');
       await interaction.channel.bulkDelete(amount, true);
       return interaction.reply({ content: `✅ Deleted ${amount} messages.`, ephemeral: true });
     }
 
     if (commandName === 'nick') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageNicknames))
-        return interaction.reply('❌ You do not have permission to change nicknames.');
+      if (!member.permissions.has(PermissionFlagsBits.ManageNicknames)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
       const nickname = options.getString('nickname');
       const target = guild.members.cache.get(user.id);
       await target.setNickname(nickname);
-      return interaction.reply(`✅ ${user.tag}'s nickname changed to ${nickname}.`);
+      return interaction.reply(`✅ ${user.tag} nickname changed to ${nickname}.`);
     }
 
     if (commandName === 'nuke') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return interaction.reply('❌ You do not have permission to nuke the channel.');
+      if (!member.permissions.has(PermissionFlagsBits.ManageChannels)) return interaction.reply('❌ No permission.');
       const channel = interaction.channel;
       await channel.clone({ reason: `Nuked by ${member.user.tag}` });
       await channel.delete();
       return;
     }
 
-    // ---------- BULK COMMANDS ----------
+    // ----------------- Bulk -----------------
     if (commandName === 'roleall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return interaction.reply('❌ You do not have permission to manage roles.');
+      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
       const role = options.getRole('role');
       guild.members.cache.forEach(m => { if (!m.user.bot) m.roles.add(role).catch(() => {}); });
       return interaction.reply(`✅ Role ${role.name} given to all members.`);
     }
 
     if (commandName === 'unroleall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return interaction.reply('❌ You do not have permission to manage roles.');
-      const role = options.getRole('role');
-      guild.members.cache.forEach(m => { if (!m.user.bot) m.roles.remove(role).catch(() => {}); });
-      return interaction.reply(`✅ Role ${role.name} removed from all members.`);
-    }
-
-    if (commandName === 'lockall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return interaction.reply('❌ You do not have permission to lock channels.');
-      guild.channels.cache.forEach(ch => { if (ch.type === ChannelType.GuildText) ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => {}); });
-      return interaction.reply('✅ All text channels locked.');
-    }
-
-    if (commandName === 'unlockall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return interaction.reply('❌ You do not have permission to unlock channels.');
-      guild.channels.cache.forEach(ch => { if (ch.type === ChannelType.GuildText) ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: true }).catch(() => {}); });
-      return interaction.reply('✅ All text channels unlocked.');
-    }
-
-    if (commandName === 'hideall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return interaction.reply('❌ You do not have permission to hide channels.');
-      guild.channels.cache.forEach(ch => { ch.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(() => {}); });
-      return interaction.reply('✅ All channels hidden.');
-    }
-
-    if (commandName === 'unhideall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return interaction.reply('❌ You do not have permission to unhide channels.');
-      guild.channels.cache.forEach(ch => { ch.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true }).catch(() => {}); });
-      return interaction.reply('✅ All channels unhidden.');
-    }
-
-    if (commandName === 'untimeoutall') {
-      if (!member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return interaction.reply('❌ You do not have permission to remove timeout.');
-      guild.members.cache.forEach(m => { if (!m.user.bot) m.timeout(null).catch(() => {}); });
-      return interaction.reply('✅ Removed timeout from all members.');
-    }
-
-    if (commandName === 'unbanall') {
-      if (!member.permissions.has(PermissionFlagsBits.BanMembers))
-        return interaction.reply('❌ You do not have permission to unban members.');
-      const bans = await guild.bans.fetch();
-      bans.forEach(b => guild.bans.remove(b.user.id).catch(() => {}));
-      return interaction.reply('✅ All banned users have been unbanned.');
-    }
-
-  } catch (err) {
-    console.error(err);
-    return interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
-  }
-});
-
-// ----------------- LOGIN -----------------
-client.login(process.env.TOKEN);
+      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
+      const role = options.getRole
