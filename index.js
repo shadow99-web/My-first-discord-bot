@@ -12,7 +12,7 @@ const client = new Client({
 
 // ----------------- COMMAND DEFINITIONS -----------------
 const commands = [
-  // ---------- Moderation / Single Member ----------
+  // Moderation / single member
   new SlashCommandBuilder().setName('ping').setDescription('Replies with Pong!'),
   new SlashCommandBuilder().setName('ban').setDescription('Ban a member')
     .addUserOption(o => o.setName('user').setDescription('User to ban').setRequired(true)),
@@ -38,7 +38,7 @@ const commands = [
     .addStringOption(o => o.setName('nickname').setDescription('New nickname').setRequired(true)),
   new SlashCommandBuilder().setName('nuke').setDescription('Delete all messages in the channel'),
 
-  // ---------- Bulk ----------
+  // Bulk
   new SlashCommandBuilder().setName('roleall').setDescription('Give a role to all members')
     .addRoleOption(o => o.setName('role').setDescription('Role to give').setRequired(true)),
   new SlashCommandBuilder().setName('unroleall').setDescription('Remove a role from all members')
@@ -50,7 +50,7 @@ const commands = [
   new SlashCommandBuilder().setName('untimeoutall').setDescription('Remove timeout from all members'),
   new SlashCommandBuilder().setName('unbanall').setDescription('Unban all banned users'),
 
-  // ---------- Info / Utility ----------
+  // Utility / info
   new SlashCommandBuilder().setName('teaminfo').setDescription('Show info about team'),
   new SlashCommandBuilder().setName('serverinfo').setDescription('Show server info'),
   new SlashCommandBuilder().setName('servericon').setDescription('Show server icon'),
@@ -78,7 +78,7 @@ const commands = [
   new SlashCommandBuilder().setName('uptime').setDescription('Bot uptime'),
   new SlashCommandBuilder().setName('invite').setDescription('Bot invite link'),
 
-  // ---------- Listing ----------
+  // Listing
   new SlashCommandBuilder().setName('list_roles').setDescription('List all roles'),
   new SlashCommandBuilder().setName('list_boosters').setDescription('List all boosters'),
   new SlashCommandBuilder().setName('list_bots').setDescription('List all bots'),
@@ -110,9 +110,10 @@ client.on('interactionCreate', async interaction => {
   const { commandName, options, member, guild } = interaction;
 
   try {
-    // ----------------- Moderation -----------------
+    // ----------------- MODERATION COMMANDS -----------------
     if (commandName === 'ping') return interaction.reply('Pong!');
-
+    
+    // --- Ban ---
     if (commandName === 'ban') {
       if (!member.permissions.has(PermissionFlagsBits.BanMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -122,6 +123,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} banned.`);
     }
 
+    // --- Unban ---
     if (commandName === 'unban') {
       if (!member.permissions.has(PermissionFlagsBits.BanMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -129,6 +131,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} unbanned.`);
     }
 
+    // --- Kick ---
     if (commandName === 'kick') {
       if (!member.permissions.has(PermissionFlagsBits.KickMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -138,6 +141,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} kicked.`);
     }
 
+    // --- Timeout ---
     if (commandName === 'timeout') {
       if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -148,6 +152,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} timed out for ${options.getInteger('duration')}s.`);
     }
 
+    // --- Untimeout ---
     if (commandName === 'untimeout') {
       if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -157,6 +162,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} un-timed out.`);
     }
 
+    // --- Role ---
     if (commandName === 'role') {
       if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -166,6 +172,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} given role ${role.name}.`);
     }
 
+    // --- Unrole ---
     if (commandName === 'unrole') {
       if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -175,6 +182,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${role.name} removed from ${user.tag}.`);
     }
 
+    // --- Purge ---
     if (commandName === 'purge') {
       if (!member.permissions.has(PermissionFlagsBits.ManageMessages)) return interaction.reply('❌ No permission.');
       const amount = options.getInteger('amount');
@@ -182,6 +190,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: `✅ Deleted ${amount} messages.`, ephemeral: true });
     }
 
+    // --- Nickname ---
     if (commandName === 'nick') {
       if (!member.permissions.has(PermissionFlagsBits.ManageNicknames)) return interaction.reply('❌ No permission.');
       const user = options.getUser('user');
@@ -191,6 +200,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply(`✅ ${user.tag} nickname changed to ${nickname}.`);
     }
 
+    // --- Nuke ---
     if (commandName === 'nuke') {
       if (!member.permissions.has(PermissionFlagsBits.ManageChannels)) return interaction.reply('❌ No permission.');
       const channel = interaction.channel;
@@ -199,14 +209,27 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    // ----------------- Bulk -----------------
-    if (commandName === 'roleall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
-      const role = options.getRole('role');
-      guild.members.cache.forEach(m => { if (!m.user.bot) m.roles.add(role).catch(() => {}); });
-      return interaction.reply(`✅ Role ${role.name} given to all members.`);
+    // --- Steal Emoji ---
+    if (commandName === 'steal') {
+      if (!member.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) return interaction.reply('❌ No permission.');
+      const emojiInput = options.getString('emoji');
+      const match = emojiInput.match(/<a?:\w+:(\d+)>/);
+      if (!match) return interaction.reply('❌ Invalid emoji.');
+      const emojiId = match[1];
+      const targetEmoji = client.emojis.cache.get(emojiId);
+      if (!targetEmoji) return interaction.reply('❌ Emoji not found.');
+      try {
+        const newEmoji = await guild.emojis.create({ attachment: targetEmoji.url, name: targetEmoji.name });
+        return interaction.reply(`✅ Emoji ${newEmoji.name} added to this server!`);
+      } catch {
+        return interaction.reply('❌ Failed to add emoji. Check permissions and emoji slots.');
+      }
     }
 
-    if (commandName === 'unroleall') {
-      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply('❌ No permission.');
-      const role = options.getRole
+  } catch (err) {
+    console.error(err);
+    return interaction.reply('❌ Something went wrong.');
+  }
+});
+
+client.login(process.env.TOKEN);
