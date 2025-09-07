@@ -26,11 +26,19 @@ const client = new Client({
   ]
 });
 
+// ===== IMPORTS =====
+const fs = require("fs");
+const { PermissionFlagsBits } = require("discord.js");
+
 // ===== PREFIX SYSTEM =====
 const prefixesFile = "./prefixes.json";
 let prefixes = {};
+
+// If file exists, load it, otherwise create an empty one
 if (fs.existsSync(prefixesFile)) {
   prefixes = JSON.parse(fs.readFileSync(prefixesFile, "utf8"));
+} else {
+  fs.writeFileSync(prefixesFile, JSON.stringify({}, null, 2));
 }
 
 client.on("messageCreate", async (message) => {
@@ -42,16 +50,26 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
+  // ===== SET PREFIX COMMAND =====
   if (command === "setprefix") {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply("❌ You don’t have permission to change prefix.");
     }
+
     const newPrefix = args[0];
     if (!newPrefix) return message.reply("❌ Please provide a new prefix.");
+
     prefixes[message.guild.id] = newPrefix;
     fs.writeFileSync(prefixesFile, JSON.stringify(prefixes, null, 2));
+
     return message.reply(`✅ Prefix updated to \`${newPrefix}\``);
   }
+
+  // Example: fallback test command
+  if (command === "ping") {
+    return message.reply("🏓 Pong!");
+  }
+});
 
 
 // --------- Snipe storage (per channel) ----------
