@@ -644,5 +644,9 @@ client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   // optional status:
   const defaultPrefix = prefixes['default'] || '!';
+  try {
   client.user.setActivity(`Type ${defaultPrefix}help | /help`, { type: 3 });
+} catch (err) {
+  console.error("Failed to set activity:", err);
+  }
 client.login(process.env.TOKEN);
