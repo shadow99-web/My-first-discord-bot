@@ -1,15 +1,29 @@
-
 {
   "name": "discord-bot",
   "version": "1.0.0",
+  "description": "A Discord bot with prefix and slash commands (with embeds & tickets).",
   "main": "index.js",
   "type": "commonjs",
-  "dependencies": {
-    "discord.js": "^14.16.3",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
-  },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "discord.js",
+    "slash-commands",
+    "prefix-commands",
+    "tickets"
+  ],
+  "author": "YourName",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "fs": "^0.0.1-security"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
