@@ -1,36 +1,36 @@
-require("dotenv").config();
 const { REST, Routes } = require("discord.js");
+require("dotenv").config();
 const fs = require("fs");
 
-const token = process.env.TOKEN;
-const clientId = process.env.CLIENT_ID; // Bot's Application ID
-const guildId = process.env.GUILD_ID;   // Your test server ID
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID; // your testing guild ID
+const TOKEN = process.env.TOKEN;
 
-// Load commands
 const commands = [];
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`);
-    if (command?.data?.toJSON) {
-        commands.push(command.data.toJSON());
-    }
+    if (command.data) commands.push(command.data.toJSON());
 }
 
-const rest = new REST({ version: "10" }).setToken(token);
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
     try {
-        console.log(`⚡ Started refreshing ${commands.length} commands...`);
+        console.log(`🚀 Registering ${commands.length} commands to GUILD (${GUILD_ID})...`);
+        await rest.put(
+            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), // Guild registration (instant)
+            { body: commands }
+        );
+        console.log("✅ Guild commands registered successfully!");
 
-        // --- GUILD SPECIFIC (instant) ---
-        await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
-        console.log("✅ Successfully registered commands to the guild (instant)");
-
-        // --- GLOBAL (may take up to 1 hour) ---
-        await rest.put(Routes.applicationCommands(clientId), { body: commands });
-        console.log("🌐 Successfully registered commands globally (may take up to 1 hour)");
-
+        console.log(`🚀 Registering ${commands.length} commands globally...`);
+        await rest.put(
+            Routes.applicationCommands(CLIENT_ID), // Global registration
+            { body: commands }
+        );
+        console.log("✅ Global commands registered successfully! (may take up to 1 hour to appear)");
     } catch (error) {
         console.error(error);
     }
