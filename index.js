@@ -12,10 +12,10 @@ const {
   ChannelType 
 } = require('discord.js');
 
+// ===== EXPRESS KEEP-ALIVE =====
 const app = express();
-app.get('/', (req, res) => res.send('Bot is running!'));
-app.listen(process.env.PORT || 3000);
-
+app.get("/", (req, res) => res.send("✅ Bot is alive on Render!"));
+app.listen(3000, () => console.log("🌍 Keep-alive running on port 3000"));
 // --------- Bot setup ----------
 const client = new Client({
   intents: [
