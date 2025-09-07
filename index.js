@@ -32,6 +32,12 @@ for (const file of commandFiles) {
   console.log(`✅ Loaded command: ${command.name}`);
 }
 
+const snipeCmd = require("./commands/snipe.js");
+
+client.on("messageDelete", (msg) => {
+  if (!msg.partial) snipeCmd.trackDeleted(msg);
+});
+
 // ===== MESSAGE HANDLER =====
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.guild) return;
