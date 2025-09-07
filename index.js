@@ -25,6 +25,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ]
 });
+
 // ===== PREFIX SYSTEM =====
 const prefixesFile = "./prefixes.json";
 let prefixes = {};
@@ -52,15 +53,6 @@ client.on("messageCreate", async (message) => {
     return message.reply(`✅ Prefix updated to \`${newPrefix}\``);
   }
 
-// --------- Persistence: prefixes ----------
-const PREFIX_FILE = './prefixes.json';
-if (!fs.existsSync(PREFIX_FILE)) fs.writeFileSync(PREFIX_FILE, '{}');
-let prefixes = JSON.parse(fs.readFileSync(PREFIX_FILE, 'utf8'));
-
-// helper: save prefixes
-function savePrefixes() {
-  fs.writeFileSync(PREFIX_FILE, JSON.stringify(prefixes, null, 2));
-}
 
 // --------- Snipe storage (per channel) ----------
 const SNIPES_PER_CHANNEL = 50;
