@@ -1,24 +1,27 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-const jokes = [
-    "Why don't scientists trust atoms? Because they make up everything!",
-    "I told my computer I needed a break, and it said: 'No problem, I'll go to sleep!'",
-    "Why did the scarecrow win an award? Because he was outstanding in his field!"
-];
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("joke")
         .setDescription("Get a random joke"),
-    async execute(interaction) {
-        const joke = jokes[Math.floor(Math.random() * jokes.length)];
+    async execute(context) {
+        try {
+            const response = await fetch("https://v2.jokeapi.dev/joke/Any?type=single");
+            const data = await response.json();
 
-        const embed = new EmbedBuilder()
-            .setTitle("😂 Random Joke")
-            .setDescription(joke)
-            .setColor("Random")
-            .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setTitle("😂 Random Joke")
+                .setDescription(data.joke)
+                .setColor("Random")
+                .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+            if (context.isPrefix) await context.message.reply({ embeds: [embed] });
+            else await context.interaction.reply({ embeds: [embed] });
+        } catch (error) {
+            console.error(error);
+            const msg = "❌ Could not fetch a joke. Try again later!";
+            if (context.isPrefix) await context.message.reply(msg);
+            else await context.interaction.reply({ content: msg, ephemeral: true });
+        }
     }
 };
