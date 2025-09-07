@@ -8,9 +8,8 @@ module.exports = {
 
     async execute(context) {
         // Emojis
-        const arrow = "<:flecha:1414301944868245574>";
-        const blueHeart = "<:blue_heart:1414309560231002194>";
-
+        const arrow = "<a:flecha:1414301944868245574>";
+const heart = "<a:blue_heart:1414309560231002194>";
         // User selection
         const user = context.isPrefix
             ? (context.message.mentions.users.first() || context.message.author)
