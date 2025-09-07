@@ -1,6 +1,16 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection } = require("discord.js");
 const fs = require("fs");
+const http = require("http");
+
+// ===== HTTP SERVER FOR RENDER =====
+const port = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Bot is running!\n");
+}).listen(port, () => {
+    console.log(`✅ HTTP server listening on port ${port}`);
+});
 
 // ===== BOT SETUP =====
 const client = new Client({
@@ -10,19 +20,18 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessageReactions
-    ]
+    ],
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 // ===== COMMAND COLLECTION =====
 client.commands = new Collection();
-
-// ===== SNIPE STORAGE =====
 client.snipes = new Map();
 
 // ===== PREFIX =====
 const defaultPrefix = "!";
 
-// ===== LOAD COMMAND FILES =====
+// ===== LOAD COMMANDS =====
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`);
@@ -40,7 +49,7 @@ client.once("ready", () => {
     client.user.setActivity(`Type ${defaultPrefix}help or /help`, { type: "WATCHING" });
 });
 
-// ===== MESSAGE DELETE EVENT (for snipe) =====
+// ===== MESSAGE DELETE EVENT (SNIPE) =====
 client.on("messageDelete", (message) => {
     if (!message.guild || message.author.bot) return;
     client.snipes.set(message.channel.id, {
@@ -75,7 +84,6 @@ client.on("messageCreate", async (message) => {
 
     const args = message.content.slice(defaultPrefix.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
-
     const command = client.commands.get(commandName);
     if (!command) return;
 
