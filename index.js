@@ -25,6 +25,32 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ]
 });
+// ===== PREFIX SYSTEM =====
+const prefixesFile = "./prefixes.json";
+let prefixes = {};
+if (fs.existsSync(prefixesFile)) {
+  prefixes = JSON.parse(fs.readFileSync(prefixesFile, "utf8"));
+}
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot || !message.guild) return;
+
+  const guildPrefix = prefixes[message.guild.id] || "!";
+  if (!message.content.startsWith(guildPrefix)) return;
+
+  const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  if (command === "setprefix") {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply("❌ You don’t have permission to change prefix.");
+    }
+    const newPrefix = args[0];
+    if (!newPrefix) return message.reply("❌ Please provide a new prefix.");
+    prefixes[message.guild.id] = newPrefix;
+    fs.writeFileSync(prefixesFile, JSON.stringify(prefixes, null, 2));
+    return message.reply(`✅ Prefix updated to \`${newPrefix}\``);
+  }
 
 // --------- Persistence: prefixes ----------
 const PREFIX_FILE = './prefixes.json';
