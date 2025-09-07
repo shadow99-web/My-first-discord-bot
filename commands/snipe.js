@@ -1,46 +1,28 @@
-const { EmbedBuilder } = require("discord.js");
-
-// Store last deleted messages per channel
-const snipes = new Map();
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
-  name: "snipe",
-  description: "Shows the last deleted message in this channel",
+    data: new SlashCommandBuilder()
+        .setName("snipe")
+        .setDescription("See the last deleted message in this channel"),
+    async execute(context) {
+        const channelId = context.isPrefix ? context.message.channel.id : context.interaction.channel.id;
+        const sniped = context.isPrefix
+            ? context.message.client.snipes.get(channelId)
+            : context.interaction.client.snipes.get(channelId);
 
-  // ===== Prefix command handler =====
-  async execute(message, args, client) {
-    const snipe = snipes.get(message.channel.id);
+        if (!sniped) {
+            const msg = "❌ No recently deleted messages in this channel.";
+            if (context.isPrefix) return context.message.reply(msg);
+            else return context.interaction.reply({ content: msg, ephemeral: true });
+        }
 
-    if (!snipe) {
-      return message.reply("❌ There’s nothing to snipe in this channel!");
+        const embed = new EmbedBuilder()
+            .setAuthor({ name: sniped.author })
+            .setDescription(sniped.content)
+            .setColor("Red")
+            .setTimestamp(sniped.createdAt);
+
+        if (context.isPrefix) await context.message.reply({ embeds: [embed] });
+        else await context.interaction.reply({ embeds: [embed] });
     }
-
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: snipe.author.tag, iconURL: snipe.author.displayAvatarURL() })
-      .setDescription(snipe.content || "*[No content, maybe an attachment?]*")
-      .setColor("Random")
-      .setFooter({ text: `Sniped by ${message.author.tag}` })
-      .setTimestamp(snipe.time);
-
-    if (snipe.attachment) {
-      embed.setImage(snipe.attachment);
-    }
-
-    message.channel.send({ embeds: [embed] });
-  },
-
-  // ===== Function to track deleted messages =====
-  trackDeleted(msg) {
-    if (!msg.author || msg.author.bot) return;
-
-    snipes.set(msg.channel.id, {
-      content: msg.content,
-      author: msg.author,
-      time: new Date(),
-      attachment: msg.attachments.first() ? msg.attachments.first().proxyURL : null,
-    });
-
-    // Auto clear after 60 sec
-    setTimeout(() => snipes.delete(msg.channel.id), 60000);
-  },
 };
