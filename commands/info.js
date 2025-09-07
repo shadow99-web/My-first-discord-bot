@@ -4,7 +4,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName("info")
         .setDescription("Get bot info"),
-    async execute(interaction) {
+    async execute(context) {
         const embed = new EmbedBuilder()
             .setTitle("🤖 Bot Information")
             .addFields(
@@ -16,6 +16,10 @@ module.exports = {
             .setFooter({ text: "🤝FEEL THE HONOR !" })
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        if (context.isPrefix) {
+            await context.message.reply({ embeds: [embed] });
+        } else {
+            await context.interaction.reply({ embeds: [embed] });
+        }
     }
 };
