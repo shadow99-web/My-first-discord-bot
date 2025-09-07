@@ -4,21 +4,20 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName("server")
         .setDescription("Get server information"),
-    async execute(interaction) {
-        const { guild } = interaction;
+    async execute(context) {
+        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
 
         const embed = new EmbedBuilder()
-            .setTitle(`🏰 ${guild.name}`)
-            .setThumbnail(guild.iconURL({ dynamic: true }))
+            .setTitle(`🏰 ${guild.name} Info`)
             .addFields(
-                { name: "Server ID", value: guild.id, inline: true },
                 { name: "Members", value: `${guild.memberCount}`, inline: true },
-                { name: "Created On", value: `${guild.createdAt.toDateString()}`, inline: true },
-                { name: "Owner", value: `<@${guild.ownerId}>`, inline: true }
+                { name: "Owner", value: `<@${guild.ownerId}>`, inline: true },
+                { name: "Region", value: guild.preferredLocale, inline: true }
             )
-            .setColor("Purple")
+            .setColor("Orange")
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        if (context.isPrefix) await context.message.reply({ embeds: [embed] });
+        else await context.interaction.reply({ embeds: [embed] });
     }
 };
