@@ -644,7 +644,5 @@ client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   // optional status:
   const defaultPrefix = prefixes['default'] || '!';
-  client.user.setActivity(`Type ${defaultPrefix}help | /help`, { type: 3 }).catch(()=>{});
-});
-
+  client.user.setActivity(`Type ${defaultPrefix}help | /help`, { type: 3 });
 client.login(process.env.TOKEN);
