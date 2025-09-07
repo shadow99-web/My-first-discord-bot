@@ -32,6 +32,9 @@ module.exports = {
         const description = guild.description || "This guild has no description set";
         const verificationLevel = guild.verificationLevel;
 
+        // Arrow emoji
+        const arrow = ":flecha_1414301944868245574:";
+
         // Create Embed
         const embed = new EmbedBuilder()
             .setTitle(`🏰 Server Info: ${guild.name}`)
@@ -40,34 +43,34 @@ module.exports = {
             .setTimestamp()
             .addFields(
                 // Server Info
-                { name: '📌 __Server Name__', value: `> ${guild.name}`, inline: true },
-                { name: '🆔 __Server ID__', value: `> ${guild.id}`, inline: true },
-                { name: '📝 __Description__', value: `> ${description}`, inline: false },
-                { name: '👑 __Founder__', value: `> <@${guild.ownerId}>`, inline: true },
-                { name: '📅 __Creation Date__', value: `> <t:${Math.floor(guild.createdTimestamp/1000)}:f>`, inline: true },
-                { name: '🎭 __Total Roles__', value: `> ${guild.roles.cache.size}`, inline: true },
-                { name: '✅ __Verify Level__', value: `> ${verificationLevel}`, inline: true },
+                { name: '📌 __Server Name__', value: `${arrow} ${guild.name}`, inline: true },
+                { name: '🆔 __Server ID__', value: `${arrow} ${guild.id}`, inline: true },
+                { name: '📝 __Description__', value: `${arrow} ${description}`, inline: false },
+                { name: '👑 __Founder__', value: `${arrow} <@${guild.ownerId}>`, inline: true },
+                { name: '📅 __Creation Date__', value: `${arrow} <t:${Math.floor(guild.createdTimestamp/1000)}:f>`, inline: true },
+                { name: '🎭 __Total Roles__', value: `${arrow} ${guild.roles.cache.size}`, inline: true },
+                { name: '✅ __Verify Level__', value: `${arrow} ${verificationLevel}`, inline: true },
 
                 // Users Info
-                { name: '👥 __Total Members__', value: `> ${totalMembers}`, inline: true },
-                { name: '🤖 __Bot Count__', value: `> ${botCount}`, inline: true },
+                { name: '👥 __Total Members__', value: `${arrow} ${totalMembers}`, inline: true },
+                { name: '🤖 __Bot Count__', value: `${arrow} ${botCount}`, inline: true },
 
                 // Emojis & Stickers
-                { name: '😀 __Total Emojis__', value: `> ${totalEmojis}`, inline: true },
-                { name: '😄 __Normal__', value: `> ${normalEmojis}`, inline: true },
-                { name: '✨ __Animated__', value: `> ${animatedEmojis}`, inline: true },
-                { name: '🏷️ __Stickers__', value: `> ${stickersCount}`, inline: true },
+                { name: '😀 __Total Emojis__', value: `${arrow} ${totalEmojis}`, inline: true },
+                { name: '😄 __Normal__', value: `${arrow} ${normalEmojis}`, inline: true },
+                { name: '✨ __Animated__', value: `${arrow} ${animatedEmojis}`, inline: true },
+                { name: '🏷️ __Stickers__', value: `${arrow} ${stickersCount}`, inline: true },
 
                 // Boost Info
-                { name: '🚀 __Total Boosts__', value: `> ${totalBoosts}`, inline: true },
-                { name: '💎 __Boost Level__', value: `> ${boostLevel}`, inline: true },
-                { name: '🏅 __Booster__', value: `> ${boosters}`, inline: false },
+                { name: '🚀 __Total Boosts__', value: `${arrow} ${totalBoosts}`, inline: true },
+                { name: '💎 __Boost Level__', value: `${arrow} ${boostLevel}`, inline: true },
+                { name: '🏅 __Booster__', value: `${arrow} ${boosters}`, inline: false },
 
                 // Channels Info
-                { name: '📁 __Total Channels__', value: `> ${totalChannels}`, inline: true },
-                { name: '📝 __Text Channels__', value: `> ${textChannels}`, inline: true },
-                { name: '🔊 __Voice Channels__', value: `> ${voiceChannels}`, inline: true },
-                { name: '📂 __Categories__', value: `> ${categories}`, inline: true }
+                { name: '📁 __Total Channels__', value: `${arrow} ${totalChannels}`, inline: true },
+                { name: '📝 __Text Channels__', value: `${arrow} ${textChannels}`, inline: true },
+                { name: '🔊 __Voice Channels__', value: `${arrow} ${voiceChannels}`, inline: true },
+                { name: '📂 __Categories__', value: `${arrow} ${categories}`, inline: true }
             );
 
         if (context.isPrefix) await context.message.reply({ embeds: [embed] });
