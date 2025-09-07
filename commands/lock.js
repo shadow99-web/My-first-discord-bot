@@ -1,34 +1,52 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require("discord.js");
 
 module.exports = {
-  name: "lock",
-  slashData: new SlashCommandBuilder()
-    .setName("lock")
-    .setDescription("Lock the current channel"),
+    data: new SlashCommandBuilder()
+        .setName("lock")
+        .setDescription("Lock or unlock the current channel")
+        .addBooleanOption(option =>
+            option.setName("lock")
+                  .setDescription("true = lock, false = unlock")
+                  .setRequired(true)
+        ),
+    async execute(context) {
+        const channel = context.isPrefix ? context.message.channel : context.interaction.channel;
+        const guildMember = context.isPrefix ? context.message.member : context.interaction.member;
 
-  async executePrefix(message) {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ManageChannels))
-      return message.reply("❌ You don’t have permission to lock channels.");
+        if (!guildMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+            const msg = "❌ You need `Manage Channels` permission to use this command.";
+            if (context.isPrefix) return context.message.reply(msg);
+            else return context.interaction.reply({ content: msg, ephemeral: true });
+        }
 
-    await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: false });
+        let lockState;
+        if (context.isPrefix) {
+            const arg = context.args[0]?.toLowerCase();
+            if (!arg || !["lock","unlock"].includes(arg)) {
+                return context.message.reply("❌ Usage: !lock lock OR !lock unlock");
+            }
+            lockState = arg === "lock";
+        } else {
+            lockState = context.interaction.options.getBoolean("lock");
+        }
 
-    const embed = new EmbedBuilder()
-      .setTitle("🔒 Channel Locked")
-      .setDescription(`This channel has been locked by ${message.author}`)
-      .setColor("Red");
-    await message.channel.send({ embeds: [embed] });
-  },
+        try {
+            await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
+                SendMessages: !lockState
+            });
 
-  async executeSlash(interaction) {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels))
-      return interaction.reply({ content: "❌ You don’t have permission to lock channels.", ephemeral: true });
+            const embed = new EmbedBuilder()
+                .setTitle(lockState ? "🔒 Channel Locked" : "🔓 Channel Unlocked")
+                .setColor(lockState ? "Red" : "Green")
+                .setTimestamp();
 
-    await interaction.channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: false });
-
-    const embed = new EmbedBuilder()
-      .setTitle("🔒 Channel Locked")
-      .setDescription(`This channel has been locked by ${interaction.user}`)
-      .setColor("Red");
-    await interaction.reply({ embeds: [embed] });
-  }
+            if (context.isPrefix) await context.message.reply({ embeds: [embed] });
+            else await context.interaction.reply({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            const msg = "❌ Failed to update channel permissions.";
+            if (context.isPrefix) await context.message.reply(msg);
+            else await context.interaction.reply({ content: msg, ephemeral: true });
+        }
+    }
 };
