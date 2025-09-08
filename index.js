@@ -24,7 +24,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// ===== COMMAND COLLECTION =====
+// ===== COMMAND COLLECTION & SNIPE MAP =====
 client.commands = new Collection();
 client.snipes = new Map();
 
@@ -77,8 +77,6 @@ client.once("ready", () => {
 });
 
 // ===== MESSAGE DELETE EVENT (SNIPE) =====
-client.snipes = new Map();
-
 client.on("messageDelete", (message) => {
     if (!message.guild || message.author?.bot) return;
 
@@ -88,7 +86,7 @@ client.on("messageDelete", (message) => {
         content: message.content || "*No text (embed/attachment)*",
         author: message.author.tag,
         avatar: message.author.displayAvatarURL({ dynamic: true }),
-        createdAt: message.createdTimestamp, // safer than message.createdAt
+        createdAt: message.createdTimestamp,
         attachment: message.attachments.first()
             ? message.attachments.first().url
             : null
@@ -105,7 +103,7 @@ client.on("interactionCreate", async (interaction) => {
     if (!command) return;
 
     try {
-        await command.execute({ interaction });
+        await command.execute({ interaction, client }); // <--- pass client
     } catch (error) {
         console.error(`❌ Error executing slash command ${interaction.commandName}:`, error);
         if (interaction.replied || interaction.deferred) {
@@ -127,7 +125,7 @@ client.on("messageCreate", async (message) => {
     if (!command) return;
 
     try {
-        await command.execute({ message, args, isPrefix: true });
+        await command.execute({ message, args, isPrefix: true, client }); // <--- pass client
     } catch (error) {
         console.error(`❌ Error executing prefix command ${commandName}:`, error);
         message.reply("❌ Something went wrong executing this command.");
