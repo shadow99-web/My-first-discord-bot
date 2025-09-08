@@ -2,33 +2,37 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 
 module.exports = {
   name: "listusers",
-  description: "List server members with pagination and animated blue heart emoji",
-
+  description: "List all server members with pagination",
   data: new SlashCommandBuilder()
     .setName("listusers")
     .setDescription("List all members of the server"),
 
-  async execute(interactionOrMessage) {
-    const isInteraction = interactionOrMessage.isCommand?.();
+  async execute({ interaction, message, args, isPrefix, client }) {
+    const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
+    const isInteraction = !!interaction;
+    const guild = interaction?.guild || message.guild;
 
+    // Unified safe reply function
     const reply = async (options) => {
-      if (isInteraction) {
-        if (!interactionOrMessage.deferred && !interactionOrMessage.replied) {
-          await interactionOrMessage.deferReply({ ephemeral: false });
+      try {
+        if (isInteraction) {
+          if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: false });
+          if (!interaction.replied) return interaction.reply(options);
+          return interaction.followUp(options);
+        } else {
+          return message.channel.send(options);
         }
-        return interactionOrMessage.followUp(options);
-      } else {
-        return interactionOrMessage.channel.send(options);
+      } catch (err) {
+        console.error("Failed to reply safely:", err);
       }
     };
 
     try {
-      const guild = interactionOrMessage.guild;
+      // Fetch all members
       await guild.members.fetch();
-
       const members = guild.members.cache.map(m => ({
-        tag: m.user.tag,
-        mention: `<@${m.id}>`
+        mention: `<@${m.id}>`,
+        tag: m.user.tag
       }));
 
       if (!members.length) return reply({ content: "No members found!" });
@@ -37,21 +41,22 @@ module.exports = {
       let page = 0;
       const totalPages = Math.ceil(members.length / pageSize);
 
+      // Generate embed for a page
       const generateEmbed = (page) => {
         const membersPage = members.slice(page * pageSize, (page + 1) * pageSize);
-
         const description = membersPage
-          .map(u => `<a:blue_heart_1414309560231002194:1414309560231002194> **${u.mention}** (\`${u.tag}\`)`)
+          .map(u => `${blueHeart} **${u.mention}** (\`${u.tag}\`)`)
           .join("\n");
 
         return new EmbedBuilder()
           .setTitle(`❤ Server Members`)
-          .setColor("#0099ff") // stylish blue color
+          .setColor("#0099ff")
           .setDescription(description)
           .setFooter({ text: `Page ${page + 1} of ${totalPages} | Total Members: ${guild.memberCount}` })
           .setTimestamp();
       };
 
+      // Buttons
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("prev")
@@ -64,18 +69,25 @@ module.exports = {
           .setStyle(ButtonStyle.Primary)
       );
 
+      // Send initial embed
       const msg = await reply({ embeds: [generateEmbed(page)], components: [row] });
 
+      // Collector for pagination
       const collector = msg.createMessageComponentCollector({ time: 120000 });
 
-      collector.on("collect", async (interaction) => {
-        if (!interaction.isButton()) return;
-        page += interaction.customId === "next" ? 1 : -1;
+      collector.on("collect", async (i) => {
+        if (!i.isButton()) return;
+
+        page += i.customId === "next" ? 1 : -1;
 
         row.components[0].setDisabled(page === 0);
         row.components[1].setDisabled(page === totalPages - 1);
 
-        await interaction.update({ embeds: [generateEmbed(page)], components: [row] });
+        try {
+          await i.update({ embeds: [generateEmbed(page)], components: [row] });
+        } catch (err) {
+          console.error("Collector interaction failed:", err);
+        }
       });
 
       collector.on("end", () => {
@@ -87,5 +99,5 @@ module.exports = {
       console.error(error);
       await reply({ content: "❌ Something went wrong." });
     }
-  },
+  }
 };
