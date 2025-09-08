@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
 
@@ -87,9 +87,7 @@ client.on("messageDelete", (message) => {
         author: message.author.tag,
         avatar: message.author.displayAvatarURL({ dynamic: true }),
         createdAt: message.createdTimestamp,
-        attachment: message.attachments.first()
-            ? message.attachments.first().url
-            : null
+        attachment: message.attachments.first() ? message.attachments.first().url : null
     });
 
     if (snipes.length > 5) snipes.pop();
@@ -118,34 +116,46 @@ client.on("interactionCreate", async (interaction) => {
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // --- AFK Return Handler ---
+    const blueHeart = "<a:blue_heart:1414309560231002194>";
+
+    // --- USER RETURNING FROM AFK ---
     if (client.afk.has(message.author.id)) {
         const afkData = client.afk.get(message.author.id);
         client.afk.delete(message.author.id);
 
-        let replyText = `✅ Welcome back ${message.author}, your AFK status has been removed.`;
+        const embed = new EmbedBuilder()
+            .setColor("Blue")
+            .setAuthor({ name: `${message.author.tag} is back!`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+            .setDescription(`${blueHeart} Your AFK status has been removed.`)
+            .setTimestamp();
 
         if (afkData.mentions.length > 0) {
-            replyText += `\n\n📌 While you were away, you were mentioned **${afkData.mentions.length}** times:\n`;
-            afkData.mentions.slice(0, 5).forEach((m, i) => {
-                replyText += `\n${i + 1}. **${m.user}** in <#${m.channel}> → [Jump](${m.url})`;
-            });
+            let mentionList = afkData.mentions.slice(0, 5).map((m, i) =>
+                `${i + 1}. **${m.user}** in <#${m.channel}> → [Jump](${m.url})`
+            ).join("\n");
+
             if (afkData.mentions.length > 5) {
-                replyText += `\n...and ${afkData.mentions.length - 5} more mentions.`;
+                mentionList += `\n...and ${afkData.mentions.length - 5} more mentions.`;
             }
+
+            embed.addFields({ name: `📌 Mentions while AFK`, value: mentionList, inline: false });
         }
 
-        message.reply(replyText);
+        message.reply({ embeds: [embed] });
     }
 
-    // --- AFK Mention Notifier ---
+    // --- NOTIFY MENTIONED AFK USERS ---
     message.mentions.users.forEach((mentioned) => {
         if (client.afk.has(mentioned.id)) {
             const afk = client.afk.get(mentioned.id);
 
-            message.reply(
-                `💤 ${mentioned} is AFK — **${afk.reason}** (since <t:${Math.floor(afk.since / 1000)}:R>)`
-            );
+            const embed = new EmbedBuilder()
+                .setColor("Blue")
+                .setAuthor({ name: `${mentioned.tag} is AFK`, iconURL: mentioned.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`${blueHeart} Reason: **${afk.reason}** (since <t:${Math.floor(afk.since / 1000)}:R>)`)
+                .setTimestamp();
+
+            message.reply({ embeds: [embed] });
 
             afk.mentions.push({
                 user: message.author.tag,
