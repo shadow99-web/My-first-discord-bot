@@ -6,8 +6,12 @@ module.exports = {
         .setDescription("Show the last 5 deleted messages from this channel"),
 
     async execute({ message, interaction, isPrefix, client }) {
-        const heart = "<a:blue_heart:1414309560231002194>";
+        const blueHeart = "<a:blue_heart:1414309560231002194>";
         const channel = isPrefix ? message.channel : interaction.channel;
+
+        // Ensure client.snipes exists
+        if (!client.snipes) client.snipes = new Map();
+
         const snipes = client.snipes.get(channel.id) || [];
 
         if (snipes.length === 0) {
@@ -17,21 +21,21 @@ module.exports = {
         }
 
         const embed = new EmbedBuilder()
-            .setTitle(`${heart} Last ${snipes.length} Deleted Message(s)`)
+            .setTitle(`${blueHeart} Last ${snipes.length} Deleted Message(s)`)
             .setColor("Blue")
             .setTimestamp();
 
+        // Add each snipe to the embed
         snipes.forEach((s, i) => {
+            let value = `${s.content || "*No text content*"}\n🕒 <t:${Math.floor(s.createdAt / 1000)}:R>`;
+            if (s.attachment) value += `\n[Attachment](${s.attachment})`;
+
             embed.addFields({
-                name: `${heart} #${i + 1} — ${s.author}`,
-                value: `${s.content || "*No content*"}\n🕒 <t:${Math.floor(s.createdAt / 1000)}:R>`,
+                name: `${blueHeart} #${i + 1} — ${s.author}`,
+                value: value,
                 inline: false
             });
         });
-
-        // If the last deleted message had an attachment, show it
-        const lastAttachment = snipes[0].attachment;
-        if (lastAttachment) embed.setImage(lastAttachment);
 
         if (isPrefix) message.reply({ embeds: [embed] });
         else interaction.reply({ embeds: [embed] });
