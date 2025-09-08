@@ -20,8 +20,8 @@ module.exports = {
     async execute(context) {
         const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
 
-        const totalMembers = guild.memberCount;
-        const botCount = guild.members.cache.filter(m => m.user.bot).size;
+        const totalMembers = guild.memberCount.toString();
+        const botCount = guild.members.cache.filter(m => m.user.bot).size.toString();
 
         const emojis = formatList(guild.emojis.cache.map(e => e.toString()), 500);
         const stickers = formatList(guild.stickers.cache.map(s => s.name), 500);
@@ -50,7 +50,7 @@ module.exports = {
         );
 
         const description = guild.description || "This guild has no description set";
-        const verificationLevel = guild.verificationLevel;
+        const verificationLevel = guild.verificationLevel.toString();
 
         const embed = new EmbedBuilder()
             .setTitle(`🏰 Server Info: ${guild.name}`)
@@ -59,13 +59,13 @@ module.exports = {
             .setTimestamp()
             .addFields(
                 { name: '__Server Name__', value: guild.name, inline: true },
-                { name: '__Server ID__', value: guild.id, inline: true },
+                { name: '__Server ID__', value: guild.id.toString(), inline: true },
                 { name: '__Description__', value: description, inline: false },
                 { name: '__Founder__', value: `<@${guild.ownerId}>`, inline: true },
                 { name: '__Creation Date__', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:f>`, inline: true },
                 { name: '__Verify Level__', value: verificationLevel, inline: true },
-                { name: '__Total Members__', value: `${totalMembers}`, inline: true },
-                { name: '__Bot Count__', value: `${botCount}`, inline: true },
+                { name: '__Total Members__', value: totalMembers, inline: true },
+                { name: '__Bot Count__', value: botCount, inline: true },
                 { name: '__Emojis__', value: emojis, inline: false },
                 { name: '__Stickers__', value: stickers, inline: false },
                 { name: '__Boosters__', value: `${heart} ${boosters}`, inline: false },
