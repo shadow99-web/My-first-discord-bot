@@ -1,61 +1,67 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const heart = "<a:blue_heart:1414309560231002194>";
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("listusers")
-        .setDescription("Show all non-bot users in this server"),
+        .setName('listusers')
+        .setDescription('Lists all users in a specific role with pagination.'),
 
-    async execute({ message, interaction, isPrefix }) {
-        const guild = isPrefix ? message.guild : interaction.guild;
-        const users = guild.members.cache.filter(m => !m.user.bot);
+    async execute(interaction) {
+        // Replace 'WARRIORS' with your role name or fetch dynamically
+        const roleName = 'WARRIORS';
+        const role = interaction.guild.roles.cache.find(r => r.name === roleName);
+        if (!role) return interaction.reply({ content: `Role "${roleName}" not found!`, ephemeral: true });
 
-        if (users.size === 0) {
-            const replyMsg = "❌ No users found!";
-            return isPrefix ? message.reply(replyMsg) : interaction.reply({ content: replyMsg, ephemeral: true });
-        }
+        // Fetch all members with the role
+        await interaction.guild.members.fetch(); // ensures all members are cached
+        const members = role.members.map(m => `:blue_heart_1414309560231002194: ${m.user} (@${m.user.username})`);
 
-        const list = users.map(m => `${heart} ${m.user.tag} (<@${m.id}>)`);
-        const pageSize = 10;
-        let page = 0;
+        if (members.length === 0) return interaction.reply({ content: `No users found in ${roleName}.`, ephemeral: true });
 
-        const generateEmbed = (p) => {
-            const start = p * pageSize;
+        const pageSize = 10; // users per page
+        const totalPages = Math.ceil(members.length / pageSize);
+        let currentPage = 0;
+
+        const generateEmbed = (page) => {
+            const start = page * pageSize;
             const end = start + pageSize;
-            const current = list.slice(start, end);
-
             return new EmbedBuilder()
-                .setTitle(`${heart} Users in ${guild.name}`)
-                .setColor("Blue")
-                .setDescription(current.join("\n"))
-                .setFooter({ text: `Page ${p + 1}/${Math.ceil(list.length / pageSize)}` })
-                .setTimestamp();
+                .setTitle(`Users in ${roleName}`)
+                .setDescription(members.slice(start, end).join('\n'))
+                .setFooter({ text: `Page ${page + 1}/${totalPages}` });
         };
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId("stop").setLabel("🛑").setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary)
+            new ButtonBuilder()
+                .setCustomId('prev')
+                .setLabel('⬅️ Previous')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId('next')
+                .setLabel('Next ➡️')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(totalPages <= 1)
         );
 
-        const replyOptions = { embeds: [generateEmbed(page)], components: [row] };
-        const msg = isPrefix ? await message.reply(replyOptions) : await interaction.reply({ ...replyOptions, fetchReply: true });
+        const message = await interaction.reply({ embeds: [generateEmbed(currentPage)], components: [row], fetchReply: true });
 
-        const collector = msg.createMessageComponentCollector({ time: 60000 });
-        collector.on("collect", async (btn) => {
-            if (btn.user.id !== (isPrefix ? message.author.id : interaction.user.id)) {
-                return btn.reply({ content: "❌ Only the command author can use these buttons.", ephemeral: true });
-            }
+        const collector = message.createMessageComponentCollector({ time: 60000 });
 
-            if (btn.customId === "prev" && page > 0) page--;
-            else if (btn.customId === "next" && (page + 1) * pageSize < list.length) page++;
-            else if (btn.customId === "stop") return collector.stop();
+        collector.on('collect', async (i) => {
+            if (i.user.id !== interaction.user.id) return i.reply({ content: 'These buttons are not for you!', ephemeral: true });
 
-            await btn.update({ embeds: [generateEmbed(page)], components: [row] });
+            if (i.customId === 'next') currentPage++;
+            if (i.customId === 'prev') currentPage--;
+
+            row.components[0].setDisabled(currentPage === 0);
+            row.components[1].setDisabled(currentPage === totalPages - 1);
+
+            await i.update({ embeds: [generateEmbed(currentPage)], components: [row] });
         });
 
-        collector.on("end", () => {
-            msg.edit({ components: [] }).catch(() => {});
+        collector.on('end', async () => {
+            row.components.forEach(button => button.setDisabled(true));
+            await interaction.editReply({ components: [row] });
         });
     }
 };
