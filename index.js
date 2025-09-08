@@ -77,13 +77,25 @@ client.once("ready", () => {
 });
 
 // ===== MESSAGE DELETE EVENT (SNIPE) =====
+client.snipes = new Map();
+
 client.on("messageDelete", (message) => {
-    if (!message.guild || message.author.bot) return;
-    client.snipes.set(message.channel.id, {
-        content: message.content || "*Embed/Attachment deleted*",
+    if (!message.guild || message.author?.bot) return;
+
+    const snipes = client.snipes.get(message.channel.id) || [];
+
+    snipes.unshift({
+        content: message.content || "*No text (embed/attachment)*",
         author: message.author.tag,
-        createdAt: message.createdAt
+        avatar: message.author.displayAvatarURL({ dynamic: true }),
+        createdAt: message.createdAt,
+        attachment: message.attachments.first()
+            ? message.attachments.first().url
+            : null
     });
+
+    if (snipes.length > 5) snipes.pop(); // Keep max 5
+    client.snipes.set(message.channel.id, snipes);
 });
 
 // ===== SLASH COMMAND HANDLER =====
