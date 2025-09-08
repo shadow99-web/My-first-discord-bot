@@ -1,39 +1,57 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+
+// ===== PUT YOUR DISCORD ID HERE =====
+const DEVELOPER_ID = "1378954077462986772";
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("blockcommand")
-        .setDescription("Block a user from using a specific command.")
-        .addUserOption(opt =>
-            opt.setName("user").setDescription("User to block").setRequired(true))
-        .addStringOption(opt =>
-            opt.setName("command").setDescription("Command to block").setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDescription("Block a user from using a specific command")
+        .addUserOption(option =>
+            option.setName("user")
+                .setDescription("The user to block")
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName("command")
+                .setDescription("The command to block")
+                .setRequired(true)
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild), // only admins/mods
 
-    name: "blockcommand",
-    description: "Block a user from using a specific command.",
+    async execute({ interaction, client }) {
+        const target = interaction.options.getUser("user");
+        const commandName = interaction.options.getString("command").toLowerCase();
 
-    async execute({ interaction, message, args, client, isPrefix }) {
-        const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
-
-        // Get target + command name
-        const user = interaction ? interaction.options.getUser("user") : message.mentions.users.first();
-        const commandName = interaction ? interaction.options.getString("command") : args[1];
-        if (!user || !commandName) {
-            const reply = "❌ Please provide a user and a command name.";
-            return interaction ? interaction.reply({ content: reply, ephemeral: true }) : message.reply(reply);
+        // ===== Prevent blocking the developer (except by themselves) =====
+        if (target.id === DEVELOPER_ID && interaction.user.id !== DEVELOPER_ID) {
+            return interaction.reply({
+                content: "❌ You cannot block the developer of this bot!",
+                ephemeral: true
+            });
         }
 
-        // Save in Map
-        if (!client.commandBlocks) client.commandBlocks = new Map();
-        const key = `${interaction?.guildId || message.guild.id}-${user.id}-${commandName.toLowerCase()}`;
-        client.commandBlocks.set(key, true);
+        // Initialize storage
+        if (!client.blockedCommands) client.blockedCommands = new Map();
+        if (!client.blockedCommands.has(interaction.guild.id)) {
+            client.blockedCommands.set(interaction.guild.id, new Map());
+        }
+
+        const guildBlocks = client.blockedCommands.get(interaction.guild.id);
+
+        if (!guildBlocks.has(target.id)) {
+            guildBlocks.set(target.id, new Set());
+        }
+
+        guildBlocks.get(target.id).add(commandName);
 
         const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setDescription(`${blueHeart} 🚫 ${user} is now **blocked** from using \`${commandName}\``)
+            .setColor("Red")
+            .setTitle("🚫 Command Blocked")
+            .setDescription(`**${target.tag}** has been blocked from using \`${commandName}\`.`)
+            .setFooter({ text: `Action by ${interaction.user.tag}` })
             .setTimestamp();
 
-        return interaction ? interaction.reply({ embeds: [embed] }) : message.reply({ embeds: [embed] });
+        await interaction.reply({ embeds: [embed] });
     }
 };
