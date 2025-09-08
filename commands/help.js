@@ -27,7 +27,7 @@ module.exports = {
             )
             .setColor("Blue")
             .setFooter({ 
-                text: `${blueHeart} Serving proudly in ${guild.name}` 
+                text: `Serving proudly in ${guild.name}` 
             })
             .setTimestamp();
 
