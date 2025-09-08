@@ -88,13 +88,13 @@ client.on("messageDelete", (message) => {
         content: message.content || "*No text (embed/attachment)*",
         author: message.author.tag,
         avatar: message.author.displayAvatarURL({ dynamic: true }),
-        createdAt: message.createdAt,
+        createdAt: message.createdTimestamp, // safer than message.createdAt
         attachment: message.attachments.first()
             ? message.attachments.first().url
             : null
     });
 
-    if (snipes.length > 5) snipes.pop(); // Keep max 5
+    if (snipes.length > 5) snipes.pop(); // keep last 5 only
     client.snipes.set(message.channel.id, snipes);
 });
 
