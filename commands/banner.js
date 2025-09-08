@@ -3,34 +3,34 @@ const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("banner")
-        .setDescription("Get the banner of a user")
-        .addUserOption(option =>
-            option.setName("target")
-                .setDescription("Select a user")
-        ),
-    async execute({ message, args, interaction, isPrefix }) {
-        const arrow = ":flecha_1414301944868245574:";
+        .setDescription("Get the profile banner of a user")
+        .addUserOption(option => option.setName("target").setDescription("Select a user")),
+
+    async execute({ message, interaction, isPrefix, client }) {
+        const blueHeart = "<a:blue_heart:1414309560231002194>";
+
         const user = isPrefix
             ? (message.mentions.users.first() || message.author)
             : (interaction.options.getUser("target") || interaction.user);
 
-        // Fetch banner (requires fetchUser if not cached)
-        const fetchedUser = await user.fetch();
+        // Fetch full user (to get banner)
+        const fetchedUser = await client.users.fetch(user.id, { force: true });
+
+        if (!fetchedUser.banner) {
+            const replyMsg = `❌ ${user.tag} does not have a profile banner set.`;
+            if (isPrefix) return message.reply(replyMsg);
+            else return interaction.reply({ content: replyMsg, ephemeral: true });
+        }
+
         const bannerURL = fetchedUser.bannerURL({ dynamic: true, size: 1024 });
 
         const embed = new EmbedBuilder()
-            .setTitle(`♨️ Banner: ${user.tag}`)
+            .setTitle(`${blueHeart} Banner of ${user.tag}`)
+            .setImage(bannerURL)
             .setColor("Blue")
-            .setTimestamp()
-            .addFields(
-                { name: "❤‍🩹 ID", value: `${arrow} ${user.id}`, inline: true },
-                { name: "✨ Username", value: `${arrow} ${user.username}`, inline: true },
-                { name: "⭐ Banner URL", value: `${arrow} ${bannerURL ? `[Click Here](${bannerURL})` : "No Banner"}`, inline: false }
-            );
+            .setTimestamp();
 
-        if (bannerURL) embed.setImage(bannerURL);
-
-        if (isPrefix) await message.reply({ embeds: [embed] });
-        else await interaction.reply({ embeds: [embed] });
+        if (isPrefix) message.reply({ embeds: [embed] });
+        else interaction.reply({ embeds: [embed] });
     }
 };
