@@ -24,7 +24,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// ===== COMMAND COLLECTION & SNIPE/AFK MAP =====
+// ===== COLLECTIONS =====
 client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map(); // { userId: { reason, since, mentions: [] } }
@@ -34,12 +34,12 @@ const defaultPrefix = "!";
 
 // ===== LOAD COMMANDS =====
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
-const commandsData = []; // for auto-deploy
+const commandsData = [];
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`);
     if (command?.data?.name && command?.execute) {
         client.commands.set(command.data.name, command);
-        commandsData.push(command.data.toJSON()); // store for deploy
+        commandsData.push(command.data.toJSON());
         console.log(`✅ Loaded command: ${command.data.name}`);
     } else {
         console.log(`⚠️ Skipped invalid command file: ${file}`);
@@ -82,7 +82,6 @@ client.on("messageDelete", (message) => {
     if (!message.guild || message.author?.bot) return;
 
     const snipes = client.snipes.get(message.channel.id) || [];
-
     snipes.unshift({
         content: message.content || "*No text (embed/attachment)*",
         author: message.author.tag,
@@ -93,7 +92,7 @@ client.on("messageDelete", (message) => {
             : null
     });
 
-    if (snipes.length > 5) snipes.pop(); // keep last 5 only
+    if (snipes.length > 5) snipes.pop();
     client.snipes.set(message.channel.id, snipes);
 });
 
@@ -115,11 +114,11 @@ client.on("interactionCreate", async (interaction) => {
     }
 });
 
-// ===== PREFIX COMMAND HANDLER =====
+// ===== PREFIX COMMAND + AFK HANDLER =====
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // ===== AFK HANDLER =====
+    // --- AFK Return Handler ---
     if (client.afk.has(message.author.id)) {
         const afkData = client.afk.get(message.author.id);
         client.afk.delete(message.author.id);
@@ -139,7 +138,7 @@ client.on("messageCreate", async (message) => {
         message.reply(replyText);
     }
 
-    // If someone mentions an AFK user → notify & log mention
+    // --- AFK Mention Notifier ---
     message.mentions.users.forEach((mentioned) => {
         if (client.afk.has(mentioned.id)) {
             const afk = client.afk.get(mentioned.id);
@@ -158,7 +157,7 @@ client.on("messageCreate", async (message) => {
         }
     });
 
-    // ===== PREFIX COMMANDS =====
+    // --- PREFIX COMMAND EXECUTION ---
     if (!message.content.startsWith(defaultPrefix)) return;
 
     const args = message.content.slice(defaultPrefix.length).trim().split(/ +/);
