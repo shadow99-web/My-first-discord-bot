@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
 
@@ -8,9 +8,7 @@ const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Bot is running!\n");
-}).listen(port, () => {
-    console.log(`✅ HTTP server listening on port ${port}`);
-});
+}).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
 
 // ===== BOT SETUP =====
 const client = new Client({
@@ -27,7 +25,7 @@ const client = new Client({
 // ===== COLLECTIONS =====
 client.commands = new Collection();
 client.snipes = new Map();
-client.afk = new Map(); // { userId: { reason, since, mentions: [] } }
+client.afk = new Map();
 
 // ===== PREFIX =====
 const defaultPrefix = "!";
@@ -48,7 +46,6 @@ for (const file of commandFiles) {
 
 // ===== AUTO DEPLOY SLASH COMMANDS =====
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-
 (async () => {
     try {
         if (process.env.GUILD_ID) {
@@ -59,7 +56,6 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
             );
             console.log("✅ Guild commands deployed successfully!");
         }
-
         console.log(`🚀 Deploying ${commandsData.length} commands globally...`);
         await rest.put(
             Routes.applicationCommands(process.env.CLIENT_ID),
@@ -80,7 +76,6 @@ client.once("ready", () => {
 // ===== MESSAGE DELETE EVENT (SNIPE) =====
 client.on("messageDelete", (message) => {
     if (!message.guild || message.author?.bot) return;
-
     const snipes = client.snipes.get(message.channel.id) || [];
     snipes.unshift({
         content: message.content || "*No text (embed/attachment)*",
@@ -89,7 +84,6 @@ client.on("messageDelete", (message) => {
         createdAt: message.createdTimestamp,
         attachment: message.attachments.first() ? message.attachments.first().url : null
     });
-
     if (snipes.length > 5) snipes.pop();
     client.snipes.set(message.channel.id, snipes);
 });
@@ -105,9 +99,9 @@ client.on("interactionCreate", async (interaction) => {
     } catch (error) {
         console.error(`❌ Error executing slash command ${interaction.commandName}:`, error);
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: "❌ Something went wrong!", ephemeral: true });
+            interaction.followUp({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
         } else {
-            await interaction.reply({ content: "❌ Something went wrong!", ephemeral: true });
+            interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
         }
     }
 });
@@ -116,7 +110,7 @@ client.on("interactionCreate", async (interaction) => {
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    const blueHeart = "<a:blue_heart:1414309560231002194>";
+    const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
 
     // --- USER RETURNING FROM AFK ---
     if (client.afk.has(message.author.id)) {
@@ -133,36 +127,31 @@ client.on("messageCreate", async (message) => {
             let mentionList = afkData.mentions.slice(0, 5).map((m, i) =>
                 `${i + 1}. **${m.user}** in <#${m.channel}> → [Jump](${m.url})`
             ).join("\n");
-
             if (afkData.mentions.length > 5) {
                 mentionList += `\n...and ${afkData.mentions.length - 5} more mentions.`;
             }
-
             embed.addFields({ name: `📌 Mentions while AFK`, value: mentionList, inline: false });
         }
 
-        message.reply({ embeds: [embed] });
+        message.reply({ embeds: [embed] }).catch(() => {});
     }
 
     // --- NOTIFY MENTIONED AFK USERS ---
     message.mentions.users.forEach((mentioned) => {
         if (client.afk.has(mentioned.id)) {
             const afk = client.afk.get(mentioned.id);
-
             const embed = new EmbedBuilder()
                 .setColor("Blue")
                 .setAuthor({ name: `${mentioned.tag} is AFK`, iconURL: mentioned.displayAvatarURL({ dynamic: true }) })
                 .setDescription(`${blueHeart} Reason: **${afk.reason}** (since <t:${Math.floor(afk.since / 1000)}:R>)`)
                 .setTimestamp();
-
-            message.reply({ embeds: [embed] });
+            message.reply({ embeds: [embed] }).catch(() => {});
 
             afk.mentions.push({
                 user: message.author.tag,
                 channel: message.channel.id,
                 url: message.url
             });
-
             client.afk.set(mentioned.id, afk);
         }
     });
@@ -179,7 +168,7 @@ client.on("messageCreate", async (message) => {
         await command.execute({ message, args, isPrefix: true, client });
     } catch (error) {
         console.error(`❌ Error executing prefix command ${commandName}:`, error);
-        message.reply("❌ Something went wrong executing this command.");
+        message.reply("❌ Something went wrong executing this command.").catch(() => {});
     }
 });
 
