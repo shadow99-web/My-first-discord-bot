@@ -1,24 +1,29 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const heart = "<a:blue_heart:1414309560231002194>";
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("serverbanner")
-        .setDescription("Show the server banner"),
-    async execute(context) {
-        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
-        const bannerURL = guild.bannerURL({ size: 1024 });
-        if (!bannerURL) {
-            const msg = "📭 This server has no banner!";
-            if (context.isPrefix) return context.message.reply(msg);
-            else return context.interaction.reply({ content: msg, ephemeral: true });
+        .setDescription("Get the banner of this server"),
+
+    async execute({ message, interaction, isPrefix }) {
+        const guild = isPrefix ? message.guild : interaction.guild;
+
+        if (!guild.banner) {
+            const replyMsg = `${heart} This server has no banner set!`;
+            if (isPrefix) return message.reply(replyMsg);
+            else return interaction.reply({ content: replyMsg, ephemeral: true });
         }
+
+        const bannerURL = guild.bannerURL({ size: 2048 });
+
         const embed = new EmbedBuilder()
-            .setTitle(`${guild.name} Banner`)
+            .setTitle(`${heart} Banner of ${guild.name}`)
             .setImage(bannerURL)
-            .setColor("Purple")
+            .setColor("Blue")
             .setTimestamp();
 
-        if (context.isPrefix) await context.message.reply({ embeds: [embed] });
-        else await context.interaction.reply({ embeds: [embed] });
+        if (isPrefix) message.reply({ embeds: [embed] });
+        else interaction.reply({ embeds: [embed] });
     }
 };
