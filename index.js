@@ -24,9 +24,10 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// ===== COMMAND COLLECTION & SNIPE MAP =====
+// ===== COMMAND COLLECTION & SNIPE/AFK MAP =====
 client.commands = new Collection();
 client.snipes = new Map();
+client.afk = new Map(); // { userId: { reason, since, mentions: [] } }
 
 // ===== PREFIX =====
 const defaultPrefix = "!";
@@ -103,7 +104,7 @@ client.on("interactionCreate", async (interaction) => {
     if (!command) return;
 
     try {
-        await command.execute({ interaction, client }); // <--- pass client
+        await command.execute({ interaction, client });
     } catch (error) {
         console.error(`❌ Error executing slash command ${interaction.commandName}:`, error);
         if (interaction.replied || interaction.deferred) {
@@ -117,6 +118,47 @@ client.on("interactionCreate", async (interaction) => {
 // ===== PREFIX COMMAND HANDLER =====
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
+
+    // ===== AFK HANDLER =====
+    if (client.afk.has(message.author.id)) {
+        const afkData = client.afk.get(message.author.id);
+        client.afk.delete(message.author.id);
+
+        let replyText = `✅ Welcome back ${message.author}, your AFK status has been removed.`;
+
+        if (afkData.mentions.length > 0) {
+            replyText += `\n\n📌 While you were away, you were mentioned **${afkData.mentions.length}** times:\n`;
+            afkData.mentions.slice(0, 5).forEach((m, i) => {
+                replyText += `\n${i + 1}. **${m.user}** in <#${m.channel}> → [Jump](${m.url})`;
+            });
+            if (afkData.mentions.length > 5) {
+                replyText += `\n...and ${afkData.mentions.length - 5} more mentions.`;
+            }
+        }
+
+        message.reply(replyText);
+    }
+
+    // If someone mentions an AFK user → notify & log mention
+    message.mentions.users.forEach((mentioned) => {
+        if (client.afk.has(mentioned.id)) {
+            const afk = client.afk.get(mentioned.id);
+
+            message.reply(
+                `💤 ${mentioned} is AFK — **${afk.reason}** (since <t:${Math.floor(afk.since / 1000)}:R>)`
+            );
+
+            afk.mentions.push({
+                user: message.author.tag,
+                channel: message.channel.id,
+                url: message.url
+            });
+
+            client.afk.set(mentioned.id, afk);
+        }
+    });
+
+    // ===== PREFIX COMMANDS =====
     if (!message.content.startsWith(defaultPrefix)) return;
 
     const args = message.content.slice(defaultPrefix.length).trim().split(/ +/);
@@ -125,7 +167,7 @@ client.on("messageCreate", async (message) => {
     if (!command) return;
 
     try {
-        await command.execute({ message, args, isPrefix: true, client }); // <--- pass client
+        await command.execute({ message, args, isPrefix: true, client });
     } catch (error) {
         console.error(`❌ Error executing prefix command ${commandName}:`, error);
         message.reply("❌ Something went wrong executing this command.");
