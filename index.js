@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
 
@@ -27,8 +27,19 @@ client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map();
 
-// ===== PREFIX =====
+// ===== DEFAULT PREFIX =====
 const defaultPrefix = "!";
+
+// ===== PREFIX STORAGE 🔵 =====
+const prefixFile = "./prefixes.json";
+if (!fs.existsSync(prefixFile)) fs.writeFileSync(prefixFile, "{}");
+
+function getPrefixes() {
+    return JSON.parse(fs.readFileSync(prefixFile, "utf8"));
+}
+function savePrefixes(prefixes) {
+    fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
+}
 
 // ===== LOAD COMMANDS =====
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
@@ -156,10 +167,12 @@ client.on("messageCreate", async (message) => {
         }
     });
 
-    // --- PREFIX COMMAND EXECUTION ---
-    if (!message.content.startsWith(defaultPrefix)) return;
+    // ===== GET PREFIX FOR THIS GUILD 🔵 =====
+    const prefixes = getPrefixes();
+    const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
 
-    const args = message.content.slice(defaultPrefix.length).trim().split(/ +/);
+    if (!message.content.startsWith(guildPrefix)) return;
+    const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
     const command = client.commands.get(commandName);
     if (!command) return;
