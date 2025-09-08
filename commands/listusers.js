@@ -3,14 +3,24 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 module.exports = {
   name: "listusers",
   description: "List server members with pagination and animated blue heart emoji",
-  
+
   data: new SlashCommandBuilder()
     .setName("listusers")
     .setDescription("List all members of the server"),
 
   async execute(interactionOrMessage) {
     const isInteraction = interactionOrMessage.isCommand?.();
-    const channel = interactionOrMessage.channel;
+
+    const reply = async (options) => {
+      if (isInteraction) {
+        if (!interactionOrMessage.deferred && !interactionOrMessage.replied) {
+          await interactionOrMessage.deferReply({ ephemeral: false });
+        }
+        return interactionOrMessage.followUp(options);
+      } else {
+        return interactionOrMessage.channel.send(options);
+      }
+    };
 
     try {
       const guild = interactionOrMessage.guild;
@@ -21,7 +31,7 @@ module.exports = {
         mention: `<@${m.id}>`
       }));
 
-      if (!members.length) return channel.send("No members found!");
+      if (!members.length) return reply({ content: "No members found!" });
 
       const pageSize = 15;
       let page = 0;
@@ -29,12 +39,17 @@ module.exports = {
 
       const generateEmbed = (page) => {
         const membersPage = members.slice(page * pageSize, (page + 1) * pageSize);
+
+        const description = membersPage
+          .map(u => `<a:blue_heart_1414309560231002194:1414309560231002194> **${u.mention}** (\`${u.tag}\`)`)
+          .join("\n");
+
         return new EmbedBuilder()
-          .setTitle(`Server Members (Page ${page + 1}/${totalPages})`)
-          .setColor("Blue")
-          .setDescription(
-            membersPage.map(u => `<a:blue_heart_1414309560231002194:1414309560231002194> ${u.mention} (${u.tag})`).join("\n")
-          );
+          .setTitle(`❤ Server Members`)
+          .setColor("#0099ff") // stylish blue color
+          .setDescription(description)
+          .setFooter({ text: `Page ${page + 1} of ${totalPages} | Total Members: ${guild.memberCount}` })
+          .setTimestamp();
       };
 
       const row = new ActionRowBuilder().addComponents(
@@ -49,7 +64,7 @@ module.exports = {
           .setStyle(ButtonStyle.Primary)
       );
 
-      const msg = await channel.send({ embeds: [generateEmbed(page)], components: [row] });
+      const msg = await reply({ embeds: [generateEmbed(page)], components: [row] });
 
       const collector = msg.createMessageComponentCollector({ time: 120000 });
 
@@ -68,11 +83,9 @@ module.exports = {
         msg.edit({ components: [row] }).catch(() => {});
       });
 
-      if (isInteraction) await interactionOrMessage.deferReply({ ephemeral: false });
-
     } catch (error) {
       console.error(error);
-      channel.send("❌ Something went wrong.");
+      await reply({ content: "❌ Something went wrong." });
     }
   },
 };
