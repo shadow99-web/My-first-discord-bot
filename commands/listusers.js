@@ -1,67 +1,114 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const Canvas = require("canvas");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('listusers')
-        .setDescription('Lists all users in a specific role with pagination.'),
+  name: "listusers",
+  description: "List all members with avatars and pagination using Canvas.",
+  async execute(message) {
+    try {
+      // Fetch all members
+      await message.guild.members.fetch();
+      const members = message.guild.members.cache.map(member => ({
+        tag: member.user.tag,
+        mention: `<@${member.id}>`,
+        avatarURL: member.user.displayAvatarURL({ format: 'png', size: 64 })
+      }));
 
-    async execute(interaction) {
-        // Replace 'WARRIORS' with your role name or fetch dynamically
-        const roleName = 'WARRIORS';
-        const role = interaction.guild.roles.cache.find(r => r.name === roleName);
-        if (!role) return interaction.reply({ content: `Role "${roleName}" not found!`, ephemeral: true });
+      if (members.length === 0) return message.channel.send("No members found!");
 
-        // Fetch all members with the role
-        await interaction.guild.members.fetch(); // ensures all members are cached
-        const members = role.members.map(m => `:blue_heart_1414309560231002194: ${m.user} (@${m.user.username})`);
+      const pageSize = 15;
+      let page = 0;
+      const totalPages = Math.ceil(members.length / pageSize);
 
-        if (members.length === 0) return interaction.reply({ content: `No users found in ${roleName}.`, ephemeral: true });
+      // Function to create canvas image for current page
+      const generateCanvas = async (membersPage) => {
+        const width = 600;
+        const height = 60 * membersPage.length + 20;
+        const canvas = Canvas.createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
 
-        const pageSize = 10; // users per page
-        const totalPages = Math.ceil(members.length / pageSize);
-        let currentPage = 0;
+        // Background
+        ctx.fillStyle = '#2C2F33';
+        ctx.fillRect(0, 0, width, height);
 
-        const generateEmbed = (page) => {
-            const start = page * pageSize;
-            const end = start + pageSize;
-            return new EmbedBuilder()
-                .setTitle(`Users in ${roleName}`)
-                .setDescription(members.slice(start, end).join('\n'))
-                .setFooter({ text: `Page ${page + 1}/${totalPages}` });
-        };
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '20px Sans-serif';
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('prev')
-                .setLabel('⬅️ Previous')
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(true),
-            new ButtonBuilder()
-                .setCustomId('next')
-                .setLabel('Next ➡️')
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(totalPages <= 1)
-        );
+        for (let i = 0; i < membersPage.length; i++) {
+          const user = membersPage[i];
 
-        const message = await interaction.reply({ embeds: [generateEmbed(currentPage)], components: [row], fetchReply: true });
+          // Draw avatar
+          const avatar = await Canvas.loadImage(user.avatarURL);
+          ctx.drawImage(avatar, 10, 10 + i * 60, 50, 50);
 
-        const collector = message.createMessageComponentCollector({ time: 60000 });
+          // Draw username and mention with animated heart
+          ctx.fillText(`💙 ${user.tag}`, 70, 40 + i * 60);
+        }
 
-        collector.on('collect', async (i) => {
-            if (i.user.id !== interaction.user.id) return i.reply({ content: 'These buttons are not for you!', ephemeral: true });
+        return canvas.toBuffer();
+      };
 
-            if (i.customId === 'next') currentPage++;
-            if (i.customId === 'prev') currentPage--;
+      const generateEmbed = async (page) => {
+        const membersPage = members.slice(page * pageSize, (page + 1) * pageSize);
+        const imageBuffer = await generateCanvas(membersPage);
 
-            row.components[0].setDisabled(currentPage === 0);
-            row.components[1].setDisabled(currentPage === totalPages - 1);
+        return new EmbedBuilder()
+          .setTitle(`Server Members (Page ${page + 1}/${totalPages})`)
+          .setColor("Blue")
+          .setImage('attachment://members.png');
+      };
 
-            await i.update({ embeds: [generateEmbed(currentPage)], components: [row] });
+      // Initial message
+      const membersPage = members.slice(0, pageSize);
+      const canvasBuffer = await generateCanvas(membersPage);
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("prev")
+          .setLabel("⬅ Previous")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId("next")
+          .setLabel("Next ➡")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      const msg = await message.channel.send({
+        embeds: [await generateEmbed(0)],
+        files: [{ attachment: canvasBuffer, name: 'members.png' }],
+        components: [row]
+      });
+
+      // Button collector
+      const collector = msg.createMessageComponentCollector({ time: 120000 });
+
+      collector.on("collect", async (interaction) => {
+        if (!interaction.isButton()) return;
+
+        if (interaction.customId === "next") page++;
+        if (interaction.customId === "prev") page--;
+
+        row.components[0].setDisabled(page === 0);
+        row.components[1].setDisabled(page === totalPages - 1);
+
+        const canvasBuffer = await generateCanvas(members.slice(page * pageSize, (page + 1) * pageSize));
+
+        await interaction.update({
+          embeds: [await generateEmbed(page)],
+          files: [{ attachment: canvasBuffer, name: 'members.png' }],
+          components: [row]
         });
+      });
 
-        collector.on('end', async () => {
-            row.components.forEach(button => button.setDisabled(true));
-            await interaction.editReply({ components: [row] });
-        });
+      collector.on("end", () => {
+        row.components.forEach(button => button.setDisabled(true));
+        msg.edit({ components: [row] }).catch(() => {});
+      });
+
+    } catch (error) {
+      console.error("Error in listusers command:", error);
+      message.channel.send("❌ Something went wrong while fetching members.");
     }
+  },
 };
