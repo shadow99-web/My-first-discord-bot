@@ -15,15 +15,16 @@ module.exports = {
         const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
         const author = context.isPrefix ? context.message.author : context.interaction.user;
 
-        const user = context.isPrefix 
-            ? context.message.mentions.users.first() 
+        const user = context.isPrefix
+            ? context.message.mentions.users.first()
             : context.interaction.options.getUser("user");
-        const commandName = context.isPrefix 
-            ? context.args[1]?.toLowerCase() 
+
+        const commandName = context.isPrefix
+            ? context.args[1]?.toLowerCase()
             : context.interaction.options.getString("command").toLowerCase();
 
         if (!user || !commandName) {
-            return context.isPrefix 
+            return context.isPrefix
                 ? context.message.reply("❌ Usage: `!unblockcommand @user <command>`")
                 : context.interaction.reply({ content: "❌ Please provide both user and command.", ephemeral: true });
         }
@@ -33,13 +34,12 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor("Green")
             .setTitle("🔓 Command Unblocked")
-            .setDescription(`User ${user} can now use \`${commandName}\`.`)
-            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+            .setDescription(`User ${user} has been **unblocked** for \`${commandName}\`.`)
             .setFooter({ text: `Unblocked by ${author.tag}` })
             .setTimestamp();
 
-        context.isPrefix 
-            ? context.message.reply({ embeds: [embed] }) 
+        context.isPrefix
+            ? context.message.reply({ embeds: [embed] })
             : context.interaction.reply({ embeds: [embed] });
     }
 };
