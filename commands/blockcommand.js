@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const { addBlock, removeBlock, getBlockedUsers } = require("../index"); // Import from index.js
+const { addBlock } = require("../utils/blockManager"); // ✅ Import from blockManager
 
 module.exports = {
     name: "blockcommand",
