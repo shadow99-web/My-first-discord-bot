@@ -1,66 +1,61 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const fs = require("fs");
+
+const blockedFile = "./blocked.json";
+if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
+
+function getBlocked() {
+    return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
+}
+function saveBlocked(data) {
+    fs.writeFileSync(blockedFile, JSON.stringify(data, null, 4));
+}
+
+const devID = process.env.DEV_ID;
 
 module.exports = {
-    name: "unblockcommand",
-    description: "Unblock a command for a specific user",
     data: new SlashCommandBuilder()
-        .setName("unblockcommand")
-        .setDescription("Unblock a command for a user")
+        .setName("unblock")
+        .setDescription("Unblock a user from all or specific commands")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addUserOption(option =>
             option.setName("user")
-                .setDescription("User to unblock")
-                .setRequired(true)
-        )
+                .setDescription("The user to unblock")
+                .setRequired(true))
         .addStringOption(option =>
             option.setName("command")
-                .setDescription("Command to unblock")
-                .setRequired(true)
-        )
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+                .setDescription("Optional command name to unblock (leave empty = all commands)")),
 
-    async execute(context) {
-        const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
-        const client = context.client;
-        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+    async execute({ interaction }) {
+        const user = interaction.options.getUser("user");
+        const commandName = interaction.options.getString("command");
+        const guildId = interaction.guild.id;
 
-        // Fetch user + command
-        const targetUser = context.isPrefix 
-            ? context.message.mentions.users.first() 
-            : context.interaction.options.getUser("user");
-        const commandName = context.isPrefix 
-            ? context.args[1] 
-            : context.interaction.options.getString("command");
-
-        if (!targetUser || !commandName) {
-            const errorEmbed = new EmbedBuilder()
-                .setColor("Red")
-                .setDescription(`${blueHeart} Please mention a valid user and command!`);
-            return context.isPrefix
-                ? context.message.reply({ embeds: [errorEmbed] })
-                : context.interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        if (user.id === devID) {
+            return interaction.reply({ content: "🚫 The developer cannot be blocked/unblocked by others.", ephemeral: true });
         }
 
-        // Remove from block list
-        if (
-            client.blockedCommands &&
-            client.blockedCommands[guild.id] &&
-            client.blockedCommands[guild.id][targetUser.id]
-        ) {
-            client.blockedCommands[guild.id][targetUser.id] =
-                client.blockedCommands[guild.id][targetUser.id].filter(cmd => cmd !== commandName);
+        const blocked = getBlocked();
+        if (!blocked[guildId] || !blocked[guildId][user.id]) {
+            return interaction.reply({ content: "⚠️ This user is not blocked.", ephemeral: true });
         }
+
+        if (commandName) {
+            blocked[guildId][user.id] = blocked[guildId][user.id].filter(cmd => cmd !== commandName);
+            if (blocked[guildId][user.id].length === 0) delete blocked[guildId][user.id];
+        } else {
+            delete blocked[guildId][user.id];
+        }
+
+        saveBlocked(blocked);
 
         const embed = new EmbedBuilder()
             .setColor("Green")
-            .setTitle(`${blueHeart} Command Unblocked`)
-            .setDescription(
-                `✅ User **${targetUser.tag}** can now use \`${commandName}\` again.`
-            )
-            .setFooter({ text: `Set by ${context.isPrefix ? context.message.author.tag : context.interaction.user.tag}` })
+            .setTitle("🔓 User Unblocked")
+            .setDescription(`${user} has been unblocked ${commandName ? `from \`${commandName}\`` : "from **all commands**"}.`)
+            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
             .setTimestamp();
 
-        return context.isPrefix
-            ? context.message.reply({ embeds: [embed] })
-            : context.interaction.reply({ embeds: [embed] });
+        await interaction.reply({ embeds: [embed] });
     }
 };
