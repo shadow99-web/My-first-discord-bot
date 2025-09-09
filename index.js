@@ -1,5 +1,7 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder } = require("discord.js");
+const { 
+    Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder 
+} = require("discord.js");
 const fs = require("fs");
 const http = require("http");
 
@@ -36,7 +38,7 @@ if (!fs.existsSync(prefixFile)) fs.writeFileSync(prefixFile, "{}");
 const getPrefixes = () => JSON.parse(fs.readFileSync(prefixFile, "utf8"));
 const savePrefixes = (prefixes) => fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
 
-// ===== BLOCKED USERS STORAGE 🔴 =====
+// ===== BLOCKED USERS STORAGE 🔴 (PER COMMAND) =====
 const blockFile = "./block.json";
 if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
 const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
@@ -46,15 +48,35 @@ const saveBlocked = (data) => fs.writeFileSync(blockFile, JSON.stringify(data, n
 const devID = process.env.DEV_ID;
 
 // ===== HELPER FUNCTIONS =====
-const isBlocked = (userId, guildId) => {
+const isBlocked = (userId, guildId, commandName) => {
     const blocked = getBlocked();
-    const guildBlocked = blocked[guildId] || [];
-    return userId !== devID && guildBlocked.includes(userId);
+    const guildBlocked = blocked[guildId] || {};
+    const commandBlocked = guildBlocked[commandName] || [];
+    return userId !== devID && commandBlocked.includes(userId);
 };
 
-const getBlockedUsers = (guildId) => {
+const addBlock = (guildId, commandName, userId) => {
     const blocked = getBlocked();
-    return blocked[guildId] || [];
+    if (!blocked[guildId]) blocked[guildId] = {};
+    if (!blocked[guildId][commandName]) blocked[guildId][commandName] = [];
+    if (!blocked[guildId][commandName].includes(userId)) {
+        blocked[guildId][commandName].push(userId);
+        saveBlocked(blocked);
+    }
+};
+
+const removeBlock = (guildId, commandName, userId) => {
+    const blocked = getBlocked();
+    if (blocked[guildId]?.[commandName]) {
+        blocked[guildId][commandName] = blocked[guildId][commandName].filter(id => id !== userId);
+        if (blocked[guildId][commandName].length === 0) delete blocked[guildId][commandName];
+        saveBlocked(blocked);
+    }
+};
+
+const getBlockedUsers = (guildId, commandName) => {
+    const blocked = getBlocked();
+    return blocked[guildId]?.[commandName] || [];
 };
 
 // ===== LOAD COMMANDS =====
@@ -106,19 +128,19 @@ client.on("messageDelete", (message) => {
     client.snipes.set(message.channel.id, snipes);
 });
 
-// ===== HANDLE BLOCKED USERS (SLASH) =====
+// ===== HANDLE SLASH COMMANDS =====
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isCommand()) return;
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
-    if (isBlocked(interaction.user.id, interaction.guildId)) {
+    if (isBlocked(interaction.user.id, interaction.guildId, interaction.commandName)) {
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setColor("Red")
                     .setTitle("🚫 Command Blocked")
-                    .setDescription("You are **blocked** from using commands in this server.")
+                    .setDescription(`You are **blocked** from using \`${interaction.commandName}\` in this server.`)
                     .setFooter({ text: "Contact an admin if you think this is a mistake." })
                     .setTimestamp()
             ],
@@ -135,50 +157,11 @@ client.on("interactionCreate", async (interaction) => {
     }
 });
 
-// ===== HANDLE BLOCKED USERS (PREFIX) + AFK =====
+// ===== HANDLE PREFIX COMMANDS =====
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
-
-    // --- User returning from AFK ---
-    if (client.afk.has(message.author.id)) {
-        const afkData = client.afk.get(message.author.id);
-        client.afk.delete(message.author.id);
-        const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setAuthor({ name: `${message.author.tag} is back!`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`${blueHeart} Your AFK status has been removed.`)
-            .setTimestamp();
-
-        if (afkData.mentions.length > 0) {
-            let mentionList = afkData.mentions.slice(0, 5).map((m, i) =>
-                `${i + 1}. **${m.user}** in <#${m.channel}> → [Jump](${m.url})`
-            ).join("\n");
-            if (afkData.mentions.length > 5) mentionList += `\n...and ${afkData.mentions.length - 5} more mentions.`;
-            embed.addFields({ name: `📌 Mentions while AFK`, value: mentionList, inline: false });
-        }
-
-        message.reply({ embeds: [embed] }).catch(() => {});
-    }
-
-    // --- Notify mentioned AFK users ---
-    message.mentions.users.forEach((mentioned) => {
-        if (client.afk.has(mentioned.id)) {
-            const afk = client.afk.get(mentioned.id);
-            const embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setAuthor({ name: `${mentioned.tag} is AFK`, iconURL: mentioned.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`${blueHeart} Reason: **${afk.reason}** (since <t:${Math.floor(afk.since / 1000)}:R>)`)
-                .setTimestamp();
-            message.reply({ embeds: [embed] }).catch(() => {});
-
-            afk.mentions.push({ user: message.author.tag, channel: message.channel.id, url: message.url });
-            client.afk.set(mentioned.id, afk);
-        }
-    });
-
-    // ===== PREFIX COMMANDS =====
+    // ===== PREFIXES =====
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
@@ -188,13 +171,13 @@ client.on("messageCreate", async (message) => {
     const command = client.commands.get(commandName);
     if (!command) return;
 
-    if (isBlocked(message.author.id, message.guild.id)) {
+    if (isBlocked(message.author.id, message.guild.id, commandName)) {
         return message.reply({
             embeds: [
                 new EmbedBuilder()
                     .setColor("Red")
                     .setTitle("🚫 Command Blocked")
-                    .setDescription("You are **blocked** from using commands in this server.")
+                    .setDescription(`You are **blocked** from using \`${commandName}\` in this server.`)
                     .setFooter({ text: "Contact an admin if you think this is a mistake." })
                     .setTimestamp()
             ]
@@ -211,3 +194,6 @@ client.on("messageCreate", async (message) => {
 
 // ===== LOGIN =====
 client.login(process.env.TOKEN);
+
+// ===== EXPORT HELPERS (for block/unblock/list commands) =====
+module.exports = { addBlock, removeBlock, getBlockedUsers };
