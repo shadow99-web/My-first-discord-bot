@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const { removeBlock } = require("../index");
+const { removeBlock } = require("../blockManager"); // ✅ Import from blockManager
 
 module.exports = {
     name: "unblockcommand",
