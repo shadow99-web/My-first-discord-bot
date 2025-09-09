@@ -1,61 +1,47 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const fs = require("fs");
-
-// Helper to get blocked users
-const blockedFile = "./blocked.json";
-const getBlocked = () => {
-    if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
-    return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
-};
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { getBlockedUsers } = require("../index");
 
 module.exports = {
+    name: "listblocks",
+    description: "List all blocked users per command",
     data: new SlashCommandBuilder()
         .setName("listblocks")
-        .setDescription("Shows all blocked users in this server from specific commands"),
+        .setDescription("List all blocked users per command")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-    async execute({ interaction, message, client, isPrefix }) {
-        const user = interaction?.user || message.author;
+    async execute(context) {
+        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
 
-        // Only admins or DEV_ID can use
-        if (!user.id === process.env.DEV_ID && !user.permissions?.has?.("Administrator") && !message?.member?.permissions?.has("Administrator")) {
-            const replyEmbed = new EmbedBuilder()
-                .setColor("Red")
-                .setTitle("❌ Permission Denied")
-                .setDescription("Only admins or the bot developer can use this command.");
-            if (isPrefix) return message.reply({ embeds: [replyEmbed] }).catch(() => {});
-            else return interaction.reply({ embeds: [replyEmbed], ephemeral: true });
-        }
-
-        const blocked = getBlocked();
-        const guildBlocked = blocked[interaction?.guildId || message.guild.id] || [];
-
-        if (guildBlocked.length === 0) {
-            const emptyEmbed = new EmbedBuilder()
-                .setColor("Yellow")
-                .setTitle("No blocked users")
-                .setDescription("There are currently no users blocked in this server.");
-            if (isPrefix) return message.reply({ embeds: [emptyEmbed] }).catch(() => {});
-            else return interaction.reply({ embeds: [emptyEmbed], ephemeral: true });
+        const blockedData = require("../block.json")[guild.id] || {};
+        if (Object.keys(blockedData).length === 0) {
+            return context.isPrefix
+                ? context.message.reply("✅ No users are blocked in this server.")
+                : context.interaction.reply({ content: "✅ No users are blocked in this server.", ephemeral: true });
         }
 
         const embed = new EmbedBuilder()
             .setColor("Blue")
-            .setTitle(`🚫 Blocked Users (${guildBlocked.length})`)
-            .setDescription(
-                await Promise.all(
-                    guildBlocked.map(async (id, index) => {
-                        try {
-                            const member = await (interaction?.guild || message.guild).members.fetch(id);
-                            return `${index + 1}. ${member.user.tag}`;
-                        } catch {
-                            return `${index + 1}. Unknown User (ID: ${id})`;
-                        }
-                    })
-                ).then(arr => arr.join("\n"))
-            )
+            .setTitle("📜 Blocked Users List")
+            .setFooter({ text: `Server: ${guild.name}` })
             .setTimestamp();
 
-        if (isPrefix) message.reply({ embeds: [embed] }).catch(() => {});
-        else interaction.reply({ embeds: [embed], ephemeral: true });
+        for (const [commandName, users] of Object.entries(blockedData)) {
+            const mentions = users.map(id => {
+                const member = guild.members.cache.get(id);
+                return member 
+                    ? `${member.user} (${member.user.username})` 
+                    : `Unknown User (${id})`;
+            }).join("\n");
+
+            embed.addFields({ 
+                name: `⚔️ Command: \`${commandName}\``, 
+                value: mentions || "None", 
+                inline: false 
+            });
+        }
+
+        context.isPrefix 
+            ? context.message.reply({ embeds: [embed] }) 
+            : context.interaction.reply({ embeds: [embed] });
     }
 };
