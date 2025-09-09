@@ -1,62 +1,58 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const fs = require("fs");
-
-const blockedFile = "./blocked.json";
-if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
-
-function getBlocked() {
-    return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
-}
-function saveBlocked(data) {
-    fs.writeFileSync(blockedFile, JSON.stringify(data, null, 4));
-}
-
-const devID = process.env.DEV_ID; // 🔑 cannot be blocked
+const { addBlock } = require("../index");
 
 module.exports = {
+    name: "blockcommand",
+    description: "Block a user from using a specific command",
     data: new SlashCommandBuilder()
-        .setName("block")
-        .setDescription("Block a user from all or specific commands")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .addUserOption(option =>
-            option.setName("user")
-                .setDescription("The user to block")
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName("command")
-                .setDescription("Optional command name to block (leave empty = all commands)")),
+        .setName("blockcommand")
+        .setDescription("Block a user from a specific command")
+        .addUserOption(opt => opt.setName("user").setDescription("User to block").setRequired(true))
+        .addStringOption(opt => opt.setName("command").setDescription("Command name").setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-    async execute({ interaction }) {
-        const user = interaction.options.getUser("user");
-        const commandName = interaction.options.getString("command");
-        const guildId = interaction.guild.id;
+    async execute(context) {
+        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+        const author = context.isPrefix ? context.message.author : context.interaction.user;
 
-        if (user.id === devID) {
-            return interaction.reply({ content: "🚫 You cannot block the developer!", ephemeral: true });
+        // ===== Permissions =====
+        if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageGuild)) {
+            return context.isPrefix 
+                ? context.message.reply("❌ I need `Manage Server` permission to block users.")
+                : context.interaction.reply({ content: "❌ I need `Manage Server` permission to block users.", ephemeral: true });
         }
 
-        const blocked = getBlocked();
-        if (!blocked[guildId]) blocked[guildId] = {};
+        const user = context.isPrefix 
+            ? context.message.mentions.users.first() 
+            : context.interaction.options.getUser("user");
+        const commandName = context.isPrefix 
+            ? context.args[1]?.toLowerCase() 
+            : context.interaction.options.getString("command").toLowerCase();
 
-        if (!blocked[guildId][user.id]) blocked[guildId][user.id] = [];
-
-        if (commandName) {
-            if (!blocked[guildId][user.id].includes(commandName)) {
-                blocked[guildId][user.id].push(commandName);
-            }
-        } else {
-            blocked[guildId][user.id] = ["*"]; // full block
+        if (!user || !commandName) {
+            return context.isPrefix 
+                ? context.message.reply("❌ Usage: `!blockcommand @user <command>`")
+                : context.interaction.reply({ content: "❌ Please provide both user and command.", ephemeral: true });
         }
 
-        saveBlocked(blocked);
+        if (user.id === process.env.DEV_ID) {
+            return context.isPrefix 
+                ? context.message.reply("🚫 You cannot block the Developer.")
+                : context.interaction.reply({ content: "🚫 You cannot block the Developer.", ephemeral: true });
+        }
+
+        addBlock(guild.id, commandName, user.id);
 
         const embed = new EmbedBuilder()
             .setColor("Red")
-            .setTitle("🔒 User Blocked")
-            .setDescription(`${user} has been blocked ${commandName ? `from \`${commandName}\`` : "from **all commands**"}.`)
+            .setTitle("🔒 Command Blocked")
+            .setDescription(`User ${user} has been **blocked** from using \`${commandName}\`.`)
             .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+            .setFooter({ text: `Blocked by ${author.tag}` })
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        context.isPrefix 
+            ? context.message.reply({ embeds: [embed] }) 
+            : context.interaction.reply({ embeds: [embed] });
     }
 };
