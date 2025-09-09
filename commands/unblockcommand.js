@@ -1,61 +1,45 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const fs = require("fs");
-
-const blockedFile = "./blocked.json";
-if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
-
-function getBlocked() {
-    return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
-}
-function saveBlocked(data) {
-    fs.writeFileSync(blockedFile, JSON.stringify(data, null, 4));
-}
-
-const devID = process.env.DEV_ID;
+const { removeBlock } = require("../index");
 
 module.exports = {
+    name: "unblockcommand",
+    description: "Unblock a user from a specific command",
     data: new SlashCommandBuilder()
-        .setName("unblock")
-        .setDescription("Unblock a user from all or specific commands")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .addUserOption(option =>
-            option.setName("user")
-                .setDescription("The user to unblock")
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName("command")
-                .setDescription("Optional command name to unblock (leave empty = all commands)")),
+        .setName("unblockcommand")
+        .setDescription("Unblock a user from a specific command")
+        .addUserOption(opt => opt.setName("user").setDescription("User to unblock").setRequired(true))
+        .addStringOption(opt => opt.setName("command").setDescription("Command name").setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-    async execute({ interaction }) {
-        const user = interaction.options.getUser("user");
-        const commandName = interaction.options.getString("command");
-        const guildId = interaction.guild.id;
+    async execute(context) {
+        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+        const author = context.isPrefix ? context.message.author : context.interaction.user;
 
-        if (user.id === devID) {
-            return interaction.reply({ content: "🚫 The developer cannot be blocked/unblocked by others.", ephemeral: true });
+        const user = context.isPrefix 
+            ? context.message.mentions.users.first() 
+            : context.interaction.options.getUser("user");
+        const commandName = context.isPrefix 
+            ? context.args[1]?.toLowerCase() 
+            : context.interaction.options.getString("command").toLowerCase();
+
+        if (!user || !commandName) {
+            return context.isPrefix 
+                ? context.message.reply("❌ Usage: `!unblockcommand @user <command>`")
+                : context.interaction.reply({ content: "❌ Please provide both user and command.", ephemeral: true });
         }
 
-        const blocked = getBlocked();
-        if (!blocked[guildId] || !blocked[guildId][user.id]) {
-            return interaction.reply({ content: "⚠️ This user is not blocked.", ephemeral: true });
-        }
-
-        if (commandName) {
-            blocked[guildId][user.id] = blocked[guildId][user.id].filter(cmd => cmd !== commandName);
-            if (blocked[guildId][user.id].length === 0) delete blocked[guildId][user.id];
-        } else {
-            delete blocked[guildId][user.id];
-        }
-
-        saveBlocked(blocked);
+        removeBlock(guild.id, commandName, user.id);
 
         const embed = new EmbedBuilder()
             .setColor("Green")
-            .setTitle("🔓 User Unblocked")
-            .setDescription(`${user} has been unblocked ${commandName ? `from \`${commandName}\`` : "from **all commands**"}.`)
+            .setTitle("🔓 Command Unblocked")
+            .setDescription(`User ${user} can now use \`${commandName}\`.`)
             .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+            .setFooter({ text: `Unblocked by ${author.tag}` })
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        context.isPrefix 
+            ? context.message.reply({ embeds: [embed] }) 
+            : context.interaction.reply({ embeds: [embed] });
     }
 };
