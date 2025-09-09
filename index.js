@@ -32,22 +32,22 @@ client.afk = new Map();
 // ===== DEFAULT PREFIX =====
 const defaultPrefix = "!";
 
-// ===== PREFIX STORAGE 🔵 =====
+// ===== PREFIX STORAGE =====
 const prefixFile = "./prefixes.json";
 if (!fs.existsSync(prefixFile)) fs.writeFileSync(prefixFile, "{}");
 const getPrefixes = () => JSON.parse(fs.readFileSync(prefixFile, "utf8"));
 const savePrefixes = (prefixes) => fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
 
-// ===== BLOCKED USERS STORAGE 🔴 (PER COMMAND) =====
+// ===== BLOCKED USERS STORAGE =====
 const blockFile = "./block.json";
 if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
 const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
 const saveBlocked = (data) => fs.writeFileSync(blockFile, JSON.stringify(data, null, 4));
 
-// ===== DEV ID (cannot be blocked) =====
+// ===== DEV ID =====
 const devID = process.env.DEV_ID;
 
-// ===== HELPER FUNCTIONS =====
+// ===== BLOCK HELPER FUNCTIONS =====
 const isBlocked = (userId, guildId, commandName) => {
     const blocked = getBlocked();
     const guildBlocked = blocked[guildId] || {};
@@ -80,6 +80,7 @@ const getBlockedUsers = (guildId, commandName) => {
 };
 
 // ===== LOAD COMMANDS =====
+client.commands = new Collection();
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 const commandsData = [];
 
@@ -92,18 +93,18 @@ for (const file of commandFiles) {
     } else console.log(`⚠️ Skipped invalid command file: ${file}`);
 }
 
-// ===== AUTO DEPLOY SLASH COMMANDS =====
+// ===== DEPLOY SLASH COMMANDS =====
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
     try {
         if (process.env.GUILD_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
-            console.log("✅ Guild commands deployed successfully!");
+            console.log("✅ Guild commands deployed!");
         }
         await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
-        console.log("✅ Global commands deployed successfully!");
-    } catch (error) {
-        console.error("❌ Error deploying commands:", error);
+        console.log("✅ Global commands deployed!");
+    } catch (err) {
+        console.error("❌ Error deploying commands:", err);
     }
 })();
 
@@ -113,7 +114,7 @@ client.once("ready", () => {
     client.user.setActivity(`Type ${defaultPrefix}help or /help`, { type: "WATCHING" });
 });
 
-// ===== MESSAGE DELETE EVENT (SNIPE) =====
+// ===== MESSAGE DELETE (SNIPE) =====
 client.on("messageDelete", (message) => {
     if (!message.guild || message.author?.bot) return;
     const snipes = client.snipes.get(message.channel.id) || [];
@@ -149,9 +150,9 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     try {
-        await command.execute({ interaction, client });
-    } catch (error) {
-        console.error(error);
+        await command.execute({ interaction, client, isPrefix: false });
+    } catch (err) {
+        console.error(err);
         if (interaction.replied || interaction.deferred) interaction.followUp({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
         else interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
     }
@@ -161,7 +162,6 @@ client.on("interactionCreate", async (interaction) => {
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // ===== PREFIXES =====
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
@@ -185,9 +185,9 @@ client.on("messageCreate", async (message) => {
     }
 
     try {
-        await command.execute({ message, args, isPrefix: true, client });
-    } catch (error) {
-        console.error(error);
+        await command.execute({ message, args, client, isPrefix: true });
+    } catch (err) {
+        console.error(err);
         message.reply("❌ Something went wrong executing this command.").catch(() => {});
     }
 });
@@ -195,5 +195,5 @@ client.on("messageCreate", async (message) => {
 // ===== LOGIN =====
 client.login(process.env.TOKEN);
 
-// ===== EXPORT HELPERS (for block/unblock/list commands) =====
-module.exports = { addBlock, removeBlock, getBlockedUsers };
+// ===== EXPORT HELPERS =====
+module.exports = { addBlock, removeBlock, getBlockedUsers, isBlocked };
