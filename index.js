@@ -176,10 +176,64 @@ client.on("interactionCreate", async (interaction) => {
     }
 });
 
-// ===== HANDLE PREFIX COMMANDS =====
+// ===== HANDLE PREFIX COMMANDS + AFK SYSTEM =====
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
+    // ===== AFK REMOVE IF USER RETURNS =====
+    if (client.afk.has(message.author.id)) {
+        const data = client.afk.get(message.author.id);
+        client.afk.delete(message.author.id);
+
+        const embed = new EmbedBuilder()
+            .setColor("Green")
+            .setAuthor({ name: `${message.author.username} is back!`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+            .setDescription("✅ You are no longer AFK.")
+            .setTimestamp();
+
+        message.reply({ embeds: [embed] }).catch(() => {});
+
+        // Notify them who pinged while AFK
+        if (data.mentions?.length) {
+            const mentionsList = data.mentions.map(m => `<@${m}>`).join(", ");
+            message.channel.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor("Yellow")
+                        .setAuthor({ name: "While you were AFK...", iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                        .setDescription(`📩 You were mentioned by: ${mentionsList}`)
+                        .setTimestamp()
+                ]
+            }).catch(() => {});
+        }
+    }
+
+    // ===== AFK NOTIFY WHEN PINGED =====
+    if (message.mentions.users.size > 0) {
+        message.mentions.users.forEach(user => {
+            if (client.afk.has(user.id)) {
+                const data = client.afk.get(user.id);
+                const since = `<t:${Math.floor(data.since / 1000)}:R>`;
+
+                const embed = new EmbedBuilder()
+                    .setColor("Blue")
+                    .setAuthor({ name: `${user.tag} is AFK`, iconURL: user.displayAvatarURL({ dynamic: true }) })
+                    .setDescription(`💤 Reason: **${data.reason}**\n⏰ Since: ${since}`)
+                    .setFooter({ text: "They will see your mention later." })
+                    .setTimestamp();
+
+                message.reply({ embeds: [embed] }).catch(() => {});
+
+                // Save who mentioned them
+                if (!data.mentions.includes(message.author.id)) {
+                    data.mentions.push(message.author.id);
+                    client.afk.set(user.id, data);
+                }
+            }
+        });
+    }
+
+    // ===== PREFIX COMMAND HANDLING =====
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
