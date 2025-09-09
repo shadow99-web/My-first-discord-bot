@@ -1,58 +1,61 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
+// Helper to get blocked users
 const blockedFile = "./blocked.json";
-function getBlocked() {
-    if (!fs.existsSync(blockedFile)) return {};
+const getBlocked = () => {
+    if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
     return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
-}
+};
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("listblocks")
-        .setDescription("📜 Show list of blocked users from using specific commands in this server"),
+        .setDescription("Shows all blocked users in this server from specific commands"),
 
     async execute({ interaction, message, client, isPrefix }) {
-        const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
-        const guild = interaction ? interaction.guild : message.guild;
-        const blocked = getBlocked();
+        const user = interaction?.user || message.author;
 
-        const blockedUsers = blocked[guild.id] || [];
+        // Only admins or DEV_ID can use
+        if (!user.id === process.env.DEV_ID && !user.permissions?.has?.("Administrator") && !message?.member?.permissions?.has("Administrator")) {
+            const replyEmbed = new EmbedBuilder()
+                .setColor("Red")
+                .setTitle("❌ Permission Denied")
+                .setDescription("Only admins or the bot developer can use this command.");
+            if (isPrefix) return message.reply({ embeds: [replyEmbed] }).catch(() => {});
+            else return interaction.reply({ embeds: [replyEmbed], ephemeral: true });
+        }
+
+        const blocked = getBlocked();
+        const guildBlocked = blocked[interaction?.guildId || message.guild.id] || [];
+
+        if (guildBlocked.length === 0) {
+            const emptyEmbed = new EmbedBuilder()
+                .setColor("Yellow")
+                .setTitle("No blocked users")
+                .setDescription("There are currently no users blocked in this server.");
+            if (isPrefix) return message.reply({ embeds: [emptyEmbed] }).catch(() => {});
+            else return interaction.reply({ embeds: [emptyEmbed], ephemeral: true });
+        }
 
         const embed = new EmbedBuilder()
             .setColor("Blue")
-            .setTitle(`${blueHeart} Blocked Users in ${guild.name}`)
+            .setTitle(`🚫 Blocked Users (${guildBlocked.length})`)
+            .setDescription(
+                await Promise.all(
+                    guildBlocked.map(async (id, index) => {
+                        try {
+                            const member = await (interaction?.guild || message.guild).members.fetch(id);
+                            return `${index + 1}. ${member.user.tag}`;
+                        } catch {
+                            return `${index + 1}. Unknown User (ID: ${id})`;
+                        }
+                    })
+                ).then(arr => arr.join("\n"))
+            )
             .setTimestamp();
 
-        if (blockedUsers.length === 0) {
-            embed.setDescription("✅ No users are blocked in this server.");
-        } else {
-            let desc = "";
-
-            for (let i = 0; i < blockedUsers.length; i++) {
-                const userId = blockedUsers[i];
-                const user = await client.users.fetch(userId).catch(() => null);
-
-                if (user) {
-                    desc += `${i + 1}. [${user.username}](https://discord.com/users/${user.id})\n`;
-                } else {
-                    desc += `${i + 1}. <@${userId}> (\`${userId}\`)\n`;
-                }
-            }
-
-            embed.setDescription(desc);
-
-            // Optional: set thumbnail if only one user
-            if (blockedUsers.length === 1) {
-                const user = await client.users.fetch(blockedUsers[0]).catch(() => null);
-                if (user) embed.setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128 }));
-            }
-        }
-
-        if (interaction) {
-            await interaction.reply({ embeds: [embed], ephemeral: false });
-        } else if (message) {
-            await message.reply({ embeds: [embed] });
-        }
+        if (isPrefix) message.reply({ embeds: [embed] }).catch(() => {});
+        else interaction.reply({ embeds: [embed], ephemeral: true });
     }
 };
