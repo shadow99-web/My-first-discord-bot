@@ -37,10 +37,10 @@ const getPrefixes = () => JSON.parse(fs.readFileSync(prefixFile, "utf8"));
 const savePrefixes = (prefixes) => fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
 
 // ===== BLOCKED USERS STORAGE 🔴 =====
-const blockedFile = "./blocked.json";
-if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
-const getBlocked = () => JSON.parse(fs.readFileSync(blockedFile, "utf8"));
-const saveBlocked = (data) => fs.writeFileSync(blockedFile, JSON.stringify(data, null, 4));
+const blockFile = "./block.json";
+if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
+const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
+const saveBlocked = (data) => fs.writeFileSync(blockFile, JSON.stringify(data, null, 4));
 
 // ===== DEV ID (cannot be blocked) =====
 const devID = process.env.DEV_ID;
