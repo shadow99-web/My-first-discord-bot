@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const { addBlock } = require("../utils/blockManager"); // ✅ Import from blockManager
+const { addBlock } = require("../blockManager"); // ✅ Import from blockManager
 
 module.exports = {
     name: "blockcommand",
@@ -15,14 +15,13 @@ module.exports = {
         const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
         const author = context.isPrefix ? context.message.author : context.interaction.user;
 
-        // ===== Permissions check =====
+        // Permission check
         if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageGuild)) {
             return context.isPrefix
                 ? context.message.reply("❌ I need `Manage Server` permission to block users.")
                 : context.interaction.reply({ content: "❌ I need `Manage Server` permission to block users.", ephemeral: true });
         }
 
-        // ===== Get user & command =====
         const user = context.isPrefix
             ? context.message.mentions.users.first()
             : context.interaction.options.getUser("user");
@@ -43,10 +42,8 @@ module.exports = {
                 : context.interaction.reply({ content: "🚫 You cannot block the Developer.", ephemeral: true });
         }
 
-        // ===== Add block =====
         addBlock(guild.id, commandName, user.id);
 
-        // ===== Confirmation embed =====
         const embed = new EmbedBuilder()
             .setColor("Red")
             .setTitle("🔒 Command Blocked")
