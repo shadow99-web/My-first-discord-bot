@@ -119,10 +119,16 @@ client.on("interactionCreate", async (interaction) => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
-    // 🔴 Check if user is blocked
+    // 🔴 Block check with embed
     const blocked = getBlocked();
     if (interaction.user.id !== devID && blocked[interaction.guildId]?.includes(interaction.user.id)) {
-        return interaction.reply({ content: "🚫 You are blocked from using commands in this server.", ephemeral: true });
+        const embed = new EmbedBuilder()
+            .setColor("Red")
+            .setTitle("🚫 Command Blocked")
+            .setDescription("You are **blocked** from using commands in this server.")
+            .setFooter({ text: "Contact an admin if you think this is a mistake." })
+            .setTimestamp();
+        return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     try {
@@ -197,10 +203,16 @@ client.on("messageCreate", async (message) => {
     const command = client.commands.get(commandName);
     if (!command) return;
 
-    // 🔴 Block check
+    // 🔴 Block check with embed
     const blocked = getBlocked();
     if (message.author.id !== devID && blocked[message.guild.id]?.includes(message.author.id)) {
-        return message.reply("🚫 You are blocked from using commands in this server.");
+        const embed = new EmbedBuilder()
+            .setColor("Red")
+            .setTitle("🚫 Command Blocked")
+            .setDescription("You are **blocked** from using commands in this server.")
+            .setFooter({ text: "Contact an admin if you think this is a mistake." })
+            .setTimestamp();
+        return message.reply({ embeds: [embed] });
     }
 
     try {
