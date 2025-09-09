@@ -4,7 +4,6 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
-const fetch = require("node-fetch"); // For internal pinging
 
 // ===== HTTP SERVER FOR RENDER =====
 const port = process.env.PORT || 3000;
@@ -13,7 +12,7 @@ http.createServer((req, res) => {
     res.end("Bot is running!\n");
 }).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
 
-// ===== SELF PING (Optional Extra to Reduce Sleep Time) =====
+// ===== SELF PING (to prevent Render sleep) =====
 const renderURL = process.env.RENDER_URL; // Add your Render URL in env
 if (renderURL) {
     setInterval(() => {
@@ -101,7 +100,9 @@ for (const file of commandFiles) {
         client.commands.set(command.data.name, command);
         commandsData.push(command.data.toJSON());
         console.log(`✅ Loaded command: ${command.data.name}`);
-    } else console.log(`⚠️ Skipped invalid command file: ${file}`);
+    } else {
+        console.log(`⚠️ Skipped invalid command file: ${file}`);
+    }
 }
 
 // ===== DEPLOY SLASH COMMANDS =====
@@ -109,7 +110,10 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
     try {
         if (process.env.GUILD_ID) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+                { body: commandsData }
+            );
             console.log("✅ Guild commands deployed!");
         }
         await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
@@ -164,8 +168,11 @@ client.on("interactionCreate", async (interaction) => {
         await command.execute({ interaction, client, isPrefix: false });
     } catch (err) {
         console.error(err);
-        if (interaction.replied || interaction.deferred) interaction.followUp({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
-        else interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
+        if (interaction.replied || interaction.deferred) {
+            interaction.followUp({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
+        } else {
+            interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
+        }
     }
 });
 
