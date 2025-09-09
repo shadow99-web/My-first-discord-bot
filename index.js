@@ -41,6 +41,20 @@ function savePrefixes(prefixes) {
     fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
 }
 
+// ===== BLOCKED USERS STORAGE 🔴 =====
+const blockedFile = "./blocked.json";
+if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
+
+function getBlocked() {
+    return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
+}
+function saveBlocked(data) {
+    fs.writeFileSync(blockedFile, JSON.stringify(data, null, 4));
+}
+
+// ===== YOUR DEV ID (cannot be blocked) =====
+const devID = process.env.DEV_ID; // 🔑 set in .env
+
 // ===== LOAD COMMANDS =====
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 const commandsData = [];
@@ -104,6 +118,12 @@ client.on("interactionCreate", async (interaction) => {
     if (!interaction.isCommand()) return;
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
+
+    // 🔴 Check if user is blocked
+    const blocked = getBlocked();
+    if (interaction.user.id !== devID && blocked[interaction.guildId]?.includes(interaction.user.id)) {
+        return interaction.reply({ content: "🚫 You are blocked from using commands in this server.", ephemeral: true });
+    }
 
     try {
         await command.execute({ interaction, client });
@@ -176,6 +196,12 @@ client.on("messageCreate", async (message) => {
     const commandName = args.shift().toLowerCase();
     const command = client.commands.get(commandName);
     if (!command) return;
+
+    // 🔴 Block check
+    const blocked = getBlocked();
+    if (message.author.id !== devID && blocked[message.guild.id]?.includes(message.author.id)) {
+        return message.reply("🚫 You are blocked from using commands in this server.");
+    }
 
     try {
         await command.execute({ message, args, isPrefix: true, client });
