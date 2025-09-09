@@ -17,6 +17,7 @@ module.exports = {
             ? context.args[0] ? context.message.mentions.users.first() : roaster
             : context.interaction.options.getUser("user") || roaster;
 
+        // Fetch a roast from EvilInsult API
         async function fetchRoast() {
             try {
                 const res = await axios.get("https://evilinsult.com/generate_insult.php?lang=en&type=json");
@@ -27,6 +28,7 @@ module.exports = {
             }
         }
 
+        // Roast GIFs
         const gifs = [
             "https://media.giphy.com/media/3o6ZsX6W8XgjrU5vMQ/giphy.gif",
             "https://media.giphy.com/media/l0HlBo7eyXzSZkJri/giphy.gif",
@@ -34,20 +36,21 @@ module.exports = {
         ];
         const getRandomGif = () => gifs[Math.floor(Math.random() * gifs.length)];
 
-        // Function to generate embed with roast and persistent emoji
+        // Function to generate embed with roast and emoji
         async function createEmbed() {
             const roast = await fetchRoast();
             const gif = getRandomGif();
 
             return new EmbedBuilder()
                 .setTitle("🔥 Random Roast 🔥")
-                .setDescription(`:younoob: ${target}, ${roast}`) // Emoji always present
+                .setDescription(`<a:pikawink_1413480827458686997:1413480827458686997> ${target}, ${roast}`)
                 .setColor("DarkRed")
                 .setImage(gif)
                 .setFooter({ text: `Roasted by ${roaster.tag}` })
                 .setTimestamp();
         }
 
+        // Buttons
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId("another_roast")
@@ -70,7 +73,7 @@ module.exports = {
         const collector = message.createMessageComponentCollector({ filter, time: 60000 });
 
         collector.on("collect", async i => {
-            const newEmbed = await createEmbed(); // always includes :younoob:
+            const newEmbed = await createEmbed();
             await i.update({ embeds: [newEmbed], components: [row] });
         });
 
