@@ -4,6 +4,7 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
+const fetch = require("node-fetch"); // For internal pinging
 
 // ===== HTTP SERVER FOR RENDER =====
 const port = process.env.PORT || 3000;
@@ -11,6 +12,16 @@ http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Bot is running!\n");
 }).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
+
+// ===== SELF PING (Optional Extra to Reduce Sleep Time) =====
+const renderURL = process.env.RENDER_URL; // Add your Render URL in env
+if (renderURL) {
+    setInterval(() => {
+        fetch(renderURL)
+            .then(() => console.log("✅ Self-ping successful"))
+            .catch(() => console.log("❌ Self-ping failed"));
+    }, 4 * 60 * 1000); // Ping every 4 minutes
+}
 
 // ===== BOT SETUP =====
 const client = new Client({
