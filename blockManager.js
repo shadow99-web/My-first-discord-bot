@@ -1,17 +1,40 @@
 // utils/blockManager.js
-const blockedUsers = {}; // { guildId: { commandName: [userIds] } }
+const fs = require("fs");
+const blockFile = "./block.json";
+
+// Create file if it doesn't exist
+if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
+
+const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
+const saveBlocked = (data) => fs.writeFileSync(blockFile, JSON.stringify(data, null, 4));
 
 function addBlock(guildId, commandName, userId) {
-    if (!blockedUsers[guildId]) blockedUsers[guildId] = {};
-    if (!blockedUsers[guildId][commandName]) blockedUsers[guildId][commandName] = [];
-    
-    if (!blockedUsers[guildId][commandName].includes(userId)) {
-        blockedUsers[guildId][commandName].push(userId);
+    const blocked = getBlocked();
+    if (!blocked[guildId]) blocked[guildId] = {};
+    if (!blocked[guildId][commandName]) blocked[guildId][commandName] = [];
+    if (!blocked[guildId][commandName].includes(userId)) {
+        blocked[guildId][commandName].push(userId);
+        saveBlocked(blocked);
+    }
+}
+
+function removeBlock(guildId, commandName, userId) {
+    const blocked = getBlocked();
+    if (blocked[guildId]?.[commandName]) {
+        blocked[guildId][commandName] = blocked[guildId][commandName].filter(id => id !== userId);
+        if (blocked[guildId][commandName].length === 0) delete blocked[guildId][commandName];
+        saveBlocked(blocked);
     }
 }
 
 function isBlocked(guildId, commandName, userId) {
-    return blockedUsers[guildId]?.[commandName]?.includes(userId) || false;
+    const blocked = getBlocked();
+    return blocked[guildId]?.[commandName]?.includes(userId) || false;
 }
 
-module.exports = { addBlock, isBlocked };
+function getBlockedUsers(guildId, commandName) {
+    const blocked = getBlocked();
+    return blocked[guildId]?.[commandName] || [];
+}
+
+module.exports = { addBlock, removeBlock, isBlocked, getBlockedUsers };
