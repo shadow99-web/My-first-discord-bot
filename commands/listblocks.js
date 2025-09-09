@@ -2,46 +2,40 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("disc
 const { getBlockedUsers } = require("../index");
 
 module.exports = {
-    name: "listblocks",
-    description: "List all blocked users per command",
+    name: "listblocked",
+    description: "List all users blocked for a specific command",
     data: new SlashCommandBuilder()
-        .setName("listblocks")
-        .setDescription("List all blocked users per command")
+        .setName("listblocked")
+        .setDescription("See blocked users for a command")
+        .addStringOption(opt => opt.setName("command").setDescription("Command name").setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
     async execute(context) {
         const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+        const commandName = context.isPrefix
+            ? context.args[0]?.toLowerCase()
+            : context.interaction.options.getString("command").toLowerCase();
 
-        const blockedData = require("../block.json")[guild.id] || {};
-        if (Object.keys(blockedData).length === 0) {
+        if (!commandName) {
             return context.isPrefix
-                ? context.message.reply("✅ No users are blocked in this server.")
-                : context.interaction.reply({ content: "✅ No users are blocked in this server.", ephemeral: true });
+                ? context.message.reply("❌ Usage: `!listblocked <command>`")
+                : context.interaction.reply({ content: "❌ Please provide a command name.", ephemeral: true });
         }
+
+        const blockedUsers = getBlockedUsers(guild.id, commandName);
 
         const embed = new EmbedBuilder()
             .setColor("Blue")
-            .setTitle("📜 Blocked Users List")
-            .setFooter({ text: `Server: ${guild.name}` })
+            .setTitle(`🚫 Blocked Users for \`${commandName}\``)
+            .setDescription(
+                blockedUsers.length > 0
+                    ? blockedUsers.map(id => `<@${id}>`).join("\n")
+                    : "No users are blocked for this command."
+            )
             .setTimestamp();
 
-        for (const [commandName, users] of Object.entries(blockedData)) {
-            const mentions = users.map(id => {
-                const member = guild.members.cache.get(id);
-                return member 
-                    ? `${member.user} (${member.user.username})` 
-                    : `Unknown User (${id})`;
-            }).join("\n");
-
-            embed.addFields({ 
-                name: `⚔️ Command: \`${commandName}\``, 
-                value: mentions || "None", 
-                inline: false 
-            });
-        }
-
-        context.isPrefix 
-            ? context.message.reply({ embeds: [embed] }) 
+        context.isPrefix
+            ? context.message.reply({ embeds: [embed] })
             : context.interaction.reply({ embeds: [embed] });
     }
 };
