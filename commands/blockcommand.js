@@ -1,76 +1,62 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const fs = require("fs");
+
+const blockedFile = "./blocked.json";
+if (!fs.existsSync(blockedFile)) fs.writeFileSync(blockedFile, "{}");
+
+function getBlocked() {
+    return JSON.parse(fs.readFileSync(blockedFile, "utf8"));
+}
+function saveBlocked(data) {
+    fs.writeFileSync(blockedFile, JSON.stringify(data, null, 4));
+}
+
+const devID = process.env.DEV_ID; // 🔑 cannot be blocked
 
 module.exports = {
-    name: "blockcommand",
-    description: "Block a command from being used by a specific user",
     data: new SlashCommandBuilder()
-        .setName("blockcommand")
-        .setDescription("Block a command from a user")
+        .setName("block")
+        .setDescription("Block a user from all or specific commands")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addUserOption(option =>
             option.setName("user")
-                .setDescription("User to block")
-                .setRequired(true)
-        )
+                .setDescription("The user to block")
+                .setRequired(true))
         .addStringOption(option =>
             option.setName("command")
-                .setDescription("Command to block")
-                .setRequired(true)
-        )
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+                .setDescription("Optional command name to block (leave empty = all commands)")),
 
-    async execute(context) {
-        const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
-        const client = context.client;
-        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+    async execute({ interaction }) {
+        const user = interaction.options.getUser("user");
+        const commandName = interaction.options.getString("command");
+        const guildId = interaction.guild.id;
 
-        // Fetch user + command
-        const targetUser = context.isPrefix 
-            ? context.message.mentions.users.first() 
-            : context.interaction.options.getUser("user");
-        const commandName = context.isPrefix 
-            ? context.args[1] 
-            : context.interaction.options.getString("command");
-
-        if (!targetUser || !commandName) {
-            const errorEmbed = new EmbedBuilder()
-                .setColor("Red")
-                .setDescription(`${blueHeart} Please mention a valid user and command!`);
-            return context.isPrefix
-                ? context.message.reply({ embeds: [errorEmbed] })
-                : context.interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        if (user.id === devID) {
+            return interaction.reply({ content: "🚫 You cannot block the developer!", ephemeral: true });
         }
 
-        // Prevent blocking developer
-        if (targetUser.id === process.env.DEV_ID) {
-            const devEmbed = new EmbedBuilder()
-                .setColor("Gold")
-                .setDescription(`${blueHeart} You cannot block the developer! ⚡`);
-            return context.isPrefix
-                ? context.message.reply({ embeds: [devEmbed] })
-                : context.interaction.reply({ embeds: [devEmbed], ephemeral: true });
+        const blocked = getBlocked();
+        if (!blocked[guildId]) blocked[guildId] = {};
+
+        if (!blocked[guildId][user.id]) blocked[guildId][user.id] = [];
+
+        if (commandName) {
+            if (!blocked[guildId][user.id].includes(commandName)) {
+                blocked[guildId][user.id].push(commandName);
+            }
+        } else {
+            blocked[guildId][user.id] = ["*"]; // full block
         }
 
-        // Initialize storage
-        if (!client.blockedCommands) client.blockedCommands = {};
-        if (!client.blockedCommands[guild.id]) client.blockedCommands[guild.id] = {};
-
-        // Save block
-        if (!client.blockedCommands[guild.id][targetUser.id]) {
-            client.blockedCommands[guild.id][targetUser.id] = [];
-        }
-        client.blockedCommands[guild.id][targetUser.id].push(commandName);
+        saveBlocked(blocked);
 
         const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setTitle(`${blueHeart} Command Blocked`)
-            .setDescription(
-                `🔒 User **${targetUser.tag}** is now blocked from using \`${commandName}\`.`
-            )
-            .setFooter({ text: `Set by ${context.isPrefix ? context.message.author.tag : context.interaction.user.tag}` })
+            .setColor("Red")
+            .setTitle("🔒 User Blocked")
+            .setDescription(`${user} has been blocked ${commandName ? `from \`${commandName}\`` : "from **all commands**"}.`)
+            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
             .setTimestamp();
 
-        return context.isPrefix
-            ? context.message.reply({ embeds: [embed] })
-            : context.interaction.reply({ embeds: [embed] });
+        await interaction.reply({ embeds: [embed] });
     }
 };
