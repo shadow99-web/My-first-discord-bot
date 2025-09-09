@@ -1,17 +1,18 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const { getBlockedUsers } = require("../index");
+const { getBlockedUsers } = require("../blockManager"); // ✅ Import from blockManager
 
 module.exports = {
     name: "listblocked",
-    description: "List all users blocked for a specific command",
+    description: "List all blocked users for a command",
     data: new SlashCommandBuilder()
         .setName("listblocked")
-        .setDescription("See blocked users for a command")
+        .setDescription("Shows all users blocked from a command")
         .addStringOption(opt => opt.setName("command").setDescription("Command name").setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
     async execute(context) {
         const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+
         const commandName = context.isPrefix
             ? context.args[0]?.toLowerCase()
             : context.interaction.options.getString("command").toLowerCase();
@@ -22,16 +23,17 @@ module.exports = {
                 : context.interaction.reply({ content: "❌ Please provide a command name.", ephemeral: true });
         }
 
-        const blockedUsers = getBlockedUsers(guild.id, commandName);
+        const blocked = getBlockedUsers(guild.id, commandName);
+        if (blocked.length === 0) {
+            return context.isPrefix
+                ? context.message.reply(`✅ No users are blocked from using \`${commandName}\`.`)
+                : context.interaction.reply({ content: `✅ No users are blocked from using \`${commandName}\`.`, ephemeral: true });
+        }
 
         const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setTitle(`🚫 Blocked Users for \`${commandName}\``)
-            .setDescription(
-                blockedUsers.length > 0
-                    ? blockedUsers.map(id => `<@${id}>`).join("\n")
-                    : "No users are blocked for this command."
-            )
+            .setColor("Yellow")
+            .setTitle(`🚫 Blocked Users for ${commandName}`)
+            .setDescription(blocked.map(id => `<@${id}>`).join("\n"))
             .setTimestamp();
 
         context.isPrefix
