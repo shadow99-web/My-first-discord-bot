@@ -19,6 +19,7 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
+const fetch = require("node-fetch"); // ✅ Ensure fetch works in Node.js environments
 
 // =============================
 // ⚡ HTTP Server (Render Support)
@@ -140,15 +141,15 @@ for (const file of commandFiles) {
     }
 }
 
-// =============================
-// 🎫 Ticket Slash Command
-// =============================
-commandsData.push(
-    new SlashCommandBuilder()
-        .setName("ticket")
-        .setDescription("Open the ticket help panel")
-        .toJSON()
-);
+// ✅ Ensure ticket command is not duplicated
+if (!commandsData.some(cmd => cmd.name === "ticket")) {
+    commandsData.push(
+        new SlashCommandBuilder()
+            .setName("ticket")
+            .setDescription("Open the ticket help panel")
+            .toJSON()
+    );
+}
 
 // =============================
 // 🚀 Deploy Slash Commands
@@ -220,7 +221,7 @@ client.on("guildMemberAdd", async (member) => {
         }
 
         if (applied.length > 0) {
-            const blueHeart = "<a:blue_heart_1414309560231002194>";
+            const blueHeart = "<a:blue_heart:1414309560231002194>";
             const dmEmbed = new EmbedBuilder()
                 .setColor("Blue")
                 .setTitle(`Welcome to ${member.guild.name}!`)
@@ -243,7 +244,7 @@ client.on("interactionCreate", async (interaction) => {
             const embed = new EmbedBuilder()
                 .setColor("Blue")
                 .setTitle("🎟️ Ticket System")
-                .setDescription("<a:blue_heart_1414309560231002194> Need help? Click below to create a private support ticket.")
+                .setDescription("<a:blue_heart:1414309560231002194> Need help? Click below to create a private support ticket.")
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -296,7 +297,7 @@ client.on("interactionCreate", async (interaction) => {
         const embed = new EmbedBuilder()
             .setColor("Green")
             .setTitle("🎫 New Ticket")
-            .setDescription(`<a:blue_heart_1414309560231002194> Welcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close this ticket.`);
+            .setDescription(`<a:blue_heart:1414309560231002194> Welcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close this ticket.`);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -333,7 +334,7 @@ client.on("messageCreate", async (message) => {
         message.reply({
             embeds: [new EmbedBuilder()
                 .setColor("Green")
-                .setDescription("<a:blue_heart_1414309560231002194> You are no longer AFK.")]
+                .setDescription("<a:blue_heart:1414309560231002194> You are no longer AFK.")]
         }).catch(() => {});
     }
 
@@ -349,7 +350,7 @@ client.on("messageCreate", async (message) => {
                     embeds: [new EmbedBuilder()
                         .setColor("Blue")
                         .setTitle(`${user.tag} is AFK`)
-                        .setDescription(`<a:blue_heart_1414309560231002194> Reason: **${data.reason}**\n⏰ Since: ${since}\n🔗 ${jump}`)]
+                        .setDescription(`<a:blue_heart:1414309560231002194> Reason: **${data.reason}**\n⏰ Since: ${since}\n🔗 ${jump}`)]
                 }).catch(() => {});
             }
         });
