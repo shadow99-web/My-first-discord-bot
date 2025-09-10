@@ -19,7 +19,6 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
-const fetch = require("node-fetch"); // ✅ Ensure fetch works in Node.js environments
 
 // =============================
 // ⚡ HTTP Server (Render Support)
@@ -238,7 +237,6 @@ client.on("guildMemberAdd", async (member) => {
 // 🛠 Slash Command + Ticket Handler
 // =============================
 client.on("interactionCreate", async (interaction) => {
-    // Slash commands
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === "ticket") {
             const embed = new EmbedBuilder()
@@ -257,7 +255,6 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
         }
 
-        // Normal command handler
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
 
@@ -280,7 +277,6 @@ client.on("interactionCreate", async (interaction) => {
         }
     }
 
-    // Ticket create
     if (interaction.isButton() && interaction.customId === "ticket_create_button") {
         const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.id}`);
         if (existing) return interaction.reply({ content: "❌ You already have an open ticket!", ephemeral: true });
@@ -310,7 +306,6 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
     }
 
-    // Ticket close
     if (interaction.isButton() && interaction.customId === "ticket_close_button") {
         if (!interaction.channel.name.startsWith("ticket-")) {
             return interaction.reply({ content: "❌ Only usable inside ticket channels.", ephemeral: true });
@@ -326,7 +321,6 @@ client.on("interactionCreate", async (interaction) => {
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // Remove AFK
     if (client.afk.has(message.author.id)) {
         const data = client.afk.get(message.author.id);
         client.afk.delete(message.author.id);
@@ -338,7 +332,6 @@ client.on("messageCreate", async (message) => {
         }).catch(() => {});
     }
 
-    // AFK notify when pinged
     if (message.mentions.users.size > 0) {
         message.mentions.users.forEach(user => {
             if (client.afk.has(user.id)) {
@@ -356,7 +349,6 @@ client.on("messageCreate", async (message) => {
         });
     }
 
-    // Prefix handler
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
