@@ -9,11 +9,29 @@ module.exports = {
             option.setName("userid")
                 .setDescription("The ID of the user to unban")
                 .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName("reason")
+                .setDescription("Reason for unbanning")
+                .setRequired(false)
         ),
+
+    usage: "!unban <userID> [reason]",
+    description: "Unban a user from the server",
 
     async execute({ message, interaction, client, args, isPrefix }) {
         const blueHeart = "<a:blue_heart:1414309560231002194>";
-        const userId = isPrefix ? args[0] : interaction.options.getString("userid");
+
+        const guild = isPrefix ? message.guild : interaction.guild;
+
+        // Get target userID
+        const userId = isPrefix
+            ? args[0]
+            : interaction.options.getString("userid");
+
+        const reason = isPrefix
+            ? args.slice(1).join(" ") || "No reason provided"
+            : interaction.options.getString("reason") || "No reason provided";
 
         if (!userId) {
             return isPrefix
@@ -21,22 +39,27 @@ module.exports = {
                 : interaction.reply({ content: "❌ Please provide a valid user ID.", ephemeral: true });
         }
 
-        try {
-            await (interaction?.guild ?? message.guild).members.unban(userId);
+        // Try fetching ban info
+        const bans = await guild.bans.fetch();
+        const bannedUser = bans.get(userId);
 
-            const embed = new EmbedBuilder()
-                .setColor("Green")
-                .setAuthor({ name: `🤝 User Unbanned` })
-                .setDescription(`${blueHeart} User with ID **${userId}** has been unbanned.`)
-                .setTimestamp();
-
-            if (isPrefix) message.reply({ embeds: [embed] });
-            else interaction.reply({ embeds: [embed] });
-        } catch (err) {
-            console.error(err);
+        if (!bannedUser) {
             return isPrefix
-                ? message.reply("❌ Failed to unban this user. Make sure the ID is correct.")
-                : interaction.reply({ content: "❌ Failed to unban this user.", ephemeral: true });
+                ? message.reply("❌ That user is not banned.")
+                : interaction.reply({ content: "❌ That user is not banned.", ephemeral: true });
         }
+
+        // Unban the user
+        await guild.members.unban(userId, reason);
+
+        const embed = new EmbedBuilder()
+            .setColor("Green")
+            .setAuthor({ name: "🥂 User Unbanned", iconURL: bannedUser.user.displayAvatarURL({ dynamic: true }) })
+            .setDescription(`${blueHeart} **${bannedUser.user.tag}** has been unbanned.\n\n📌 Reason: **${reason}**`)
+            .addFields({ name: "👤 Unbanned by", value: (isPrefix ? message.author : interaction.user).toString(), inline: true })
+            .setTimestamp();
+
+        if (isPrefix) message.reply({ embeds: [embed] });
+        else interaction.reply({ embeds: [embed] });
     }
 };
