@@ -1,65 +1,54 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("unban")
-        .setDescription("Unban a user from the server")
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-        .addStringOption(option =>
-            option.setName("userid")
-                .setDescription("The ID of the user to unban")
-                .setRequired(true)
-        )
-        .addStringOption(option =>
-            option.setName("reason")
-                .setDescription("Reason for unbanning")
-                .setRequired(false)
-        ),
+  name: "unban",
+  description: "Unban a member by ID",
+  data: new SlashCommandBuilder()
+    .setName("unban")
+    .setDescription("Unban a member")
+    .addStringOption(option => 
+      option.setName("userid")
+        .setDescription("User ID to unban")
+        .setRequired(true)),
+  async execute(interaction, client) {
+    const userId = interaction.options.getString("userid");
 
-    usage: "!unban <userID> [reason]",
-    description: "Unban a user from the server",
-
-    async execute({ message, interaction, client, args, isPrefix }) {
-        const blueHeart = "<a:blue_heart:1414309560231002194>";
-
-        const guild = isPrefix ? message.guild : interaction.guild;
-
-        // Get target userID
-        const userId = isPrefix
-            ? args[0]
-            : interaction.options.getString("userid");
-
-        const reason = isPrefix
-            ? args.slice(1).join(" ") || "No reason provided"
-            : interaction.options.getString("reason") || "No reason provided";
-
-        if (!userId) {
-            return isPrefix
-                ? message.reply("❌ Please provide a valid user ID to unban.")
-                : interaction.reply({ content: "❌ Please provide a valid user ID.", ephemeral: true });
-        }
-
-        // Try fetching ban info
-        const bans = await guild.bans.fetch();
-        const bannedUser = bans.get(userId);
-
-        if (!bannedUser) {
-            return isPrefix
-                ? message.reply("❌ That user is not banned.")
-                : interaction.reply({ content: "❌ That user is not banned.", ephemeral: true });
-        }
-
-        // Unban the user
-        await guild.members.unban(userId, reason);
-
-        const embed = new EmbedBuilder()
-            .setColor("Green")
-            .setAuthor({ name: "🥂 User Unbanned", iconURL: bannedUser.user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`${blueHeart} **${bannedUser.user.tag}** has been unbanned.\n\n📌 Reason: **${reason}**`)
-            .addFields({ name: "🤝 Unbanned by", value: (isPrefix ? message.author : interaction.user).toString(), inline: true })
-            .setTimestamp();
-
-        if (isPrefix) message.reply({ embeds: [embed] });
-        else interaction.reply({ embeds: [embed] });
+    try {
+      await interaction.guild.bans.fetch(userId);
+    } catch {
+      return interaction.reply({ content: "This user is not banned.", ephemeral: true });
     }
+
+    await interaction.guild.members.unban(userId);
+
+    const embed = new EmbedBuilder()
+      .setTitle("Member Unbanned")
+      .setDescription(`💙 **<@${userId}>** has been unbanned!`)
+      .setColor("Blue")
+      .setTimestamp();
+
+    interaction.reply({ embeds: [embed] });
+  }
+};
+
+// ===== PREFIX COMMAND ======
+module.exports.prefix = async (message, args) => {
+  if (!message.member.permissions.has("BanMembers")) return message.reply("You cannot use this command!");
+  if (!args[0]) return message.reply("Please provide a user ID.");
+
+  try {
+    const ban = await message.guild.bans.fetch(args[0]);
+    if (!ban) return message.reply("This user is not banned.");
+    await message.guild.members.unban(args[0]);
+
+    const embed = new EmbedBuilder()
+      .setTitle("Member Unbanned")
+      .setDescription(`💙 **<@${args[0]}>** has been unbanned!`)
+      .setColor("Blue")
+      .setTimestamp();
+
+    message.channel.send({ embeds: [embed] });
+  } catch {
+    return message.reply("User not found or not banned.");
+  }
 };
