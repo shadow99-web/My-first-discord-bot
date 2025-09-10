@@ -9,7 +9,13 @@ const {
     Collection,
     REST,
     Routes,
-    EmbedBuilder
+    EmbedBuilder,
+    SlashCommandBuilder,
+    ChannelType,
+    PermissionFlagsBits,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
@@ -67,7 +73,7 @@ if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
 const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
 const saveBlocked = (data) => fs.writeFileSync(blockFile, JSON.stringify(data, null, 4));
 
-// ===== Autorole storage (new) =====
+// ===== Autorole storage =====
 const autoroleFile = "./autorole.json";
 if (!fs.existsSync(autoroleFile)) fs.writeFileSync(autoroleFile, "{}");
 const getAutorole = () => {
@@ -135,6 +141,16 @@ for (const file of commandFiles) {
 }
 
 // =============================
+// 🎫 Ticket Slash Command
+// =============================
+commandsData.push(
+    new SlashCommandBuilder()
+        .setName("ticket")
+        .setDescription("Open the ticket help panel")
+        .toJSON()
+);
+
+// =============================
 // 🚀 Deploy Slash Commands
 // =============================
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -180,19 +196,17 @@ client.on("messageDelete", (message) => {
 });
 
 // =============================
-// 🟢 Autorole: assign roles on join (NEW)
+// 🟢 Autorole
 // =============================
 client.on("guildMemberAdd", async (member) => {
     try {
         const cfg = getAutorole();
         const guildCfg = cfg[member.guild.id];
-        if (!guildCfg) return; // nothing configured
+        if (!guildCfg) return;
 
-        // choose list by whether member is a bot
         const roleIds = (member.user.bot ? (guildCfg.bots || []) : (guildCfg.humans || []));
         if (!Array.isArray(roleIds) || roleIds.length === 0) return;
 
-        // Try to add each role (skip if role missing)
         const applied = [];
         for (const roleId of roleIds) {
             const role = member.guild.roles.cache.get(roleId);
@@ -201,12 +215,10 @@ client.on("guildMemberAdd", async (member) => {
                 await member.roles.add(roleId, `Autorole: assigned on join`);
                 applied.push(`<@&${roleId}>`);
             } catch (err) {
-                // Could be permission or role hierarchy issue; log but keep going
-                console.warn(`Failed to add role ${roleId} to ${member.user.tag} in ${member.guild.name}:`, err.message);
+                console.warn(`Failed to add role ${roleId} to ${member.user.tag}:`, err.message);
             }
         }
 
-        // Optional: send a small DM informing the new member (safe try/catch — many DMs fail)
         if (applied.length > 0) {
             const blueHeart = "<a:blue_heart_1414309560231002194>";
             const dmEmbed = new EmbedBuilder()
@@ -217,92 +229,112 @@ client.on("guildMemberAdd", async (member) => {
             member.send({ embeds: [dmEmbed] }).catch(() => {});
         }
     } catch (err) {
-        console.error("Error in guildMemberAdd autorole handler:", err);
+        console.error("Error in autorole handler:", err);
     }
 });
 
 // =============================
-// 🛠 Slash Command Handler
+// 🛠 Slash Command + Ticket Handler
 // =============================
 client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isCommand()) return;
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    // Slash commands
+    if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === "ticket") {
+            const embed = new EmbedBuilder()
+                .setColor("Blue")
+                .setTitle("🎟️ Ticket System")
+                .setDescription("<a:blue_heart_1414309560231002194> Need help? Click below to create a private support ticket.")
+                .setTimestamp();
 
-    if (isBlocked(interaction.user.id, interaction.guildId, interaction.commandName)) {
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId("ticket_create_button")
+                    .setLabel("🎫 Create Ticket")
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+            return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+        }
+
+        // Normal command handler
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+
+        if (isBlocked(interaction.user.id, interaction.guildId, interaction.commandName)) {
+            return interaction.reply({
+                embeds: [new EmbedBuilder()
                     .setColor("Red")
                     .setTitle("🚫 Command Blocked")
-                    .setDescription(`You are **blocked** from using \`${interaction.commandName}\` in this server.`)
-                    .setFooter({ text: "Contact an admin if you think this is a mistake." })
-                    .setTimestamp()
-            ],
-            ephemeral: true
-        });
-    }
-
-    try {
-        // ℹ️ Auto usage help
-        if (command.usage && interaction.options._hoistedOptions.length === 0) {
-            return interaction.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor("Blue")
-                        .setTitle(`ℹ️ ${interaction.commandName} Command`)
-                        .setDescription(command.description || "No description provided.")
-                        .addFields({ name: "Usage", value: `\`${command.usage}\`` })
-                        .setFooter({ text: `${client.user.username} | Made with 💙` })
+                    .setDescription(`You are blocked from using \`${interaction.commandName}\` here.`)
                 ],
                 ephemeral: true
             });
         }
 
-        await command.execute({ interaction, client, isPrefix: false });
-    } catch (err) {
-        console.error(err);
-        if (interaction.replied || interaction.deferred) {
-            interaction.followUp({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
-        } else {
+        try {
+            await command.execute({ interaction, client, isPrefix: false });
+        } catch (err) {
+            console.error(err);
             interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
         }
+    }
+
+    // Ticket create
+    if (interaction.isButton() && interaction.customId === "ticket_create_button") {
+        const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.id}`);
+        if (existing) return interaction.reply({ content: "❌ You already have an open ticket!", ephemeral: true });
+
+        const channel = await interaction.guild.channels.create({
+            name: `ticket-${interaction.user.id}`,
+            type: ChannelType.GuildText,
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
+            ]
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor("Green")
+            .setTitle("🎫 New Ticket")
+            .setDescription(`<a:blue_heart_1414309560231002194> Welcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close this ticket.`);
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId("ticket_close_button")
+                .setLabel("🔒 Close Ticket")
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await channel.send({ embeds: [embed], components: [row] });
+        return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
+    }
+
+    // Ticket close
+    if (interaction.isButton() && interaction.customId === "ticket_close_button") {
+        if (!interaction.channel.name.startsWith("ticket-")) {
+            return interaction.reply({ content: "❌ Only usable inside ticket channels.", ephemeral: true });
+        }
+        await interaction.reply({ content: "🔒 Closing ticket in **5 seconds**..." });
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
 });
 
 // =============================
-// 💬 Prefix Commands + AFK System
+// 💬 Prefix Commands + AFK System (Modified)
 // =============================
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // AFK remove if user returns
+    // Remove AFK
     if (client.afk.has(message.author.id)) {
         const data = client.afk.get(message.author.id);
         client.afk.delete(message.author.id);
 
         message.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor("Green")
-                    .setAuthor({ name: `${message.author.username} is back!`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                    .setDescription("✅ You are no longer AFK.")
-                    .setTimestamp()
-            ]
+            embeds: [new EmbedBuilder()
+                .setColor("Green")
+                .setDescription("<a:blue_heart_1414309560231002194> You are no longer AFK.")]
         }).catch(() => {});
-
-        if (data.mentions?.length) {
-            const mentionsList = data.mentions.map(m => `<@${m}>`).join(", ");
-            message.channel.send({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor("Yellow")
-                        .setAuthor({ name: "While you were AFK...", iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                        .setDescription(`📩 You were mentioned by: ${mentionsList}`)
-                        .setTimestamp()
-                ]
-            }).catch(() => {});
-        }
     }
 
     // AFK notify when pinged
@@ -311,27 +343,19 @@ client.on("messageCreate", async (message) => {
             if (client.afk.has(user.id)) {
                 const data = client.afk.get(user.id);
                 const since = `<t:${Math.floor(data.since / 1000)}:R>`;
+                const jump = `[Jump to Message](${message.url})`;
 
                 message.reply({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setColor("Blue")
-                            .setAuthor({ name: `${user.tag} is AFK`, iconURL: user.displayAvatarURL({ dynamic: true }) })
-                            .setDescription(`💤 Reason: **${data.reason}**\n⏰ Since: ${since}`)
-                            .setFooter({ text: "They will see your mention later." })
-                            .setTimestamp()
-                    ]
+                    embeds: [new EmbedBuilder()
+                        .setColor("Blue")
+                        .setTitle(`${user.tag} is AFK`)
+                        .setDescription(`<a:blue_heart_1414309560231002194> Reason: **${data.reason}**\n⏰ Since: ${since}\n🔗 ${jump}`)]
                 }).catch(() => {});
-
-                if (!data.mentions.includes(message.author.id)) {
-                    data.mentions.push(message.author.id);
-                    client.afk.set(user.id, data);
-                }
             }
         });
     }
 
-    // Prefix command handling
+    // Prefix handler
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
@@ -342,33 +366,10 @@ client.on("messageCreate", async (message) => {
     if (!command) return;
 
     if (isBlocked(message.author.id, message.guild.id, commandName)) {
-        return message.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor("Red")
-                    .setTitle("🚫 Command Blocked")
-                    .setDescription(`You are **blocked** from using \`${commandName}\` in this server.`)
-                    .setFooter({ text: "Contact an admin if you think this is a mistake." })
-                    .setTimestamp()
-            ]
-        });
+        return message.reply("🚫 You are blocked from using this command.");
     }
 
     try {
-        // ℹ️ Auto usage help
-        if (command.usage && args.length === 0) {
-            return message.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor("Blue")
-                        .setTitle(`ℹ️ ${guildPrefix}${commandName} Command`)
-                        .setDescription(command.description || "No description provided.")
-                        .addFields({ name: "Usage", value: `\`${command.usage}\`` })
-                        .setFooter({ text: `${client.user.username} | Made with 💙` })
-                ]
-            });
-        }
-
         await command.execute({ message, args, client, isPrefix: true });
     } catch (err) {
         console.error(err);
