@@ -165,6 +165,21 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     try {
+        // ===== AUTO USAGE HELP FOR SLASH COMMANDS =====
+        if (command.usage && interaction.options._hoistedOptions.length === 0) {
+            return interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor("Blue")
+                        .setTitle(`ℹ️ ${interaction.commandName} Command`)
+                        .setDescription(command.description || "No description provided.")
+                        .addFields({ name: "Usage", value: `\`${command.usage}\`` })
+                        .setFooter({ text: `${client.user.username} | Made with 💙` })
+                ],
+                ephemeral: true
+            });
+        }
+
         await command.execute({ interaction, client, isPrefix: false });
     } catch (err) {
         console.error(err);
@@ -257,6 +272,20 @@ client.on("messageCreate", async (message) => {
     }
 
     try {
+        // ===== AUTO USAGE HELP FOR PREFIX COMMANDS =====
+        if (command.usage && args.length === 0) {
+            return message.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor("Blue")
+                        .setTitle(`ℹ️ ${guildPrefix}${commandName} Command`)
+                        .setDescription(command.description || "No description provided.")
+                        .addFields({ name: "Usage", value: `\`${command.usage}\`` })
+                        .setFooter({ text: `${client.user.username} | Made with 💙` })
+                ]
+            });
+        }
+
         await command.execute({ message, args, client, isPrefix: true });
     } catch (err) {
         console.error(err);
