@@ -56,7 +56,7 @@ module.exports = {
             .setColor("Green")
             .setAuthor({ name: "🥂 User Unbanned", iconURL: bannedUser.user.displayAvatarURL({ dynamic: true }) })
             .setDescription(`${blueHeart} **${bannedUser.user.tag}** has been unbanned.\n\n📌 Reason: **${reason}**`)
-            .addFields({ name: "👤 Unbanned by", value: (isPrefix ? message.author : interaction.user).toString(), inline: true })
+            .addFields({ name: "🤝 Unbanned by", value: (isPrefix ? message.author : interaction.user).toString(), inline: true })
             .setTimestamp();
 
         if (isPrefix) message.reply({ embeds: [embed] });
