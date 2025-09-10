@@ -1,101 +1,76 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("ban")
-        .setDescription("Ban a user from the server")
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-        .addUserOption(option =>
-            option.setName("target")
-                .setDescription("The user to ban")
-                .setRequired(true)
-        )
-        .addStringOption(option =>
-            option.setName("reason")
-                .setDescription("Reason for banning")
-                .setRequired(false)
-        ),
+  name: "ban",
+  description: "Ban a member by mention, username, or ID",
+  // Slash command setup
+  data: new SlashCommandBuilder()
+    .setName("ban")
+    .setDescription("Ban a member")
+    .addStringOption(option => 
+      option.setName("user")
+        .setDescription("User ID or mention")
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName("reason")
+        .setDescription("Reason for the ban")
+        .setRequired(false)),
+  async execute(interaction, client) {
+    const userInput = interaction.options.getString("user");
+    const reason = interaction.options.getString("reason") || "No reason provided";
 
-    usage: "!ban @user [reason]", // helpful for prefix auto-usage
-    description: "Ban a user from the server",
+    let member;
+    try {
+      // Try fetching by ID
+      member = await interaction.guild.members.fetch(userInput).catch(() => null);
+      // If not found by ID, try mention/username
+      if (!member) {
+        const userMention = userInput.replace(/[<@!>]/g, "");
+        member = await interaction.guild.members.fetch(userMention).catch(() => null);
+      }
+    } catch {}
+    
+    if (!member) return interaction.reply({ content: "User not found.", ephemeral: true });
 
-    async execute({ message, interaction, client, args, isPrefix }) {
-        const blueHeart = "<a:blue_heart:1414309560231002194>";
+    if (!member.bannable) return interaction.reply({ content: "I cannot ban this user.", ephemeral: true });
 
-        // Get target & reason
-        const user = isPrefix
-            ? message.mentions.users.first()
-            : interaction.options.getUser("target");
+    await member.ban({ reason });
 
-        const reason = isPrefix
-            ? args.slice(1).join(" ") || "No reason provided"
-            : interaction.options.getString("reason") || "No reason provided";
+    const embed = new EmbedBuilder()
+      .setTitle("Member Banned")
+      .setDescription(`💙 **${member.user.tag}** has been banned!\n**Reason:** ${reason}`)
+      .setColor("Blue")
+      .setTimestamp();
 
-        if (!user) {
-            return isPrefix
-                ? message.reply("❌ Please mention a user to ban.")
-                : interaction.reply({ content: "❌ Please provide a valid user.", ephemeral: true });
-        }
+    interaction.reply({ embeds: [embed] });
+  }
+};
 
-        // Fetch member from guild
-        const guild = isPrefix ? message.guild : interaction.guild;
-        const member = await guild.members.fetch(user.id).catch(() => null);
-
-        if (!member) {
-            return isPrefix
-                ? message.reply("❌ That user is not in this server.")
-                : interaction.reply({ content: "❌ That user is not in this server.", ephemeral: true });
-        }
-
-        // Prevent banning self or bot
-        if (user.id === (isPrefix ? message.author.id : interaction.user.id)) {
-            return isPrefix
-                ? message.reply("❌ You cannot ban yourself.")
-                : interaction.reply({ content: "❌ You cannot ban yourself.", ephemeral: true });
-        }
-        if (user.id === client.user.id) {
-            return isPrefix
-                ? message.reply("❌ You cannot ban me.")
-                : interaction.reply({ content: "❌ You cannot ban me.", ephemeral: true });
-        }
-
-        // Role hierarchy check
-        const executor = isPrefix ? message.member : interaction.member;
-        if (member.roles.highest.position >= executor.roles.highest.position) {
-            return isPrefix
-                ? message.reply("❌ You cannot ban someone with an equal or higher role than you.")
-                : interaction.reply({ content: "❌ You cannot ban someone with an equal or higher role than you.", ephemeral: true });
-        }
-
-        if (!member.bannable) {
-            return isPrefix
-                ? message.reply("❌ I cannot ban this user (check my role position).")
-                : interaction.reply({ content: "❌ I cannot ban this user.", ephemeral: true });
-        }
-
-        // Try to DM the user before banning
-        await user.send({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor("Red")
-                    .setTitle("🚫 You have been banned")
-                    .setDescription(`You were banned from **${guild.name}**.\n📌 Reason: **${reason}**`)
-                    .setTimestamp()
-            ]
-        }).catch(() => {}); // Ignore DM fails
-
-        // Ban the user
-        await member.ban({ reason });
-
-        // Confirmation embed
-        const embed = new EmbedBuilder()
-            .setColor("Red")
-            .setAuthor({ name: `🥂 User Banned`, iconURL: user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`${blueHeart} **${user.tag}** has been banned.\n\n📌 Reason: **${reason}**`)
-            .addFields({ name: "😎 Banned by", value: executor.toString(), inline: true })
-            .setTimestamp();
-
-        if (isPrefix) message.reply({ embeds: [embed] });
-        else interaction.reply({ embeds: [embed] });
+// ====== PREFIX COMMAND ======
+module.exports.prefix = async (message, args) => {
+  if (!message.member.permissions.has("BanMembers")) return message.reply("You cannot use this command!");
+  if (!args[0]) return message.reply("Please provide a user ID or mention.");
+  
+  let member;
+  try {
+    member = await message.guild.members.fetch(args[0]).catch(() => null);
+    if (!member && args[0].match(/^<@!?(\d+)>$/)) {
+      const id = args[0].replace(/[<@!>]/g, "");
+      member = await message.guild.members.fetch(id).catch(() => null);
     }
+  } catch {}
+  
+  if (!member) return message.reply("User not found.");
+  if (!member.bannable) return message.reply("I cannot ban this user.");
+
+  const reason = args.slice(1).join(" ") || "No reason provided";
+  await member.ban({ reason });
+
+  const embed = new EmbedBuilder()
+    .setTitle("Member Banned")
+    .setDescription(`💙 **${member.user.tag}** has been banned!\n**Reason:** ${reason}`)
+    .setColor("Blue")
+    .setTimestamp();
+
+  message.channel.send({ embeds: [embed] });
 };
