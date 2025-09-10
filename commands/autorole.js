@@ -1,157 +1,137 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const fs = require("fs");
 
-const blueHeart = "<a:blue_heart:1414309560231002194>";
-const file = "./autorole.json";
+const autoroleFile = "./autorole.json";
+if (!fs.existsSync(autoroleFile)) fs.writeFileSync(autoroleFile, "{}");
 
-// Ensure file exists
-if (!fs.existsSync(file)) fs.writeFileSync(file, "{}");
-const getData = () => JSON.parse(fs.readFileSync(file, "utf8"));
-const saveData = (data) => fs.writeFileSync(file, JSON.stringify(data, null, 4));
+const getAutorole = () => JSON.parse(fs.readFileSync(autoroleFile, "utf8"));
+const saveAutorole = (data) => fs.writeFileSync(autoroleFile, JSON.stringify(data, null, 4));
+
+const blueHeart = "<a:blue_heart:1414309560231002194>";
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("autorole")
-        .setDescription("Setup autorole system")
+        .setDescription("Manage automatic role assignment")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addSubcommandGroup(group =>
             group.setName("humans")
-                .setDescription("Manage human autoroles")
-                .addSubcommand(sub =>
-                    sub.setName("add")
-                        .setDescription("Add a role for humans")
-                        .addRoleOption(opt => opt.setName("role").setDescription("Role to add").setRequired(true))
+                .setDescription("Manage autoroles for humans")
+                .addSubcommand(cmd =>
+                    cmd.setName("add")
+                        .setDescription("Add an autorole for humans")
+                        .addRoleOption(opt =>
+                            opt.setName("role")
+                                .setDescription("Role to assign")
+                                .setRequired(true)
+                        )
                 )
-                .addSubcommand(sub =>
-                    sub.setName("remove")
-                        .setDescription("Remove a role for humans")
-                        .addRoleOption(opt => opt.setName("role").setDescription("Role to remove").setRequired(true))
+                .addSubcommand(cmd =>
+                    cmd.setName("remove")
+                        .setDescription("Remove autorole for humans")
+                        .addRoleOption(opt =>
+                            opt.setName("role")
+                                .setDescription("Role to remove")
+                                .setRequired(true)
+                        )
                 )
         )
         .addSubcommandGroup(group =>
             group.setName("bots")
-                .setDescription("Manage bot autoroles")
-                .addSubcommand(sub =>
-                    sub.setName("add")
-                        .setDescription("Add a role for bots")
-                        .addRoleOption(opt => opt.setName("role").setDescription("Role to add").setRequired(true))
+                .setDescription("Manage autoroles for bots")
+                .addSubcommand(cmd =>
+                    cmd.setName("add")
+                        .setDescription("Add an autorole for bots")
+                        .addRoleOption(opt =>
+                            opt.setName("role")
+                                .setDescription("Role to assign")
+                                .setRequired(true)
+                        )
                 )
-                .addSubcommand(sub =>
-                    sub.setName("remove")
-                        .setDescription("Remove a role for bots")
-                        .addRoleOption(opt => opt.setName("role").setDescription("Role to remove").setRequired(true))
+                .addSubcommand(cmd =>
+                    cmd.setName("remove")
+                        .setDescription("Remove autorole for bots")
+                        .addRoleOption(opt =>
+                            opt.setName("role")
+                                .setDescription("Role to remove")
+                                .setRequired(true)
+                        )
                 )
         )
-        .addSubcommand(sub =>
-            sub.setName("config")
-                .setDescription("Show current autorole config")
+        .addSubcommand(cmd =>
+            cmd.setName("config")
+                .setDescription("View autorole configuration")
         )
-        .addSubcommand(sub =>
-            sub.setName("reset")
-                .setDescription("Reset autorole settings for this server")
+        .addSubcommand(cmd =>
+            cmd.setName("reset")
+                .setDescription("Reset autorole configuration")
         ),
 
-    description: "Auto assign roles to new members (humans or bots).",
-    usage: ".autorole humans add <role>",
+    async execute({ interaction, isPrefix, message, args, client }) {
+        const guildId = interaction ? interaction.guild.id : message.guild.id;
+        const autorole = getAutorole();
+        if (!autorole[guildId]) autorole[guildId] = { humans: [], bots: [] };
 
-    async execute({ interaction, message, args, isPrefix }) {
-        const guildId = isPrefix ? message.guild.id : interaction.guild.id;
-        const member = isPrefix ? message.member : interaction.member;
-
-        if (!member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+        const sendEmbed = (title, description, color = "Blue") => {
             const embed = new EmbedBuilder()
-                .setColor("Red")
-                .setTitle("🚫 Permission Denied")
-                .setDescription(`${blueHeart} You need **Manage Server** permission to use autorole commands.`)
+                .setColor(color)
+                .setAuthor({ name: title, iconURL: client.user.displayAvatarURL() })
+                .setDescription(`${blueHeart} ${description}`)
                 .setTimestamp();
-            return isPrefix ? message.reply({ embeds: [embed] }) : interaction.reply({ embeds: [embed], ephemeral: true });
-        }
+            return embed;
+        };
 
-        const data = getData();
-        if (!data[guildId]) data[guildId] = { humans: [], bots: [] };
+        if (interaction) {
+            const group = interaction.options.getSubcommandGroup(false);
+            const sub = interaction.options.getSubcommand();
 
-        let sub = "";
-        let subGroup = "";
-        if (!isPrefix) {
-            if (interaction.options.getSubcommandGroup(false)) subGroup = interaction.options.getSubcommandGroup();
-            if (interaction.options.getSubcommand(false)) sub = interaction.options.getSubcommand();
-        } else {
-            // For prefix command parsing
-            subGroup = args[0]; // humans/bots/config/reset
-            sub = args[1];      // add/remove
-        }
+            if (group === "humans" && sub === "add") {
+                const role = interaction.options.getRole("role");
+                if (!autorole[guildId].humans.includes(role.id)) {
+                    autorole[guildId].humans.push(role.id);
+                    saveAutorole(autorole);
+                }
+                return interaction.reply({ embeds: [sendEmbed("Autorole Updated", `Added **${role.name}** to humans.`)] });
+            }
 
-        let embed;
+            if (group === "humans" && sub === "remove") {
+                const role = interaction.options.getRole("role");
+                autorole[guildId].humans = autorole[guildId].humans.filter(r => r !== role.id);
+                saveAutorole(autorole);
+                return interaction.reply({ embeds: [sendEmbed("Autorole Updated", `Removed **${role.name}** from humans.`)] });
+            }
 
-        if (subGroup === "humans" && sub === "add") {
-            const role = isPrefix ? message.mentions.roles.first() : interaction.options.getRole("role");
-            if (!role) return;
-            if (!data[guildId].humans.includes(role.id)) data[guildId].humans.push(role.id);
-            saveData(data);
-            embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setTitle("✅ Human Autorole Added")
-                .setDescription(`${blueHeart} Role <@&${role.id}> will now be given to **humans**.`)
-                .setTimestamp();
-        }
+            if (group === "bots" && sub === "add") {
+                const role = interaction.options.getRole("role");
+                if (!autorole[guildId].bots.includes(role.id)) {
+                    autorole[guildId].bots.push(role.id);
+                    saveAutorole(autorole);
+                }
+                return interaction.reply({ embeds: [sendEmbed("Autorole Updated", `Added **${role.name}** to bots.`)] });
+            }
 
-        else if (subGroup === "humans" && sub === "remove") {
-            const role = isPrefix ? message.mentions.roles.first() : interaction.options.getRole("role");
-            if (!role) return;
-            data[guildId].humans = data[guildId].humans.filter(r => r !== role.id);
-            saveData(data);
-            embed = new EmbedBuilder()
-                .setColor("Orange")
-                .setTitle("❌ Human Autorole Removed")
-                .setDescription(`${blueHeart} Role <@&${role.id}> removed from **humans autorole**.`)
-                .setTimestamp();
-        }
+            if (group === "bots" && sub === "remove") {
+                const role = interaction.options.getRole("role");
+                autorole[guildId].bots = autorole[guildId].bots.filter(r => r !== role.id);
+                saveAutorole(autorole);
+                return interaction.reply({ embeds: [sendEmbed("Autorole Updated", `Removed **${role.name}** from bots.`)] });
+            }
 
-        else if (subGroup === "bots" && sub === "add") {
-            const role = isPrefix ? message.mentions.roles.first() : interaction.options.getRole("role");
-            if (!role) return;
-            if (!data[guildId].bots.includes(role.id)) data[guildId].bots.push(role.id);
-            saveData(data);
-            embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setTitle("✅ Bot Autorole Added")
-                .setDescription(`${blueHeart} Role <@&${role.id}> will now be given to **bots**.`)
-                .setTimestamp();
-        }
+            if (interaction.commandName === "autorole" && sub === "config") {
+                const humans = autorole[guildId].humans.map(r => `<@&${r}>`).join(", ") || "None";
+                const bots = autorole[guildId].bots.map(r => `<@&${r}>`).join(", ") || "None";
+                return interaction.reply({
+                    embeds: [
+                        sendEmbed("Autorole Config", `👤 Humans: ${humans}\n🤖 Bots: ${bots}`, "Yellow")
+                    ]
+                });
+            }
 
-        else if (subGroup === "bots" && sub === "remove") {
-            const role = isPrefix ? message.mentions.roles.first() : interaction.options.getRole("role");
-            if (!role) return;
-            data[guildId].bots = data[guildId].bots.filter(r => r !== role.id);
-            saveData(data);
-            embed = new EmbedBuilder()
-                .setColor("Orange")
-                .setTitle("❌ Bot Autorole Removed")
-                .setDescription(`${blueHeart} Role <@&${role.id}> removed from **bots autorole**.`)
-                .setTimestamp();
-        }
-
-        else if (sub === "config") {
-            const humanRoles = data[guildId].humans.map(r => `<@&${r}>`).join(", ") || "None";
-            const botRoles = data[guildId].bots.map(r => `<@&${r}>`).join(", ") || "None";
-            embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setTitle("⚙️ Autorole Config")
-                .setDescription(`${blueHeart} **Humans:** ${humanRoles}\n${blueHeart} **Bots:** ${botRoles}`)
-                .setTimestamp();
-        }
-
-        else if (sub === "reset") {
-            data[guildId] = { humans: [], bots: [] };
-            saveData(data);
-            embed = new EmbedBuilder()
-                .setColor("Red")
-                .setTitle("♻️ Autorole Reset")
-                .setDescription(`${blueHeart} Autorole configuration has been reset.`)
-                .setTimestamp();
-        }
-
-        if (embed) {
-            return isPrefix ? message.reply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+            if (interaction.commandName === "autorole" && sub === "reset") {
+                autorole[guildId] = { humans: [], bots: [] };
+                saveAutorole(autorole);
+                return interaction.reply({ embeds: [sendEmbed("Autorole Reset", "All autorole settings have been reset.", "Red")] });
+            }
         }
     }
 };
