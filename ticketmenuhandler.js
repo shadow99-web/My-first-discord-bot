@@ -1,26 +1,89 @@
-const { EmbedBuilder } = require("discord.js");
+const {
+    ChannelType,
+    PermissionFlagsBits,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+} = require("discord.js");
 
 module.exports = async (client, interaction) => {
-    if (!interaction.isStringSelectMenu()) return;
-    if (interaction.customId !== "ticket_help_menu") return;
+    if (!interaction.isButton()) return;
 
-    let embed = new EmbedBuilder().setColor("Blue").setTimestamp();
+    // 🎫 Create Ticket button
+    if (interaction.customId === "ticket_create_button") {
+        const existing = interaction.guild.channels.cache.find(
+            c => c.name === `ticket-${interaction.user.id}`
+        );
+        if (existing) {
+            return interaction.reply({
+                content: "❌ You already have an open ticket!",
+                ephemeral: true,
+            });
+        }
 
-    if (interaction.values[0] === "create_ticket") {
-        embed.setTitle("🎫 Create Ticket").setDescription("Use `/ticket open` or the **Create Ticket** button to start a new ticket.");
+        const channel = await interaction.guild.channels.create({
+            name: `ticket-${interaction.user.id}`,
+            type: ChannelType.GuildText,
+            permissionOverwrites: [
+                {
+                    id: interaction.guild.id,
+                    deny: [PermissionFlagsBits.ViewChannel],
+                },
+                {
+                    id: interaction.user.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                    ],
+                },
+                // ⚠ Replace this with your staff role ID
+                {
+                    id: interaction.guild.roles.everyone,
+                    deny: [PermissionFlagsBits.ViewChannel],
+                },
+            ],
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor("Green")
+            .setTitle("🎫 New Ticket")
+            .setDescription(
+                `Welcome <@${interaction.user.id}>, a staff member will be with you shortly.\n\nWhen you’re done, press the button below to close this ticket.`
+            )
+            .setTimestamp();
+
+        const closeBtn = new ButtonBuilder()
+            .setCustomId("ticket_close_button")
+            .setLabel("🔒 Close Ticket")
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(closeBtn);
+
+        await channel.send({ embeds: [embed], components: [row] });
+
+        await interaction.reply({
+            content: `✅ Ticket created: ${channel}`,
+            ephemeral: true,
+        });
     }
 
-    if (interaction.values[0] === "ticket_commands") {
-        embed.setTitle("🖥 Ticket Commands").setDescription("`/ticket open` → Open a ticket\n`/ticket close` → Close a ticket\n`/ticket config` → View config");
-    }
+    // 🔒 Close Ticket button
+    if (interaction.customId === "ticket_close_button") {
+        if (!interaction.channel.name.startsWith("ticket-")) {
+            return interaction.reply({
+                content: "❌ This command can only be used inside a ticket channel.",
+                ephemeral: true,
+            });
+        }
 
-    if (interaction.values[0] === "ticket_faq") {
-        embed.setTitle("📖 FAQ").setDescription("❓ *Why use tickets?*\nTickets allow private support between staff and users.");
-    }
+        await interaction.reply({
+            content: "🔒 Closing this ticket in **5 seconds**...",
+        });
 
-    if (interaction.values[0] === "ticket_setup") {
-        embed.setTitle("⚙ Setup Guide").setDescription("1️⃣ Set staff role\n2️⃣ Run `/ticket panel`\n3️⃣ Users can now open tickets via the panel!");
+        setTimeout(() => {
+            interaction.channel.delete().catch(() => {});
+        }, 5000);
     }
-
-    await interaction.update({ embeds: [embed] });
 };
