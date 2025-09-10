@@ -14,13 +14,15 @@ module.exports = {
         .setName("ticket")
         .setDescription("🎫 Ticket system help & setup"),
 
-    async execute({ interaction, client }) {
+    async execute({ message, interaction, client, isPrefix }) {
+        const guild = interaction?.guild ?? message.guild;
+        const user = interaction?.user ?? message.author;
+
+        // Help Embed
         const embed = new EmbedBuilder()
             .setColor("Blue")
             .setTitle("🎫 Ticket System Help Menu")
-            .setDescription(
-                "Our ticket system is here to help you!\nExplore its features and set the best ticket system for your server."
-            )
+            .setDescription("Our ticket system is here to help you!\nExplore its features and set the best ticket system for your server.")
             .addFields(
                 { name: "🖥 Commands", value: "Browse through all ticket commands and utilities!" },
                 { name: "📖 FAQ", value: "Find solutions for the most common questions." },
@@ -49,13 +51,18 @@ module.exports = {
         const row1 = new ActionRowBuilder().addComponents(menu);
         const row2 = new ActionRowBuilder().addComponents(createButton);
 
-        await interaction.reply({ embeds: [embed], components: [row1, row2] });
+        // Send response depending on prefix/slash
+        if (isPrefix) {
+            await message.reply({ embeds: [embed], components: [row1, row2] });
+        } else {
+            await interaction.reply({ embeds: [embed], components: [row1, row2] });
+        }
 
-        // Handle button/select interactions
+        // -------- Interaction Handling --------
         client.on("interactionCreate", async i => {
             if (!i.isButton() && !i.isStringSelectMenu()) return;
 
-            // -------- Ticket Creation --------
+            // --- Ticket Creation ---
             if (i.customId === "ticket_create_button" || (i.isStringSelectMenu() && i.values[0] === "create_ticket")) {
                 const existing = i.guild.channels.cache.find(c => c.name === `ticket-${i.user.id}`);
                 if (existing) {
@@ -96,7 +103,7 @@ module.exports = {
                 });
             }
 
-            // -------- Ticket Closing --------
+            // --- Ticket Closing ---
             if (i.customId === "ticket_close_button") {
                 if (!i.channel.name.startsWith("ticket-")) {
                     return i.reply({
