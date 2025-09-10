@@ -350,7 +350,7 @@ client.on("messageCreate", async (message) => {
                     embeds: [new EmbedBuilder()
                         .setColor("Blue")
                         .setTitle(`${user.tag} is AFK`)
-                        .setDescription(`<a:blue_heart:1414309560231002194> Reason: **${data.reason}**\n⏰ Since: ${since}\n🔗 ${jump}`)]
+                        .setDescription(`<a:blue_heart:1414309560231002194> Reason: **${data.reason}**\n THEY WENT: ${since}\n🔗 ${jump}`)]
                 }).catch(() => {});
             }
         });
