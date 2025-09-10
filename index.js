@@ -1,28 +1,41 @@
+// =============================
+// 🌐 Environment Setup
+// =============================
 require("dotenv").config();
-const { 
-    Client, GatewayIntentBits, Partials, Collection, REST, Routes, EmbedBuilder 
+const {
+    Client,
+    GatewayIntentBits,
+    Partials,
+    Collection,
+    REST,
+    Routes,
+    EmbedBuilder
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
 
-// ===== HTTP SERVER FOR RENDER =====
+// =============================
+// ⚡ HTTP Server (Render Support)
+// =============================
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Bot is running!\n");
 }).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
 
-// ===== SELF PING (to prevent Render sleep) =====
-const renderURL = process.env.RENDER_URL; // Add your Render URL in env
+// 🔁 Self-ping (prevent Render sleep)
+const renderURL = process.env.RENDER_URL;
 if (renderURL) {
     setInterval(() => {
         fetch(renderURL)
             .then(() => console.log("✅ Self-ping successful"))
             .catch(() => console.log("❌ Self-ping failed"));
-    }, 4 * 60 * 1000); // Ping every 4 minutes
+    }, 4 * 60 * 1000); // every 4 minutes
 }
 
-// ===== BOT SETUP =====
+// =============================
+// 🤖 Client Setup
+// =============================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -34,30 +47,45 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// ===== COLLECTIONS =====
+// =============================
+// 📦 Collections & Storage
+// =============================
 client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map();
 
-// ===== DEFAULT PREFIX =====
+// Prefix
 const defaultPrefix = "!";
-
-// ===== PREFIX STORAGE =====
 const prefixFile = "./prefixes.json";
 if (!fs.existsSync(prefixFile)) fs.writeFileSync(prefixFile, "{}");
 const getPrefixes = () => JSON.parse(fs.readFileSync(prefixFile, "utf8"));
 const savePrefixes = (prefixes) => fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
 
-// ===== BLOCKED USERS STORAGE =====
+// Blocked Users
 const blockFile = "./block.json";
 if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
 const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
 const saveBlocked = (data) => fs.writeFileSync(blockFile, JSON.stringify(data, null, 4));
 
-// ===== DEV ID =====
+// ===== Autorole storage (new) =====
+const autoroleFile = "./autorole.json";
+if (!fs.existsSync(autoroleFile)) fs.writeFileSync(autoroleFile, "{}");
+const getAutorole = () => {
+    try {
+        return JSON.parse(fs.readFileSync(autoroleFile, "utf8") || "{}");
+    } catch (e) {
+        console.error("Failed to read autorole.json:", e);
+        return {};
+    }
+};
+const saveAutorole = (data) => fs.writeFileSync(autoroleFile, JSON.stringify(data, null, 4));
+
+// Dev ID
 const devID = process.env.DEV_ID;
 
-// ===== BLOCK HELPER FUNCTIONS =====
+// =============================
+// 🚫 Block Helpers
+// =============================
 const isBlocked = (userId, guildId, commandName) => {
     const blocked = getBlocked();
     const guildBlocked = blocked[guildId] || {};
@@ -89,8 +117,9 @@ const getBlockedUsers = (guildId, commandName) => {
     return blocked[guildId]?.[commandName] || [];
 };
 
-// ===== LOAD COMMANDS =====
-client.commands = new Collection();
+// =============================
+// 📂 Load Commands
+// =============================
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 const commandsData = [];
 
@@ -105,7 +134,9 @@ for (const file of commandFiles) {
     }
 }
 
-// ===== DEPLOY SLASH COMMANDS =====
+// =============================
+// 🚀 Deploy Slash Commands
+// =============================
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
     try {
@@ -123,13 +154,17 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
     }
 })();
 
-// ===== READY EVENT =====
+// =============================
+// 🔔 Ready Event
+// =============================
 client.once("ready", () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     client.user.setActivity(`Type ${defaultPrefix}help or /help`, { type: "WATCHING" });
 });
 
-// ===== MESSAGE DELETE (SNIPE) =====
+// =============================
+// 🗑️ Message Delete (Snipe)
+// =============================
 client.on("messageDelete", (message) => {
     if (!message.guild || message.author?.bot) return;
     const snipes = client.snipes.get(message.channel.id) || [];
@@ -144,7 +179,51 @@ client.on("messageDelete", (message) => {
     client.snipes.set(message.channel.id, snipes);
 });
 
-// ===== HANDLE SLASH COMMANDS =====
+// =============================
+// 🟢 Autorole: assign roles on join (NEW)
+// =============================
+client.on("guildMemberAdd", async (member) => {
+    try {
+        const cfg = getAutorole();
+        const guildCfg = cfg[member.guild.id];
+        if (!guildCfg) return; // nothing configured
+
+        // choose list by whether member is a bot
+        const roleIds = (member.user.bot ? (guildCfg.bots || []) : (guildCfg.humans || []));
+        if (!Array.isArray(roleIds) || roleIds.length === 0) return;
+
+        // Try to add each role (skip if role missing)
+        const applied = [];
+        for (const roleId of roleIds) {
+            const role = member.guild.roles.cache.get(roleId);
+            if (!role) continue;
+            try {
+                await member.roles.add(roleId, `Autorole: assigned on join`);
+                applied.push(`<@&${roleId}>`);
+            } catch (err) {
+                // Could be permission or role hierarchy issue; log but keep going
+                console.warn(`Failed to add role ${roleId} to ${member.user.tag} in ${member.guild.name}:`, err.message);
+            }
+        }
+
+        // Optional: send a small DM informing the new member (safe try/catch — many DMs fail)
+        if (applied.length > 0) {
+            const blueHeart = "<a:blue_heart_1414309560231002194>";
+            const dmEmbed = new EmbedBuilder()
+                .setColor("Blue")
+                .setTitle(`Welcome to ${member.guild.name}!`)
+                .setDescription(`${blueHeart} You have been given the following role(s):\n${applied.join(", ")}`)
+                .setTimestamp();
+            member.send({ embeds: [dmEmbed] }).catch(() => {});
+        }
+    } catch (err) {
+        console.error("Error in guildMemberAdd autorole handler:", err);
+    }
+});
+
+// =============================
+// 🛠 Slash Command Handler
+// =============================
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isCommand()) return;
     const command = client.commands.get(interaction.commandName);
@@ -165,7 +244,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     try {
-        // ===== AUTO USAGE HELP FOR SLASH COMMANDS =====
+        // ℹ️ Auto usage help
         if (command.usage && interaction.options._hoistedOptions.length === 0) {
             return interaction.reply({
                 embeds: [
@@ -191,24 +270,27 @@ client.on("interactionCreate", async (interaction) => {
     }
 });
 
-// ===== HANDLE PREFIX COMMANDS + AFK SYSTEM =====
+// =============================
+// 💬 Prefix Commands + AFK System
+// =============================
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // ===== AFK REMOVE IF USER RETURNS =====
+    // AFK remove if user returns
     if (client.afk.has(message.author.id)) {
         const data = client.afk.get(message.author.id);
         client.afk.delete(message.author.id);
 
-        const embed = new EmbedBuilder()
-            .setColor("Green")
-            .setAuthor({ name: `${message.author.username} is back!`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-            .setDescription("✅ You are no longer AFK.")
-            .setTimestamp();
+        message.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor("Green")
+                    .setAuthor({ name: `${message.author.username} is back!`, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                    .setDescription("✅ You are no longer AFK.")
+                    .setTimestamp()
+            ]
+        }).catch(() => {});
 
-        message.reply({ embeds: [embed] }).catch(() => {});
-
-        // Notify them who pinged while AFK
         if (data.mentions?.length) {
             const mentionsList = data.mentions.map(m => `<@${m}>`).join(", ");
             message.channel.send({
@@ -223,23 +305,24 @@ client.on("messageCreate", async (message) => {
         }
     }
 
-    // ===== AFK NOTIFY WHEN PINGED =====
+    // AFK notify when pinged
     if (message.mentions.users.size > 0) {
         message.mentions.users.forEach(user => {
             if (client.afk.has(user.id)) {
                 const data = client.afk.get(user.id);
                 const since = `<t:${Math.floor(data.since / 1000)}:R>`;
 
-                const embed = new EmbedBuilder()
-                    .setColor("Blue")
-                    .setAuthor({ name: `${user.tag} is AFK`, iconURL: user.displayAvatarURL({ dynamic: true }) })
-                    .setDescription(`💤 Reason: **${data.reason}**\n⏰ Since: ${since}`)
-                    .setFooter({ text: "They will see your mention later." })
-                    .setTimestamp();
+                message.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor("Blue")
+                            .setAuthor({ name: `${user.tag} is AFK`, iconURL: user.displayAvatarURL({ dynamic: true }) })
+                            .setDescription(`💤 Reason: **${data.reason}**\n⏰ Since: ${since}`)
+                            .setFooter({ text: "They will see your mention later." })
+                            .setTimestamp()
+                    ]
+                }).catch(() => {});
 
-                message.reply({ embeds: [embed] }).catch(() => {});
-
-                // Save who mentioned them
                 if (!data.mentions.includes(message.author.id)) {
                     data.mentions.push(message.author.id);
                     client.afk.set(user.id, data);
@@ -248,7 +331,7 @@ client.on("messageCreate", async (message) => {
         });
     }
 
-    // ===== PREFIX COMMAND HANDLING =====
+    // Prefix command handling
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
@@ -272,7 +355,7 @@ client.on("messageCreate", async (message) => {
     }
 
     try {
-        // ===== AUTO USAGE HELP FOR PREFIX COMMANDS =====
+        // ℹ️ Auto usage help
         if (command.usage && args.length === 0) {
             return message.reply({
                 embeds: [
@@ -293,8 +376,12 @@ client.on("messageCreate", async (message) => {
     }
 });
 
-// ===== LOGIN =====
+// =============================
+// 🔑 Login
+// =============================
 client.login(process.env.TOKEN);
 
-// ===== EXPORT HELPERS =====
+// =============================
+// 📤 Export Helpers
+// =============================
 module.exports = { addBlock, removeBlock, getBlockedUsers, isBlocked };
