@@ -20,7 +20,6 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
-const fetch = require("node-fetch"); // make sure fetch works
 
 // =============================
 // ⚡ HTTP Server (Render Support)
@@ -61,25 +60,6 @@ const client = new Client({
 client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map();
-
-// =============================
-// 📝 Snipe System
-// =============================
-client.on("messageDelete", (message) => {
-    if (!message.guild || message.author?.bot) return;
-
-    const snipes = client.snipes.get(message.channel.id) || [];
-    snipes.unshift({
-        content: message.content || "*No text (embed/attachment)*",
-        author: message.author.tag,
-        avatar: message.author.displayAvatarURL({ dynamic: true }),
-        createdAt: message.createdTimestamp,
-        attachment: message.attachments.first()?.url || null
-    });
-
-    if (snipes.length > 5) snipes.pop(); // keep last 5 messages
-    client.snipes.set(message.channel.id, snipes);
-});
 
 // Prefix
 const defaultPrefix = "!";
@@ -268,10 +248,22 @@ async function sendTicketPanel(channel) {
 const { getResponse, addResponse, removeResponse } = require("./Handlers/autoresponseHandler");
 
 // =============================
-// 💬 Message Handler (AFK + Autoresponse + Prefix)
+// 💬 Message Handler (AFK + Autoresponse + Prefix + Snipe)
 // =============================
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
+
+    // ---------- SNIPE SYSTEM ----------
+    const snipes = client.snipes.get(message.channel.id) || [];
+    snipes.unshift({
+        content: message.content || "*No text (embed/attachment)*",
+        author: message.author.tag,
+        avatar: message.author.displayAvatarURL({ dynamic: true }),
+        createdAt: message.createdTimestamp,
+        attachment: message.attachments.first()?.url || null
+    });
+    if (snipes.length > 5) snipes.pop();
+    client.snipes.set(message.channel.id, snipes);
 
     // ---------- AFK Remove ----------
     if (client.afk.has(message.author.id)) {
@@ -335,6 +327,74 @@ client.on("messageCreate", async (message) => {
     } catch (err) {
         console.error(err);
         message.reply("❌ Something went wrong executing this command.").catch(() => {});
+    }
+});
+
+// =============================
+// 🎫 Ticket Interaction Handler
+// =============================
+client.on("interactionCreate", async (interaction) => {
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+
+        if (isBlocked(interaction.user.id, interaction.guildId, interaction.commandName)) {
+            return interaction.reply({
+                embeds: [new EmbedBuilder()
+                    .setColor("Red")
+                    .setTitle("🚫 Command Blocked")
+                    .setDescription(`You are blocked from using \`${interaction.commandName}\` here.`)
+                ],
+                ephemeral: true
+            });
+        }
+
+        try {
+            await command.execute({ interaction, client, isPrefix: false });
+        } catch (err) {
+            console.error(err);
+            interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
+        }
+    }
+
+    // Ticket select menu
+    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
+        const type = interaction.values[0];
+        const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.id}`);
+        if (existing) return interaction.reply({ content: "❌ You already have an open ticket!", ephemeral: true });
+
+        const channel = await interaction.guild.channels.create({
+            name: `ticket-${interaction.user.id}`,
+            type: ChannelType.GuildText,
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
+            ]
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor("Green")
+            .setAuthor({ name: `${interaction.user.username}'s Ticket`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
+            .setDescription(`<a:blue_heart:1414309560231002194> Ticket Type: **${type}**\nWelcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close this ticket.`);
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId("ticket_close_button")
+                .setLabel("🔒 Close Ticket")
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await channel.send({ content: `<@${interaction.user.id}>`, embeds: [embed], components: [row] });
+        return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
+    }
+
+    // Close ticket button
+    if (interaction.isButton() && interaction.customId === "ticket_close_button") {
+        if (!interaction.channel.name.startsWith("ticket-")) {
+            return interaction.reply({ content: "❌ Only usable inside ticket channels.", ephemeral: true });
+        }
+        await interaction.reply({ content: "🔒 Closing ticket in **5 seconds**..." });
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
 });
 
