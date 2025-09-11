@@ -375,7 +375,7 @@ client.on("messageCreate", async (message) => {
     }
 });
 
-const { getResponse } = require("./Handlers/autoresponseHandler");
+const { getResponse } = require("./Handlers/autoresponseHandlers");
 
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
