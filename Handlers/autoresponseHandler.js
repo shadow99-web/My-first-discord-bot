@@ -27,7 +27,6 @@ const addResponse = (guildId, trigger, response) => {
     const data = load();
     if (!data[guildId]) data[guildId] = {};
 
-    // Store trigger as lowercase for safety
     const key = trigger.toLowerCase();
     data[guildId][key] = response;
 
@@ -55,8 +54,16 @@ const getResponse = (guildId, messageContent) => {
     return data[guildId][key] || null;
 };
 
+// 📜 List all responses for a guild
+const listResponses = (guildId) => {
+    const data = load();
+    return data[guildId] || {};
+};
+
 module.exports = {
     addResponse,
     removeResponse,
     getResponse,
+    listResponses,
+    load  // optional if you want direct access to the full JSON
 };
