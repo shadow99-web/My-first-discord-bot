@@ -20,6 +20,7 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 const http = require("http");
+const fetch = require("node-fetch"); // make sure fetch works
 
 // =============================
 // ⚡ HTTP Server (Render Support)
@@ -60,6 +61,25 @@ const client = new Client({
 client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map();
+
+// =============================
+// 📝 Snipe System
+// =============================
+client.on("messageDelete", (message) => {
+    if (!message.guild || message.author?.bot) return;
+
+    const snipes = client.snipes.get(message.channel.id) || [];
+    snipes.unshift({
+        content: message.content || "*No text (embed/attachment)*",
+        author: message.author.tag,
+        avatar: message.author.displayAvatarURL({ dynamic: true }),
+        createdAt: message.createdTimestamp,
+        attachment: message.attachments.first()?.url || null
+    });
+
+    if (snipes.length > 5) snipes.pop(); // keep last 5 messages
+    client.snipes.set(message.channel.id, snipes);
+});
 
 // Prefix
 const defaultPrefix = "!";
@@ -242,85 +262,18 @@ async function sendTicketPanel(channel) {
     await channel.send({ embeds: [embed], components: [menu] });
 }
 
-client.on("interactionCreate", async (interaction) => {
-    if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === "ticket") {
-            await sendTicketPanel(interaction.channel);
-            return interaction.reply({ content: "✅ Ticket panel sent!", ephemeral: true });
-        }
-
-        const command = client.commands.get(interaction.commandName);
-        if (!command) return;
-
-        if (isBlocked(interaction.user.id, interaction.guildId, interaction.commandName)) {
-            return interaction.reply({
-                embeds: [new EmbedBuilder()
-                    .setColor("Red")
-                    .setTitle("🚫 Command Blocked")
-                    .setDescription(`You are blocked from using \`${interaction.commandName}\` here.`)
-                ],
-                ephemeral: true
-            });
-        }
-
-        try {
-            await command.execute({ interaction, client, isPrefix: false });
-        } catch (err) {
-            console.error(err);
-            interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
-        }
-    }
-
-    // 🎫 Ticket creation
-    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
-        const type = interaction.values[0];
-        const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.id}`);
-        if (existing) return interaction.reply({ content: "❌ You already have an open ticket!", ephemeral: true });
-
-        const channel = await interaction.guild.channels.create({
-            name: `ticket-${interaction.user.id}`,
-            type: ChannelType.GuildText,
-            permissionOverwrites: [
-                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
-            ]
-        });
-
-        const embed = new EmbedBuilder()
-            .setColor("Green")
-            .setAuthor({ name: `${interaction.user.username}'s Ticket`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`<a:blue_heart:1414309560231002194> Ticket Type: **${type}**\nWelcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close this ticket.`);
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId("ticket_close_button")
-                .setLabel("🔒 Close Ticket")
-                .setStyle(ButtonStyle.Danger)
-        );
-
-        await channel.send({ content: `<@${interaction.user.id}>`, embeds: [embed], components: [row] });
-        return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
-    }
-
-    // 🔒 Close handler
-    if (interaction.isButton() && interaction.customId === "ticket_close_button") {
-        if (!interaction.channel.name.startsWith("ticket-")) {
-            return interaction.reply({ content: "❌ Only usable inside ticket channels.", ephemeral: true });
-        }
-        await interaction.reply({ content: "🔒 Closing ticket in **5 seconds**..." });
-        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
-    }
-});
+// =============================
+// 💬 Autoresponse Helper
+// =============================
+const { getResponse, addResponse, removeResponse } = require("./Handlers/autoresponseHandler");
 
 // =============================
-// 💬 Prefix Commands + AFK
+// 💬 Message Handler (AFK + Autoresponse + Prefix)
 // =============================
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    const { getResponse } = require("./Handlers/autoresponseHandler");
-   
-    // AFK remove
+    // ---------- AFK Remove ----------
     if (client.afk.has(message.author.id)) {
         client.afk.delete(message.author.id);
         message.reply({
@@ -330,14 +283,13 @@ client.on("messageCreate", async (message) => {
         }).catch(() => {});
     }
 
-    // AFK mentions
+    // ---------- AFK Mentions ----------
     if (message.mentions.users.size > 0) {
         message.mentions.users.forEach(user => {
             if (client.afk.has(user.id)) {
                 const data = client.afk.get(user.id);
                 const since = `<t:${Math.floor(data.since / 1000)}:R>`;
                 const jump = `[Jump to Message](${message.url})`;
-
                 message.reply({
                     embeds: [new EmbedBuilder()
                         .setColor("Blue")
@@ -348,7 +300,16 @@ client.on("messageCreate", async (message) => {
         });
     }
 
-    // Prefix check
+    // ---------- Autoresponse ----------
+    const response = getResponse(message.guild.id, message.content.toLowerCase());
+    if (response) {
+        const payload = {};
+        if (response.text) payload.content = response.text;
+        if (response.attachments && response.attachments.length > 0) payload.files = response.attachments;
+        return message.channel.send(payload);
+    }
+
+    // ---------- Prefix Commands ----------
     const prefixes = getPrefixes();
     const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
     if (!message.content.startsWith(guildPrefix)) return;
@@ -376,17 +337,6 @@ client.on("messageCreate", async (message) => {
         message.reply("❌ Something went wrong executing this command.").catch(() => {});
     }
 });
-
-    // --- Autoresponse check ---
-    const response = getResponse(message.guild.id, message.content.toLowerCase());
-    if (response) {
-        const payload = {};
-        if (response.text) payload.content = response.text;
-        if (response.attachments && response.attachments.length > 0) {
-            payload.files = response.attachments;
-        }
-        return message.channel.send(payload);
-    }
 
 // =============================
 // 🔑 Login
