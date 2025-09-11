@@ -375,6 +375,25 @@ client.on("messageCreate", async (message) => {
     }
 });
 
+const { getResponse } = require("./Handlers/autoresponseHandler");
+
+client.on("messageCreate", async (message) => {
+    if (!message.guild || message.author.bot) return;
+
+    // --- Autoresponse Check ---
+    const response = getResponse(message.guild.id, message.content.toLowerCase());
+    if (response) {
+        const payload = {};
+        if (response.text) payload.content = response.text;
+        if (response.attachments && response.attachments.length > 0) {
+            payload.files = response.attachments;
+        }
+        return message.channel.send(payload);
+    }
+
+    // ... your other prefix command handling here ...
+});
+
 // =============================
 // 🔑 Login
 // =============================
