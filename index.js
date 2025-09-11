@@ -318,6 +318,8 @@ client.on("interactionCreate", async (interaction) => {
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
+    const { getResponse } = require("./Handlers/autoresponseHandler");
+   
     // AFK remove
     if (client.afk.has(message.author.id)) {
         client.afk.delete(message.author.id);
@@ -375,12 +377,7 @@ client.on("messageCreate", async (message) => {
     }
 });
 
-const { getResponse } = require("/Handlers/autoresponseHandlers");
-
-client.on("messageCreate", async (message) => {
-    if (!message.guild || message.author.bot) return;
-
-    // --- Autoresponse Check ---
+    // --- Autoresponse check ---
     const response = getResponse(message.guild.id, message.content.toLowerCase());
     if (response) {
         const payload = {};
@@ -390,9 +387,6 @@ client.on("messageCreate", async (message) => {
         }
         return message.channel.send(payload);
     }
-
-    // ... your other prefix command handling here ...
-});
 
 // =============================
 // 🔑 Login
