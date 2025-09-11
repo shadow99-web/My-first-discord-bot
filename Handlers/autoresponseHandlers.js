@@ -1,6 +1,7 @@
 const fs = require("fs");
 const file = "./autoresponses.json";
 
+module.exports = function autoresponseHandlers (client)
 if (!fs.existsSync(file)) fs.writeFileSync(file, "{}");
 
 function getAutoresponses() {
