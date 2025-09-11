@@ -1,9 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const {
-    addAutoresponse,
-    removeAutoresponse,
-    listAutoresponses
-} = require("../Handlers/autoresponseHandler");
+const { addResponse, removeResponse, getResponse, load } = require("../Handlers/autoresponseHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -26,42 +22,38 @@ module.exports = {
                 .setDescription("List all autoresponses")
         ),
 
-    async execute({ interaction, message, client, isPrefix }) {
+    async execute({ interaction, message }) {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        const reply = async (ctx, content) => {
-            if (interaction) return interaction.reply(content);
+        const reply = async (content) => {
+            if (interaction) return interaction.reply({ ...content, ephemeral: true });
             if (message) return message.reply(content);
         };
 
-        let sub = null;
-        let trigger, response, file;
+        // Determine subcommand, trigger, response, file
+        let sub = null, trigger, response, file;
         if (interaction) {
             sub = interaction.options.getSubcommand();
             trigger = interaction.options.getString("trigger");
             response = interaction.options.getString("response");
             file = interaction.options.getAttachment("file");
         } else if (message) {
-            const args = message.content.split(" ").slice(1);
-            sub = args.shift();
+            const args = message.content.trim().split(/\s+/).slice(1);
+            sub = args.shift()?.toLowerCase();
             trigger = args.shift();
             response = args.join(" ");
             if (message.attachments.size > 0) file = message.attachments.first();
         }
 
-        // --- Add ---
+        // --- Add Autoresponse ---
         if (sub === "add") {
-            if (!trigger && !response && !file) {
-                return reply(interaction || message, "❌ Provide at least a response message or an attachment!");
-            }
+            if (!trigger && !response && !file) return reply("❌ Provide at least a response message or an attachment!");
 
-            let attachments = [];
-            if (file) attachments.push(file.url);
+            const attachments = file ? [file.url] : [];
+            addResponse(guildId, trigger, { text: response || "", attachments });
 
-            addAutoresponse(guildId, trigger, response || "", attachments);
-
-            return reply(interaction || message, {
+            return reply({
                 embeds: [
                     new EmbedBuilder()
                         .setColor("Green")
@@ -73,29 +65,31 @@ module.exports = {
             });
         }
 
-        // --- Remove ---
+        // --- Remove Autoresponse ---
         if (sub === "remove") {
-            if (!trigger) return reply(interaction || message, "❌ Provide a trigger word to remove.");
-
-            const success = removeAutoresponse(guildId, trigger);
-            if (success) return reply(interaction || message, `🗑️ Removed autoresponse for \`${trigger}\``);
-            return reply(interaction || message, "❌ No autoresponse found for that trigger.");
+            if (!trigger) return reply("❌ Provide a trigger word to remove.");
+            const success = removeResponse(guildId, trigger);
+            if (success) return reply(`🗑️ Removed autoresponse for \`${trigger}\``);
+            return reply("❌ No autoresponse found for that trigger.");
         }
 
-        // --- List ---
+        // --- List Autoresponses ---
         if (sub === "list") {
-            const data = listAutoresponses(guildId);
-            if (Object.keys(data).length === 0) return reply(interaction || message, "📭 No autoresponses set.");
+            const data = load()[guildId] || {};
+            if (Object.keys(data).length === 0) return reply("📭 No autoresponses set.");
 
             const embed = new EmbedBuilder()
                 .setColor("Blue")
                 .setTitle("📜 Autoresponses")
                 .setDescription(Object.entries(data).map(([t, r]) =>
-                    `🔹 **${t}** → ${r.text || ""} ${r.attachments?.length > 0 ? `📎 [${r.attachments.length} file(s)]` : ""}`
+                    `🔹 **${t}** → ${r.text || ""} ${r.attachments?.length ? `📎 [${r.attachments.length} file(s)]` : ""}`
                 ).join("\n"))
                 .setTimestamp();
 
-            return reply(interaction || message, { embeds: [embed] });
+            return reply({ embeds: [embed] });
         }
+
+        // If subcommand invalid
+        return reply("❌ Invalid subcommand! Use add, remove, or list.");
     }
 };
