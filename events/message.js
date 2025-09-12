@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
 const { getResponse } = require("../Handlers/autoresponseHandler");
-const { sendTicketPanel } = require("../Handlers/ticketHandler");
+const { sendTicketPanel } = require("../Handlers/ticketmenuhandler");
 
 module.exports = (client, getPrefixes, blockHelpers) => {
     client.on("messageCreate", async (message) => {
