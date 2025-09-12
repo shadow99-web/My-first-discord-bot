@@ -141,7 +141,7 @@ for (const file of commandFiles) {
     }
 }
 
-// ✅ Ensure ticket command is not duplicated
+// ✅ Ensure ticket command is registered
 if (!commandsData.some(cmd => cmd.name === "ticket")) {
     commandsData.push(
         new SlashCommandBuilder()
@@ -206,34 +206,9 @@ client.on("guildMemberAdd", async (member) => {
 });
 
 // =============================
-// 🛠 Ticket System
-// =============================
-async function sendTicketPanel(channel) {
-    const embed = new EmbedBuilder()
-        .setColor("Blue")
-        .setTitle("🎟️ Ticket System")
-        .setDescription("Need help? Select a category below to create a private ticket.")
-        .setTimestamp();
-
-    const menu = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId("ticket_menu")
-            .setPlaceholder("📂 Choose a ticket category")
-            .addOptions([
-                { label: "General Support", value: "general", emoji: "💬" },
-                { label: "Appeal to be Staff", value: "staff", emoji: "🧑‍💼" },
-                { label: "Appeal Ban for Member", value: "ban", emoji: "🚫" },
-                { label: "Report a Member", value: "report", emoji: "⚠️" }
-            ])
-    );
-
-    await channel.send({ embeds: [embed], components: [menu] });
-}
-
-// =============================
 // 💬 Autoresponse Handler
 // =============================
-const { getResponse, addResponse, removeResponse } = require("./Handlers/autoresponseHandler");
+const { getResponse } = require("./Handlers/autoresponseHandler");
 
 // =============================
 // 💬 Message Handler
@@ -241,7 +216,7 @@ const { getResponse, addResponse, removeResponse } = require("./Handlers/autores
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
-    // ---------- SNIPE SYSTEM ----------
+    // ---------- SNIPE ----------
     const snipes = client.snipes.get(message.channel.id) || [];
     snipes.unshift({
         content: message.content || "*No text (embed/attachment)*",
@@ -283,9 +258,11 @@ client.on("messageCreate", async (message) => {
     const response = getResponse(message.guild.id, message.content.toLowerCase());
     if (response) {
         const payload = {};
-        if (response.text) payload.content = response.text;
+        if (response.text && response.text.trim() !== "") payload.content = response.text;
         if (response.attachments?.length > 0) payload.files = response.attachments;
-        return message.channel.send(payload);
+        if (Object.keys(payload).length > 0) {
+            return message.channel.send(payload).catch(() => {});
+        }
     }
 
     // ---------- Prefix Commands ----------
@@ -359,8 +336,8 @@ client.on("interactionCreate", async (interaction) => {
         });
 
         const embed = new EmbedBuilder()
-            .setColor("Green")
-            .setAuthor({ name: `${interaction.user.username}'s Ticket`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
+            .setColor("Blue")
+            .setAuthor({ name: `${interaction.user.username}'s Ticket 💙`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
             .setDescription(`🎟️ Ticket Type: **${type}**\nWelcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close.`);
 
         const row = new ActionRowBuilder().addComponents(
