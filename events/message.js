@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
 const { getPrefixes } = require("../utils/storage");
-const { handleMessage } = require("../Handlers/ticketHandler");
+const { handleMessage } = require("../Handlers/ticketmenuhandler");
 
 module.exports = (client) => {
     client.on("messageCreate", async (message) => {
