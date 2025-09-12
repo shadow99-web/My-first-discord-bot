@@ -191,26 +191,14 @@ client.on("guildMemberAdd", async (member) => {
         const roleIds = (member.user.bot ? (guildCfg.bots || []) : (guildCfg.humans || []));
         if (!Array.isArray(roleIds) || roleIds.length === 0) return;
 
-        const applied = [];
         for (const roleId of roleIds) {
             const role = member.guild.roles.cache.get(roleId);
             if (!role) continue;
             try {
                 await member.roles.add(roleId, `Autorole: assigned on join`);
-                applied.push(`<@&${roleId}>`);
             } catch (err) {
                 console.warn(`Failed to add role ${roleId} to ${member.user.tag}:`, err.message);
             }
-        }
-
-        if (applied.length > 0) {
-            const blueHeart = "<a:blue_heart:1414309560231002194>";
-            const dmEmbed = new EmbedBuilder()
-                .setColor("Blue")
-                .setTitle(`Welcome to ${member.guild.name}!`)
-                .setDescription(`${blueHeart} You have been given the following role(s):\n${applied.join(", ")}`)
-                .setTimestamp();
-            member.send({ embeds: [dmEmbed] }).catch(() => {});
         }
     } catch (err) {
         console.error("Error in autorole handler:", err);
@@ -224,7 +212,7 @@ async function sendTicketPanel(channel) {
     const embed = new EmbedBuilder()
         .setColor("Blue")
         .setTitle("🎟️ Ticket System")
-        .setDescription("<a:blue_heart:1414309560231002194> Need help? Select a category below to create a private ticket.")
+        .setDescription("Need help? Select a category below to create a private ticket.")
         .setTimestamp();
 
     const menu = new ActionRowBuilder().addComponents(
@@ -243,12 +231,12 @@ async function sendTicketPanel(channel) {
 }
 
 // =============================
-// 💬 Autoresponse Helper
+// 💬 Autoresponse Handler
 // =============================
 const { getResponse, addResponse, removeResponse } = require("./Handlers/autoresponseHandler");
 
 // =============================
-// 💬 Message Handler (AFK + Autoresponse + Prefix + Snipe)
+// 💬 Message Handler
 // =============================
 client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
@@ -271,7 +259,7 @@ client.on("messageCreate", async (message) => {
         message.reply({
             embeds: [new EmbedBuilder()
                 .setColor("Green")
-                .setDescription("<a:blue_heart:1414309560231002194> You are no longer AFK.")]
+                .setDescription("✅ You are no longer AFK.")]
         }).catch(() => {});
     }
 
@@ -281,12 +269,11 @@ client.on("messageCreate", async (message) => {
             if (client.afk.has(user.id)) {
                 const data = client.afk.get(user.id);
                 const since = `<t:${Math.floor(data.since / 1000)}:R>`;
-                const jump = `[Jump to Message](${message.url})`;
                 message.reply({
                     embeds: [new EmbedBuilder()
                         .setColor("Blue")
                         .setTitle(`${user.tag} is AFK`)
-                        .setDescription(`<a:blue_heart:1414309560231002194> Reason: **${data.reason}**\nSince: ${since}\n🔗 ${jump}`)]
+                        .setDescription(`📝 Reason: **${data.reason}**\nSince: ${since}`)]
                 }).catch(() => {});
             }
         });
@@ -297,7 +284,7 @@ client.on("messageCreate", async (message) => {
     if (response) {
         const payload = {};
         if (response.text) payload.content = response.text;
-        if (response.attachments && response.attachments.length > 0) payload.files = response.attachments;
+        if (response.attachments?.length > 0) payload.files = response.attachments;
         return message.channel.send(payload);
     }
 
@@ -309,7 +296,6 @@ client.on("messageCreate", async (message) => {
     const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    // Prefix ticket command
     if (commandName === "ticket") {
         await sendTicketPanel(message.channel);
         return message.reply("✅ Ticket panel sent!");
@@ -331,7 +317,7 @@ client.on("messageCreate", async (message) => {
 });
 
 // =============================
-// 🎫 Ticket Interaction Handler
+// 🎫 Interaction Handler
 // =============================
 client.on("interactionCreate", async (interaction) => {
     if (interaction.isChatInputCommand()) {
@@ -343,7 +329,7 @@ client.on("interactionCreate", async (interaction) => {
                 embeds: [new EmbedBuilder()
                     .setColor("Red")
                     .setTitle("🚫 Command Blocked")
-                    .setDescription(`You are blocked from using \`${interaction.commandName}\` here.`)
+                    .setDescription(`You are blocked from using \`${interaction.commandName}\``)
                 ],
                 ephemeral: true
             });
@@ -375,7 +361,7 @@ client.on("interactionCreate", async (interaction) => {
         const embed = new EmbedBuilder()
             .setColor("Green")
             .setAuthor({ name: `${interaction.user.username}'s Ticket`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`<a:blue_heart:1414309560231002194> Ticket Type: **${type}**\nWelcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close this ticket.`);
+            .setDescription(`🎟️ Ticket Type: **${type}**\nWelcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close.`);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
