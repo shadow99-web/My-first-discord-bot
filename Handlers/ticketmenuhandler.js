@@ -1,21 +1,17 @@
-const {
-    EmbedBuilder,
-    ActionRowBuilder,
-    StringSelectMenuBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ChannelType,
-    PermissionFlagsBits
-} = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
+const { getResponse } = require("./autoresponseHandler"); // Correct relative path
 
-const blueHeart = "<a:blue_heart_1414309560231002194>";
-
+// This function sends the ticket panel
 async function sendTicketPanel(channel) {
+    const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
+
     const embed = new EmbedBuilder()
         .setColor("Blue")
         .setTitle("🎟️ Ticket System")
         .setDescription(`${blueHeart} Need help? Select a category below to create a private ticket.`)
         .setTimestamp();
+
+    const { ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
 
     const menu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -32,39 +28,74 @@ async function sendTicketPanel(channel) {
     await channel.send({ embeds: [embed], components: [menu] });
 }
 
-async function handleTicketMenu(interaction) {
-    const type = interaction.values[0];
-    const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${interaction.user.id}`);
-    if (existing) return interaction.reply({ content: "❌ You already have an open ticket!", ephemeral: true });
+module.exports = (client, getPrefixes, blockHelpers) => {
+    client.on("messageCreate", async (message) => {
+        if (!message.guild || message.author.bot) return;
 
-    const channel = await interaction.guild.channels.create({
-        name: `ticket-${interaction.user.id}`,
-        type: ChannelType.GuildText,
-        permissionOverwrites: [
-            { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-            { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
-        ]
+        // ---------- AFK Remove ----------
+        if (client.afk.has(message.author.id)) {
+            client.afk.delete(message.author.id);
+            message.reply({
+                embeds: [new EmbedBuilder().setColor("Green").setDescription("✅ You are no longer AFK.")]
+            }).catch(() => {});
+        }
+
+        // ---------- AFK Mentions ----------
+        if (message.mentions.users.size > 0) {
+            message.mentions.users.forEach(user => {
+                if (client.afk.has(user.id)) {
+                    const data = client.afk.get(user.id);
+                    const since = `<t:${Math.floor(data.since / 1000)}:R>`;
+                    message.reply({
+                        embeds: [new EmbedBuilder()
+                            .setColor("Blue")
+                            .setTitle(`${user.tag} is AFK`)
+                            .setDescription(`✨ Reason: **${data.reason}**\nSince: ${since}`)]
+                    }).catch(() => {});
+                }
+            });
+        }
+
+        // ---------- Autoresponse ----------
+        const response = getResponse(message.guild.id, message.content.toLowerCase());
+        if (response) {
+            const payload = {};
+            if (response.text && response.text.trim() !== "") payload.content = response.text;
+            if (response.attachments?.length > 0) payload.files = response.attachments;
+            if (Object.keys(payload).length > 0) return message.channel.send(payload).catch(() => {});
+        }
+
+        // ---------- Prefix Commands ----------
+        const prefixes = getPrefixes();
+        const guildPrefix = prefixes[message.guild.id] || require("../utils/storage").defaultPrefix;
+        if (!message.content.startsWith(guildPrefix)) return;
+
+        const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
+        const commandName = args.shift().toLowerCase();
+
+        const command = client.commands.get(commandName);
+        if (!command) return;
+
+        // ---------- Block Check ----------
+        if (blockHelpers?.isBlocked && blockHelpers.isBlocked(message.author.id, message.guild.id, commandName)) {
+            return message.reply("🚫 You are blocked from using this command.");
+        }
+
+        // ---------- Ticket Prefix Command ----------
+        if (commandName === "ticket") {
+            await sendTicketPanel(message.channel);
+            return message.reply("✅ Ticket panel sent!");
+        }
+
+        // ---------- Execute Command ----------
+        try {
+            await command.execute({ message, args, client, isPrefix: true });
+        } catch (err) {
+            console.error(err);
+            message.reply("❌ Something went wrong executing this command.").catch(() => {});
+        }
     });
+};
 
-    const embed = new EmbedBuilder()
-        .setColor("Green")
-        .setTitle("🎫 New Ticket")
-        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-        .setDescription(`${blueHeart} Ticket Type: **${type}**\nWelcome <@${interaction.user.id}>, staff will assist you soon.\nPress 🔒 to close.`);
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("ticket_close_button").setLabel("🔒 Close Ticket").setStyle(ButtonStyle.Danger)
-    );
-
-    await channel.send({ content: `<@${interaction.user.id}>`, embeds: [embed], components: [row] });
-    return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
-}
-
-async function handleTicketClose(interaction) {
-    if (!interaction.channel.name.startsWith("ticket-"))
-        return interaction.reply({ content: "❌ Only usable inside ticket channels.", ephemeral: true });
-    await interaction.reply({ content: "🔒 Closing ticket in 5 seconds..." });
-    setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
-}
-
-module.exports = { sendTicketPanel, handleTicketMenu, handleTicketClose };
+// Export sendTicketPanel for external use
+module.exports.sendTicketPanel = sendTicketPanel;
