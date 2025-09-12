@@ -1,11 +1,10 @@
 const { getBlocked, saveBlocked } = require("./storage");
-const devID = process.env.DEV_ID;
 
 const isBlocked = (userId, guildId, commandName) => {
     const blocked = getBlocked();
     const guildBlocked = blocked[guildId] || {};
     const commandBlocked = guildBlocked[commandName] || [];
-    return userId !== devID && commandBlocked.includes(userId);
+    return commandBlocked.includes(userId);
 };
 
 const addBlock = (guildId, commandName, userId) => {
@@ -27,9 +26,4 @@ const removeBlock = (guildId, commandName, userId) => {
     }
 };
 
-const getBlockedUsers = (guildId, commandName) => {
-    const blocked = getBlocked();
-    return blocked[guildId]?.[commandName] || [];
-};
-
-module.exports = { isBlocked, addBlock, removeBlock, getBlockedUsers };
+module.exports = { isBlocked, addBlock, removeBlock };
