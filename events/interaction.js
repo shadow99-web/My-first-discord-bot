@@ -1,3 +1,4 @@
+// events/interaction.js
 const { EmbedBuilder } = require("discord.js");
 const { sendTicketPanel, handleTicketMenu, handleTicketClose } = require("../Handlers/ticketHandler");
 
@@ -9,7 +10,11 @@ module.exports = (client, blockHelpers) => {
                 const command = client.commands.get(interaction.commandName);
                 if (!command) return;
 
-                if (blockHelpers.isBlocked?.(interaction.user.id, interaction.guildId, interaction.commandName)) {
+                const guildId = interaction.guildId;
+                const userId = interaction.user.id;
+
+                // Block check (fixed param order)
+                if (blockHelpers.isBlocked?.(guildId, userId)) {
                     return interaction.reply({
                         embeds: [
                             new EmbedBuilder()
@@ -18,7 +23,7 @@ module.exports = (client, blockHelpers) => {
                                 .setDescription(`You are blocked from using \`${interaction.commandName}\``)
                         ],
                         ephemeral: true
-                    });
+                    }).catch(() => {});
                 }
 
                 await command.execute({ interaction, client, isPrefix: false });
@@ -34,9 +39,13 @@ module.exports = (client, blockHelpers) => {
                 await handleTicketClose(interaction);
             }
         } catch (err) {
-            console.error(err);
-            if (!interaction.replied)
-                interaction.reply({ content: "❌ Something went wrong!", ephemeral: true }).catch(() => {});
+            console.error("❌ Interaction handler error:", err);
+            if (!interaction.replied && !interaction.deferred) {
+                interaction.reply({
+                    content: "⚠️ Something went wrong!",
+                    ephemeral: true
+                }).catch(() => {});
+            }
         }
     });
 };
