@@ -2,6 +2,7 @@ require("dotenv").config();
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
 const fs = require("fs");
+const fetch = require("node-fetch"); // for self-ping
 
 // ====================
 // ⚡ HTTP Server (Render)
@@ -15,13 +16,9 @@ http.createServer((req, res) => {
 const renderURL = process.env.RENDER_URL;
 if (renderURL) {
     setInterval(() => {
-        try {
-            fetch(renderURL)
-                .then(res => res.ok ? console.log("✅ Self-ping successful") : console.log(`❌ Self-ping failed: ${res.status}`))
-                .catch(err => console.log("❌ Self-ping error:", err.message));
-        } catch (err) {
-            console.log("❌ Fetch not available:", err.message);
-        }
+        fetch(renderURL)
+            .then(res => res.ok ? console.log("✅ Self-ping successful") : console.log(`❌ Self-ping failed: ${res.status}`))
+            .catch(err => console.log("❌ Self-ping error:", err.message));
     }, 4 * 60 * 1000);
 }
 
@@ -44,7 +41,7 @@ client.afk = new Map();
 
 // ====================
 // 📦 Load Utils
-const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
+const { defaultPrefix, getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
 const blockHelpers = require("./utils/block");
 
 // ====================
@@ -58,7 +55,9 @@ for (const file of commandFiles) {
         client.commands.set(command.data.name, command);
         commandsData.push(command.data.toJSON());
         console.log(`✅ Loaded command: ${command.data.name}`);
-    } else console.log(`⚠️ Skipped invalid command: ${file}`);
+    } else {
+        console.log(`⚠️ Skipped invalid command: ${file}`);
+    }
 }
 
 // ====================
@@ -67,12 +66,17 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
     try {
         if (process.env.GUILD_ID) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+                { body: commandsData }
+            );
             console.log("✅ Guild commands deployed!");
         }
         await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
         console.log("✅ Global commands deployed!");
-    } catch (err) { console.error("❌ Error deploying commands:", err); }
+    } catch (err) {
+        console.error("❌ Error deploying commands:", err);
+    }
 })();
 
 // ====================
@@ -83,5 +87,16 @@ require("./events/message")(client, getPrefixes, savePrefixes, blockHelpers);
 require("./events/interaction")(client, blockHelpers);
 
 // ====================
+// 🔑 Ready Event
+client.once("ready", () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+    client.user.setActivity(`Type ${defaultPrefix}help or /help`, { type: "WATCHING" });
+});
+
+// ====================
 // 🔑 Login
 client.login(process.env.TOKEN);
+
+// ====================
+// 📤 Export Helpers (Optional)
+module.exports = { blockHelpers, getPrefixes, savePrefixes, getAutorole, saveAutorole };
