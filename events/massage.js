@@ -5,10 +5,25 @@ module.exports = (client, getPrefixes, blockHelpers) => {
     client.on("messageCreate", async (message) => {
         if (!message.guild || message.author.bot) return;
 
+        // ---------- SNIPE ----------
+        const snipes = client.snipes.get(message.channel.id) || [];
+        snipes.unshift({
+            content: message.content || "*No text (embed/attachment)*",
+            author: message.author.tag,
+            authorId: message.author.id,
+            avatar: message.author.displayAvatarURL({ dynamic: true }),
+            createdAt: message.createdTimestamp,
+            attachment: message.attachments.first()?.url || null
+        });
+        if (snipes.length > 5) snipes.pop();
+        client.snipes.set(message.channel.id, snipes);
+
         // ---------- AFK Remove ----------
         if (client.afk.has(message.author.id)) {
             client.afk.delete(message.author.id);
-            message.reply({ embeds: [new EmbedBuilder().setColor("Green").setDescription("✅ You are no longer AFK.")] }).catch(() => {});
+            message.reply({
+                embeds: [new EmbedBuilder().setColor("Green").setDescription("✅ You are no longer AFK.")]
+            }).catch(() => {});
         }
 
         // ---------- AFK Mentions ----------
@@ -38,12 +53,14 @@ module.exports = (client, getPrefixes, blockHelpers) => {
 
         // ---------- Prefix Commands ----------
         const prefixes = getPrefixes();
-        const guildPrefix = prefixes[message.guild.id] || require("../utils/storage").defaultPrefix;
+        const { defaultPrefix } = require("../utils/storage");
+        const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
         if (!message.content.startsWith(guildPrefix)) return;
 
         const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
 
+        // Ticket special case
         if (commandName === "ticket") {
             const sendTicketPanel = require("../commands/ticket").sendTicketPanel;
             await sendTicketPanel(message.channel);
@@ -53,11 +70,16 @@ module.exports = (client, getPrefixes, blockHelpers) => {
         const command = client.commands.get(commandName);
         if (!command) return;
 
+        // Blocked users
         if (blockHelpers.isBlocked(message.author.id, message.guild.id, commandName)) {
             return message.reply("🚫 You are blocked from using this command.");
         }
 
-        try { await command.execute({ message, args, client, isPrefix: true }); }
-        catch (err) { console.error(err); message.reply("❌ Something went wrong executing this command.").catch(() => {}); }
+        try {
+            await command.execute({ message, args, client, isPrefix: true });
+        } catch (err) {
+            console.error(err);
+            message.reply("❌ Something went wrong executing this command.").catch(() => {});
+        }
     });
 };
