@@ -1,13 +1,15 @@
 const fs = require("fs");
 
-// Prefix
+// Default prefix
 const defaultPrefix = "!";
+
+// Prefixes
 const prefixFile = "./prefixes.json";
 if (!fs.existsSync(prefixFile)) fs.writeFileSync(prefixFile, "{}");
 const getPrefixes = () => JSON.parse(fs.readFileSync(prefixFile, "utf8"));
 const savePrefixes = (prefixes) => fs.writeFileSync(prefixFile, JSON.stringify(prefixes, null, 4));
 
-// Blocked Users
+// Blocked users
 const blockFile = "./block.json";
 if (!fs.existsSync(blockFile)) fs.writeFileSync(blockFile, "{}");
 const getBlocked = () => JSON.parse(fs.readFileSync(blockFile, "utf8"));
