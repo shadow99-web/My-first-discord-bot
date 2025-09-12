@@ -1,23 +1,32 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, Collection } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
-const fetch = require("node-fetch"); // for self-ping
+const fs = require("fs");
 
 // ====================
 // ⚡ HTTP Server (Render)
-// ====================
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Bot is running!\n");
 }).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
 
+// 🔁 Self-ping (Render)
 const renderURL = process.env.RENDER_URL;
-if (renderURL) setInterval(() => fetch(renderURL).then(() => console.log("✅ Self-ping")).catch(() => console.log("❌ Self-ping failed")), 4*60*1000);
+if (renderURL) {
+    setInterval(() => {
+        try {
+            fetch(renderURL)
+                .then(res => res.ok ? console.log("✅ Self-ping successful") : console.log(`❌ Self-ping failed: ${res.status}`))
+                .catch(err => console.log("❌ Self-ping error:", err.message));
+        } catch (err) {
+            console.log("❌ Fetch not available:", err.message);
+        }
+    }, 4 * 60 * 1000);
+}
 
 // ====================
 // 🤖 Client Setup
-// ====================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -34,15 +43,12 @@ client.snipes = new Map();
 client.afk = new Map();
 
 // ====================
-// 📦 Load Utilities
-// ====================
-const { getPrefixes, getAutorole } = require("./utils/storage");
+// 📦 Load Utils
+const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
 const blockHelpers = require("./utils/block");
 
 // ====================
 // 📂 Load Commands
-// ====================
-const fs = require("fs");
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 const commandsData = [];
 
@@ -57,8 +63,6 @@ for (const file of commandFiles) {
 
 // ====================
 // 🚀 Deploy Slash Commands
-// ====================
-const { REST, Routes } = require("discord.js");
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
     try {
@@ -72,14 +76,12 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 })();
 
 // ====================
-// 🔔 Load Events
-// ====================
-require("./events/autorole")(client, getAutorole);
+// 🔔 Load Event Handlers
+require("./events/autorole")(client, getAutorole, saveAutorole);
 require("./events/snipe")(client);
-require("./events/message")(client, getPrefixes, blockHelpers);
+require("./events/message")(client, getPrefixes, savePrefixes, blockHelpers);
 require("./events/interaction")(client, blockHelpers);
 
 // ====================
 // 🔑 Login
-// ====================
 client.login(process.env.TOKEN);
