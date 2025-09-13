@@ -1,66 +1,76 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require("discord.js");
 
 module.exports = {
   name: "stealemojis",
-  description: "Steal multiple emojis from another server or URLs",
+  description: "Steal multiple emojis from another server",
   data: new SlashCommandBuilder()
     .setName("stealemojis")
     .setDescription("Copy multiple emojis to this server")
     .addStringOption(option =>
       option.setName("emojis")
-        .setDescription("List of emojis or URLs (separated by space)")
+        .setDescription("List of emojis separated by space (like <:emoji:ID> or URL)")
         .setRequired(true)
     ),
 
-  async execute({ interaction, message, args }) {
-    const guild = interaction ? interaction.guild : message.guild;
+  async execute({ interaction, message, args, client }) {
+    const guild = interaction?.guild || message.guild;
+    const user = interaction?.user || message.author;
     const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
 
-    // Input
-    const input = interaction ? interaction.options.getString("emojis") : args.join(" ");
-    const emojiList = input.split(/ +/).filter(e => e);
-
-    // Permission check
-    if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) {
+    // Permissions check
+    if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
       const reply = "❌ I need `Manage Emojis and Stickers` permission!";
-      if (interaction) return interaction.reply({ content: reply, ephemeral: true });
-      else return message.reply(reply);
+      return interaction 
+        ? interaction.reply({ content: reply, ephemeral: true })
+        : message.reply(reply);
+    }
+
+    // Parse input
+    const input = interaction 
+      ? interaction.options.getString("emojis") 
+      : args.join(" ");
+    let emojiList = input.split(/ +/).filter(e => e);
+
+    // 🔒 Limit safeguard
+    const limit = 10;
+    if (emojiList.length > limit) {
+      emojiList = emojiList.slice(0, limit);
     }
 
     const addedEmojis = [];
     const failedEmojis = [];
 
     for (const e of emojiList) {
-      let url, name;
+      // Match Discord emoji format <:name:id>
+      const match = e.match(/<a?:([\w\d_]+):(\d+)>/);
+      let name, url;
 
-      // Case 1: Custom emoji format <:name:id> or <a:name:id>
-      const match = e.match(/<a?:([a-zA-Z0-9_]+):(\d+)>/);
       if (match) {
         name = match[1];
         const id = match[2];
-        const isAnimated = e.startsWith("<a:");
-        url = `https://cdn.discordapp.com/emojis/${id}.${isAnimated ? "gif" : "png"}`;
-      }
-
-      // Case 2: Direct URL
-      else if (e.startsWith("http")) {
+        const animated = e.startsWith("<a:");
+        url = `https://cdn.discordapp.com/emojis/${id}.${animated ? "gif" : "png"}`;
+      } else if (e.startsWith("http")) {
+        // Direct URL case
+        name = `emoji_${Date.now()}`;
         url = e;
-        const urlParts = url.split("/");
-        const fileName = urlParts[urlParts.length - 1];
-        name = fileName.split(".")[0] || `emoji_${Date.now()}`;
-      }
-
-      // If no valid match → fail
-      else {
+      } else {
         failedEmojis.push(e);
         continue;
       }
 
+      // Auto-rename duplicates
+      let finalName = name;
+      let counter = 1;
+      while (guild.emojis.cache.find(emoji => emoji.name === finalName)) {
+        finalName = `${name}_${counter++}`;
+      }
+
       try {
-        const created = await guild.emojis.create({ attachment: url, name: name });
-        addedEmojis.push(created.toString());
+        const newEmoji = await guild.emojis.create({ attachment: url, name: finalName });
+        addedEmojis.push(newEmoji.toString());
       } catch (err) {
-        console.error(`Failed to add emoji ${name}:`, err.message);
+        console.error(`Failed to add emoji ${finalName}:`, err.message);
         failedEmojis.push(e);
       }
     }
@@ -69,15 +79,15 @@ module.exports = {
       .setTitle(`${blueHeart} Emoji Steal Result`)
       .setColor("Blue")
       .setDescription(
-        (addedEmojis.length ? `✅ Added:\n${addedEmojis.join(" ")}` : "") +
-        (failedEmojis.length ? `\n❌ Failed:\n${failedEmojis.join(" ")}` : "") ||
-        "⚠️ No valid emojis provided."
+        `${addedEmojis.length ? `✅ Added:\n${addedEmojis.join(" ")}` : ""}\n` +
+        `${failedEmojis.length ? `❌ Failed:\n${failedEmojis.join(" ")}` : ""}`
       )
+      .setFooter({ text: `Requested by ${user.tag}` })
       .setTimestamp();
 
     if (interaction) {
       await interaction.reply({ embeds: [embed] });
-    } else {
+    } else if (message) {
       await message.reply({ embeds: [embed] });
     }
   }
