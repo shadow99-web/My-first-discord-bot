@@ -1,3 +1,4 @@
+// commands/stealemojis.js
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require("discord.js");
 
 module.exports = {
@@ -17,41 +18,41 @@ module.exports = {
     const user = interaction?.user || message.author;
     const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
 
-    // Permissions check
+    // 🔒 Permissions check
     if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
       const reply = "❌ I need `Manage Emojis and Stickers` permission!";
-      return interaction 
-        ? interaction.reply({ content: reply, ephemeral: true })
-        : message.reply(reply);
+      if (interaction) return interaction.reply({ content: reply, ephemeral: true }).catch(() => {});
+      if (message) return message.reply(reply).catch(() => {});
     }
 
-    // Parse input
-    const input = interaction 
-      ? interaction.options.getString("emojis") 
+    // 📩 Input handling
+    const input = interaction
+      ? interaction.options.getString("emojis")
       : args.join(" ");
     let emojiList = input.split(/ +/).filter(e => e);
 
-    // 🔒 Limit safeguard
+    // ⛔ Limit safeguard
     const limit = 10;
-    if (emojiList.length > limit) {
-      emojiList = emojiList.slice(0, limit);
-    }
+    if (emojiList.length > limit) emojiList = emojiList.slice(0, limit);
 
     const addedEmojis = [];
     const failedEmojis = [];
 
+    // If slash → defer to avoid timeout
+    if (interaction) await interaction.deferReply();
+
     for (const e of emojiList) {
-      // Match Discord emoji format <:name:id>
-      const match = e.match(/<a?:([\w\d_]+):(\d+)>/);
       let name, url;
 
+      // <:name:id> format
+      const match = e.match(/<a?:([\w\d_]+):(\d+)>/);
       if (match) {
         name = match[1];
         const id = match[2];
         const animated = e.startsWith("<a:");
         url = `https://cdn.discordapp.com/emojis/${id}.${animated ? "gif" : "png"}`;
       } else if (e.startsWith("http")) {
-        // Direct URL case
+        // URL format
         name = `emoji_${Date.now()}`;
         url = e;
       } else {
@@ -62,7 +63,7 @@ module.exports = {
       // Auto-rename duplicates
       let finalName = name;
       let counter = 1;
-      while (guild.emojis.cache.find(emoji => emoji.name === finalName)) {
+      while (guild.emojis.cache.find(em => em.name === finalName)) {
         finalName = `${name}_${counter++}`;
       }
 
@@ -70,11 +71,12 @@ module.exports = {
         const newEmoji = await guild.emojis.create({ attachment: url, name: finalName });
         addedEmojis.push(newEmoji.toString());
       } catch (err) {
-        console.error(`Failed to add emoji ${finalName}:`, err.message);
+        console.error(`❌ Failed to add emoji ${finalName}:`, err.message);
         failedEmojis.push(e);
       }
     }
 
+    // 📊 Embed Result
     const embed = new EmbedBuilder()
       .setTitle(`${blueHeart} Emoji Steal Result`)
       .setColor("Blue")
@@ -85,10 +87,11 @@ module.exports = {
       .setFooter({ text: `Requested by ${user.tag}` })
       .setTimestamp();
 
+    // ✅ Safe reply
     if (interaction) {
-      await interaction.reply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed] }).catch(() => {});
     } else if (message) {
-      await message.reply({ embeds: [embed] });
+      await message.reply({ embeds: [embed] }).catch(() => {});
     }
   }
 };
