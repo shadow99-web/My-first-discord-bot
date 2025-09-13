@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   name: "stealemojis",
@@ -12,14 +12,14 @@ module.exports = {
         .setRequired(true)
     ),
 
-  async execute({ interaction, client }) {
+  async execute({ interaction }) {
     const guild = interaction.guild;
     const blueHeart = "<a:blue_heart_1414309560231002194:1414309560231002194>";
 
     const input = interaction.options.getString("emojis");
     const emojiList = input.split(/ +/).filter(e => e);
 
-    if (!guild.members.me.permissions.has("ManageEmojisAndStickers")) {
+    if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) {
       return interaction.reply({
         content: "❌ I need `Manage Emojis and Stickers` permission!",
         ephemeral: true
@@ -37,19 +37,15 @@ module.exports = {
       }
 
       const id = match[1];
-      const emoji = client.emojis.cache.get(id);
-      if (!emoji) {
-        failedEmojis.push(e);
-        continue;
-      }
+      const isAnimated = e.startsWith("<a:");
+      const url = `https://cdn.discordapp.com/emojis/${id}.${isAnimated ? "gif" : "png"}`;
 
       try {
-        const url = emoji.url;
-        await guild.emojis.create({ attachment: url, name: emoji.name });
-        addedEmojis.push(emoji.toString());
+        const created = await guild.emojis.create({ attachment: url, name: `emoji_${id}` });
+        addedEmojis.push(created.toString());
       } catch (err) {
-        console.error(`Failed to add emoji ${emoji.name}:`, err);
-        failedEmojis.push(emoji.toString());
+        console.error(`Failed to add emoji ${id}:`, err);
+        failedEmojis.push(e);
       }
     }
 
@@ -57,8 +53,9 @@ module.exports = {
       .setTitle(`${blueHeart} Emoji Steal Result`)
       .setColor("Blue")
       .setDescription(
-        `${addedEmojis.length ? `✅ Added:\n${addedEmojis.join(" ")}` : ""}\n` +
-        `${failedEmojis.length ? `❌ Failed:\n${failedEmojis.join(" ")}` : ""}`
+        (addedEmojis.length ? `✅ Added:\n${addedEmojis.join(" ")}` : "") +
+        (failedEmojis.length ? `\n❌ Failed:\n${failedEmojis.join(" ")}` : "") ||
+        "⚠️ No valid emojis provided."
       )
       .setTimestamp();
 
