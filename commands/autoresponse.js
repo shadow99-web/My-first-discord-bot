@@ -42,21 +42,35 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // safe reply wrapper
+        // ✅ safe reply wrapper
         const reply = async (content) => {
-            if (!content) return; // avoid empty replies
-            if (interaction) return interaction.reply({ ...content, ephemeral: true });
-            if (message) return message.reply(content);
+            if (!content) return;
+
+            if (interaction) {
+                if (typeof content === "string") {
+                    return interaction.reply({ content, ephemeral: true });
+                }
+                return interaction.reply({ ...content, ephemeral: true });
+            }
+
+            if (message) {
+                if (typeof content === "string") {
+                    return message.reply(content);
+                }
+                return message.reply(content);
+            }
         };
 
-        // subcommand handling
+        // --- Subcommand Parsing ---
         let sub = null, trigger, response, file;
+
         if (interaction) {
             sub = interaction.options.getSubcommand();
             trigger = interaction.options.getString("trigger");
             response = interaction.options.getString("response");
             file = interaction.options.getAttachment("file");
         } else if (message) {
+            // Example: !autoresponse add hello hi there
             const args = message.content.trim().split(/\s+/).slice(1);
             sub = args.shift()?.toLowerCase();
             trigger = args.shift();
@@ -69,8 +83,12 @@ module.exports = {
             if (!trigger) return reply("❌ You must provide a trigger word.");
             if (!response && !file) return reply("❌ Provide at least a response message or an attachment!");
 
-            const attachments = file ? [file.url] : [];
-            addResponse(guildId, trigger, { text: response || "", attachments });
+            const entry = {
+                text: response || "",
+                attachments: file ? [file.url] : []
+            };
+
+            addResponse(guildId, trigger, entry);
 
             return reply({
                 embeds: [
@@ -99,9 +117,12 @@ module.exports = {
 
             if (entries.length === 0) return reply("✨ No autoresponses set.");
 
-            const description = entries.map(([t, r]) =>
-                `🔹 **${t}** → ${r.text || ""} ${r.attachments?.length ? `📎 [${r.attachments.length} file(s)]` : ""}`
-            ).join("\n");
+            const description = entries.map(([t, r]) => {
+                const arr = Array.isArray(r) ? r : [r];
+                return arr.map(item =>
+                    `🔹 **${t}** → ${item.text || ""} ${item.attachments?.length ? `📎 [${item.attachments.length} file(s)]` : ""}`
+                ).join("\n");
+            }).join("\n");
 
             const embed = new EmbedBuilder()
                 .setColor("Blue")
@@ -112,7 +133,6 @@ module.exports = {
             return reply({ embeds: [embed] });
         }
 
-        // invalid subcommand
         return reply("❌ Invalid subcommand! Use add, remove, or list.");
     }
 };
