@@ -1,32 +1,54 @@
 // Handlers/greetHandler.js
 const fs = require("fs");
-const path = require("path");
+const file = "./greet.json";
 
-const file = path.join(__dirname, "../greet.json");
-
-function load() {
-    if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({}));
-    return JSON.parse(fs.readFileSync(file));
+// ✅ Ensure file exists
+if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, JSON.stringify({}, null, 4));
 }
 
-function save(data) {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
+// 🔄 Load greets
+const load = () => {
+    try {
+        return JSON.parse(fs.readFileSync(file, "utf8") || "{}");
+    } catch (e) {
+        console.error("Failed to read greet.json:", e);
+        return {};
+    }
+};
 
-function addGreet(guildId, greetData) {
-    const db = load();
-    if (!db[guildId]) db[guildId] = [];
-    db[guildId].push(greetData);
-    save(db);
-}
+// 💾 Save greets
+const save = (data) => {
+    fs.writeFileSync(file, JSON.stringify(data, null, 4));
+};
 
-function removeGreet(guildId, index) {
-    const db = load();
-    if (!db[guildId]) return false;
-    if (index < 0 || index >= db[guildId].length) return false;
-    db[guildId].splice(index, 1);
-    save(db);
-    return true;
-}
+// ➕ Add/replace greet (only one per guild)
+const addGreet = (guildId, greet) => {
+    const data = load();
+    data[guildId] = greet; // overwrite if exists
+    save(data);
+};
 
-module.exports = { load, addGreet, removeGreet };
+// ➖ Remove greet
+const removeGreet = (guildId) => {
+    const data = load();
+    if (data[guildId]) {
+        delete data[guildId];
+        save(data);
+        return true;
+    }
+    return false;
+};
+
+// 🔍 Get greet
+const getGreet = (guildId) => {
+    const data = load();
+    return data[guildId] || null;
+};
+
+module.exports = {
+    addGreet,
+    removeGreet,
+    getGreet,
+    load
+};
