@@ -7,19 +7,23 @@ if (!fs.existsSync(file)) {
     fs.writeFileSync(file, JSON.stringify({}, null, 4));
 }
 
-// 🔄 Load data
+// 🔄 Load data safely
 const load = () => {
     try {
         return JSON.parse(fs.readFileSync(file, "utf8") || "{}");
     } catch (e) {
-        console.error("Failed to read autoresponse.json:", e);
+        console.error("❌ Failed to read autoresponse.json:", e);
         return {};
     }
 };
 
-// 💾 Save data
+// 💾 Save data safely
 const save = (data) => {
-    fs.writeFileSync(file, JSON.stringify(data, null, 4));
+    try {
+        fs.writeFileSync(file, JSON.stringify(data, null, 4));
+    } catch (e) {
+        console.error("❌ Failed to save autoresponse.json:", e);
+    }
 };
 
 // ➕ Add response
@@ -28,8 +32,16 @@ const addResponse = (guildId, trigger, response) => {
     if (!data[guildId]) data[guildId] = {};
 
     const key = trigger.toLowerCase();
-    data[guildId][key] = response;
 
+    // Optional: if you want multiple responses, store array instead of string
+    if (!data[guildId][key]) {
+        data[guildId][key] = [];
+    }
+    if (!Array.isArray(data[guildId][key])) {
+        data[guildId][key] = [data[guildId][key]];
+    }
+
+    data[guildId][key].push(response);
     save(data);
 };
 
@@ -37,7 +49,7 @@ const addResponse = (guildId, trigger, response) => {
 const removeResponse = (guildId, trigger) => {
     const data = load();
     const key = trigger.toLowerCase();
-    if (data[guildId] && data[guildId][key]) {
+    if (data[guildId]?.[key]) {
         delete data[guildId][key];
         save(data);
         return true;
@@ -45,13 +57,20 @@ const removeResponse = (guildId, trigger) => {
     return false;
 };
 
-// 🔍 Get response (case-insensitive)
+// 🔍 Get response (case-insensitive, supports partial match)
 const getResponse = (guildId, messageContent) => {
     const data = load();
     if (!data[guildId]) return null;
 
-    const key = messageContent.toLowerCase();
-    return data[guildId][key] || null;
+    const msg = messageContent.toLowerCase();
+    for (const [trigger, responses] of Object.entries(data[guildId])) {
+        if (msg.includes(trigger)) {
+            const resList = Array.isArray(responses) ? responses : [responses];
+            // Randomize if multiple responses exist
+            return resList[Math.floor(Math.random() * resList.length)];
+        }
+    }
+    return null;
 };
 
 // 📜 List all responses for a guild
@@ -65,5 +84,5 @@ module.exports = {
     removeResponse,
     getResponse,
     listResponses,
-    load  // optional if you want direct access to the full JSON
+    load
 };
