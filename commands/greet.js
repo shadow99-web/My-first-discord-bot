@@ -1,6 +1,6 @@
 // Commands/greet.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { addGreet, removeGreet, load } = require("../Handlers/greetHandler");
+const { addGreet, removeGreet, getGreet } = require("../Handlers/greetHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -25,7 +25,7 @@ module.exports = {
         )
         .addSubcommand(sub =>
             sub.setName("list")
-                .setDescription("Show the greet message")
+                .setDescription("Show the current greet message")
         ),
 
     async execute({ interaction, message }) {
@@ -54,20 +54,18 @@ module.exports = {
         // --- ADD ---
         if (sub === "add") {
             if (!text && !file) return reply("❌ Provide at least text or an attachment!");
-
-            // overwrite greet for this guild
             addGreet(guildId, {
                 text: text || "",
                 attachment: file ? file.url : null,
                 author: user.tag
-            }, true); // true = overwrite mode
-
+            });
             return reply({
                 embeds: [new EmbedBuilder()
                     .setColor("Green")
-                    .setTitle("✅ Greet Set")
+                    .setTitle("✅ Greet Saved")
                     .setDescription(`Text: ${text || "(attachment only)"}`)
-                    .setFooter({ text: `Set by ${user.tag}` })
+                    .setFooter({ text: `Added by ${user.tag}` })
+                    .setTimestamp()
                 ]
             });
         }
@@ -80,16 +78,16 @@ module.exports = {
 
         // --- LIST ---
         if (sub === "list") {
-            const db = load()[guildId];
-            if (!db) return reply("✨ No greet set.");
-            return reply({
-                embeds: [new EmbedBuilder()
-                    .setColor("Blue")
-                    .setTitle("🌸 Current Greet")
-                    .setDescription(`${db.text || ""} ${db.attachment ? "📎" : ""}`)
-                    .setFooter({ text: `Set by ${db.author}` })
-                ]
-            });
+            const greet = getGreet(guildId);
+            if (!greet) return reply("✨ No greet set for this server.");
+            const embed = new EmbedBuilder()
+                .setColor("Blue")
+                .setTitle("🌸 Current Greet")
+                .setDescription(greet.text || "(attachment only)")
+                .setFooter({ text: `Added by ${greet.author}` })
+                .setTimestamp();
+            if (greet.attachment) embed.setImage(greet.attachment);
+            return reply({ embeds: [embed] });
         }
 
         return reply("❌ Invalid subcommand.");
