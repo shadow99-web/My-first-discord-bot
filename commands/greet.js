@@ -1,6 +1,6 @@
 // Commands/greet.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { addGreet, removeGreet, getGreet } = require("../Handlers/greetHandler");
+const { addGreet, removeGreet, load } = require("../Handlers/greetHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -8,7 +8,7 @@ module.exports = {
         .setDescription("Manage greet message")
         .addSubcommand(sub =>
             sub.setName("add")
-                .setDescription("Add or replace the greet message")
+                .setDescription("Add a greet message")
                 .addStringOption(opt =>
                     opt.setName("text")
                         .setDescription("Greeting text (supports {user}, {server}, {count})")
@@ -24,17 +24,30 @@ module.exports = {
                 .setDescription("Remove the greet message")
         )
         .addSubcommand(sub =>
-            sub.setName("list")
-                .setDescription("Show the current greet message")
+            sub.setName("view")
+                .setDescription("View current greet message")
         ),
 
     async execute({ interaction, message }) {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
+        // --- SAFE REPLY WRAPPER ---
         const reply = async (content) => {
-            if (interaction) return interaction.reply({ ...content, ephemeral: true });
-            if (message) return message.reply(content);
+            if (interaction) {
+                if (typeof content === "string") {
+                    return interaction.reply({ content, ephemeral: true });
+                } else {
+                    return interaction.reply({ ...content, ephemeral: true });
+                }
+            }
+            if (message) {
+                if (typeof content === "string") {
+                    return message.reply(content);
+                } else {
+                    return message.reply(content);
+                }
+            }
         };
 
         let sub, text, file;
@@ -53,19 +66,25 @@ module.exports = {
 
         // --- ADD ---
         if (sub === "add") {
+            const db = load()[guildId] || [];
+            if (db.length > 0) {
+                return reply("❌ This server already has a greet message! Remove it first.");
+            }
+
             if (!text && !file) return reply("❌ Provide at least text or an attachment!");
+
             addGreet(guildId, {
                 text: text || "",
                 attachment: file ? file.url : null,
                 author: user.tag
             });
+
             return reply({
                 embeds: [new EmbedBuilder()
                     .setColor("Green")
-                    .setTitle("✅ Greet Saved")
+                    .setTitle("✅ Greet Added")
                     .setDescription(`Text: ${text || "(attachment only)"}`)
                     .setFooter({ text: `Added by ${user.tag}` })
-                    .setTimestamp()
                 ]
             });
         }
@@ -73,21 +92,24 @@ module.exports = {
         // --- REMOVE ---
         if (sub === "remove") {
             const ok = removeGreet(guildId);
-            return reply(ok ? "✅ Greet removed." : "❌ No greet set.");
+            return reply(ok ? "✅ Greet removed." : "❌ No greet message set.");
         }
 
-        // --- LIST ---
-        if (sub === "list") {
-            const greet = getGreet(guildId);
-            if (!greet) return reply("✨ No greet set for this server.");
-            const embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setTitle("🌸 Current Greet")
-                .setDescription(greet.text || "(attachment only)")
-                .setFooter({ text: `Added by ${greet.author}` })
-                .setTimestamp();
-            if (greet.attachment) embed.setImage(greet.attachment);
-            return reply({ embeds: [embed] });
+        // --- VIEW ---
+        if (sub === "view") {
+            const db = load()[guildId] || [];
+            if (db.length === 0) return reply("✨ No greet message set.");
+
+            const g = db[0];
+            return reply({
+                embeds: [new EmbedBuilder()
+                    .setColor("Blue")
+                    .setTitle("🌸 Current Greet Message")
+                    .setDescription(g.text || "(attachment only)")
+                    .setFooter({ text: `Added by ${g.author}` })
+                ],
+                files: g.attachment ? [g.attachment] : []
+            });
         }
 
         return reply("❌ Invalid subcommand.");
