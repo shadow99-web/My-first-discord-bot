@@ -1,58 +1,32 @@
+// Handlers/greetHandler.js
 const fs = require("fs");
-const file = "./greet.json";
+const path = require("path");
 
-// ✅ Ensure file exists
-if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, JSON.stringify({}, null, 4));
+const file = path.join(__dirname, "../greet.json");
+
+function load() {
+    if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({}));
+    return JSON.parse(fs.readFileSync(file));
 }
 
-// 🔄 Load data
-const load = () => {
-    try {
-        return JSON.parse(fs.readFileSync(file, "utf8") || "{}");
-    } catch (e) {
-        console.error("Failed to read greet.json:", e);
-        return {};
-    }
-};
+function save(data) {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
 
-// 💾 Save data
-const save = (data) => {
-    fs.writeFileSync(file, JSON.stringify(data, null, 4));
-};
+function addGreet(guildId, greetData) {
+    const db = load();
+    if (!db[guildId]) db[guildId] = [];
+    db[guildId].push(greetData);
+    save(db);
+}
 
-// ➕ Update settings
-const setGreet = (guildId, key, value) => {
-    const data = load();
-    if (!data[guildId]) {
-        data[guildId] = {
-            enabled: true,
-            channel: null,
-            welcome: "{mention} Welcome to {server}! 🎉",
-            leave: "{user} has left {server}. 👋"
-        };
-    }
-    data[guildId][key] = value;
-    save(data);
-};
+function removeGreet(guildId, index) {
+    const db = load();
+    if (!db[guildId]) return false;
+    if (index < 0 || index >= db[guildId].length) return false;
+    db[guildId].splice(index, 1);
+    save(db);
+    return true;
+}
 
-// 🔍 Get settings
-const getGreet = (guildId) => {
-    const data = load();
-    return data[guildId] || null;
-};
-
-// 🔀 Replace placeholders
-const replacePlaceholders = (template, member) => {
-    if (!template) return "";
-
-    return template
-        .replace(/{mention}/gi, `<@${member.id}>`)
-        .replace(/{user}/gi, `${member.user.username}`)
-        .replace(/{tag}/gi, `${member.user.tag}`)
-        .replace(/{id}/gi, `${member.id}`)
-        .replace(/{server}/gi, member.guild.name)
-        .replace(/{membercount}/gi, member.guild.memberCount.toString());
-};
-
-module.exports = { load, save, setGreet, getGreet, replacePlaceholders };
+module.exports = { load, addGreet, removeGreet };
