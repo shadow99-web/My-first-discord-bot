@@ -1,54 +1,58 @@
 // Handlers/greetHandler.js
 const fs = require("fs");
-const file = "./greet.json";
+const path = require("path");
 
-// ✅ Ensure file exists
-if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, JSON.stringify({}, null, 4));
-}
+const file = path.join(__dirname, "../Data/greet.json");
 
-// 🔄 Load greets
-const load = () => {
+function load() {
+    if (!fs.existsSync(file)) return {};
     try {
-        return JSON.parse(fs.readFileSync(file, "utf8") || "{}");
+        return JSON.parse(fs.readFileSync(file, "utf8"));
     } catch (e) {
-        console.error("Failed to read greet.json:", e);
+        console.error("Failed to load greet.json:", e);
         return {};
     }
-};
+}
 
-// 💾 Save greets
-const save = (data) => {
-    fs.writeFileSync(file, JSON.stringify(data, null, 4));
-};
+function save(data) {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
 
-// ➕ Add/replace greet (only one per guild)
-const addGreet = (guildId, greet) => {
-    const data = load();
-    data[guildId] = greet; // overwrite if exists
-    save(data);
-};
+function addGreet(guildId, greetData) {
+    const db = load();
+    if (!db[guildId]) db[guildId] = {};
+    db[guildId].greet = greetData;
+    save(db);
+    return true;
+}
 
-// ➖ Remove greet
-const removeGreet = (guildId) => {
-    const data = load();
-    if (data[guildId]) {
-        delete data[guildId];
-        save(data);
+function removeGreet(guildId) {
+    const db = load();
+    if (db[guildId] && db[guildId].greet) {
+        delete db[guildId].greet;
+        save(db);
         return true;
     }
     return false;
-};
+}
 
-// 🔍 Get greet
-const getGreet = (guildId) => {
-    const data = load();
-    return data[guildId] || null;
-};
+function setChannel(guildId, channelId) {
+    const db = load();
+    if (!db[guildId]) db[guildId] = {};
+    db[guildId].channel = channelId;
+    save(db);
+    return true;
+}
+
+function getChannel(guildId) {
+    const db = load();
+    return db[guildId]?.channel || null;
+}
 
 module.exports = {
+    load,
     addGreet,
     removeGreet,
-    getGreet,
-    load
+    setChannel,
+    getChannel
 };
