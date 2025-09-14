@@ -2,7 +2,8 @@ require("dotenv").config();
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
 const fs = require("fs");
-
+const connectDB = require("./db");
+connectDB();
 // ====================
 // ⚡ HTTP Server (Render)
 const port = process.env.PORT || 3000;
