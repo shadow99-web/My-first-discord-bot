@@ -2,65 +2,75 @@
 const fs = require("fs");
 const path = require("path");
 
-// greet.json will be created in project root (same place as index.js)
-const file = path.join(process.cwd(), "greet.json");
+// ✅ Always resolve greet.json in project root
+const file = path.resolve(__dirname, "..", "greet.json");
 
-function ensureFile() {
+// Ensure file exists
+function ensure() {
     if (!fs.existsSync(file)) {
-        fs.writeFileSync(file, JSON.stringify({}, null, 2));
+        fs.writeFileSync(file, JSON.stringify({}, null, 4));
     }
 }
 
-function load() {
-    ensureFile();
+// 🔄 Load data safely
+const load = () => {
     try {
-        return JSON.parse(fs.readFileSync(file, "utf8"));
+        ensure();
+        const raw = fs.readFileSync(file, "utf8");
+        return raw ? JSON.parse(raw) : {};
     } catch (e) {
-        console.error("Failed to load greet.json:", e);
+        console.error("❌ Failed to read greet.json:", e);
         return {};
     }
-}
+};
 
-function save(data) {
-    ensureFile();
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
+// 💾 Save data safely (atomic write)
+const save = (data) => {
+    try {
+        ensure();
+        const tmp = file + ".tmp";
+        fs.writeFileSync(tmp, JSON.stringify(data, null, 4));
+        fs.renameSync(tmp, file);
+    } catch (e) {
+        console.error("❌ Failed to save greet.json:", e);
+    }
+};
 
-function addGreet(guildId, greetData) {
+// ➕ Add or update greet
+const addGreet = (guildId, greetData) => {
     const db = load();
-    if (!db[guildId]) db[guildId] = {};
-    db[guildId].greet = greetData;
+    db[guildId] = greetData;
     save(db);
-    return true;
-}
+};
 
-function removeGreet(guildId) {
+// ➖ Remove greet
+const removeGreet = (guildId) => {
     const db = load();
-    if (db[guildId] && db[guildId].greet) {
-        delete db[guildId].greet;
+    if (db[guildId]) {
+        delete db[guildId];
         save(db);
         return true;
     }
     return false;
-}
+};
 
-function setChannel(guildId, channelId) {
+// 🔍 Get greet data
+const getGreet = (guildId) => {
     const db = load();
-    if (!db[guildId]) db[guildId] = {};
-    db[guildId].channel = channelId;
-    save(db);
-    return true;
-}
+    return db[guildId] || null;
+};
 
-function getChannel(guildId) {
+// 🔍 Get greet channel
+const getChannel = (guildId) => {
     const db = load();
     return db[guildId]?.channel || null;
-}
+};
 
 module.exports = {
     load,
+    save,
     addGreet,
     removeGreet,
-    setChannel,
-    getChannel
+    getGreet,
+    getChannel,
 };
