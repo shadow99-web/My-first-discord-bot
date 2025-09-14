@@ -1,6 +1,6 @@
 // Commands/greet.js
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { addGreet, removeGreet, load } = require("../Handlers/greetHandler");
+const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require("discord.js");
+const { addGreet, removeGreet, load, setChannel } = require("../Handlers/greetHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -26,6 +26,16 @@ module.exports = {
         .addSubcommand(sub =>
             sub.setName("view")
                 .setDescription("View current greet message")
+        )
+        .addSubcommand(sub =>
+            sub.setName("channel")
+                .setDescription("Set the channel where greet messages will be sent")
+                .addChannelOption(opt =>
+                    opt.setName("target")
+                        .setDescription("Select the channel")
+                        .addChannelTypes(ChannelType.GuildText)
+                        .setRequired(true)
+                )
         ),
 
     async execute({ interaction, message }) {
@@ -37,37 +47,36 @@ module.exports = {
         const reply = async (content) => {
             if (interaction) {
                 if (typeof content === "string") {
-                    return interaction.reply({ content, ephemeral: true });
+                    return interaction.reply({ content, flags: 1 << 6 });
                 } else {
-                    return interaction.reply({ ...content, ephemeral: true });
+                    return interaction.reply({ ...content, flags: 1 << 6 });
                 }
             }
             if (message) {
-                if (typeof content === "string") {
-                    return message.reply(content);
-                } else {
-                    return message.reply(content);
-                }
+                return typeof content === "string" ? message.reply(content) : message.reply(content);
             }
         };
 
-        let sub, text, file;
+        let sub, text, file, channel;
         if (interaction) {
             sub = interaction.options.getSubcommand();
             text = interaction.options.getString("text");
             file = interaction.options.getAttachment("file");
+            channel = interaction.options.getChannel("target");
         } else {
             const args = message.content.trim().split(/\s+/).slice(1);
             sub = args.shift()?.toLowerCase();
             if (sub === "add") {
                 text = args.join(" ");
                 if (message.attachments.size > 0) file = message.attachments.first();
+            } else if (sub === "channel") {
+                channel = message.mentions.channels.first();
             }
         }
 
         // --- ADD ---
         if (sub === "add") {
-            const db = load()[guildId] || null;
+            const db = load()[guildId]?.greet || null;
             if (db) {
                 return reply("❌ This server already has a greet message! Remove it first.");
             }
@@ -98,7 +107,7 @@ module.exports = {
 
         // --- VIEW ---
         if (sub === "view") {
-            const g = load()[guildId];
+            const g = load()[guildId]?.greet;
             if (!g) return reply("✨ No greet message set.");
 
             // 🔄 Replace placeholders
@@ -116,6 +125,22 @@ module.exports = {
                     .setFooter({ text: `Added by ${g.author}` })
                 ],
                 files: g.attachment ? [g.attachment] : []
+            });
+        }
+
+        // --- CHANNEL ---
+        if (sub === "channel") {
+            if (!channel) return reply("❌ Please specify a valid text channel.");
+
+            setChannel(guildId, channel.id);
+
+            return reply({
+                embeds: [new EmbedBuilder()
+                    .setColor("Purple")
+                    .setTitle("✅ Greet Channel Set")
+                    .setDescription(`All greet messages will now be sent in ${channel}`)
+                    .setFooter({ text: `Set by ${user.tag}` })
+                ]
             });
         }
 
