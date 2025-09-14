@@ -1,31 +1,42 @@
-// Events/guildMemberAdd.js
-const { load } = require("../Handlers/greetHandler");
+// events/guildMemberAdd.js
+const { EmbedBuilder } = require("discord.js");
+const { load, getChannel } = require("../Handlers/greetHandler");
 
-module.exports = {
-    name: "guildMemberAdd",
-    async execute(member) {
+module.exports = (client) => {
+    client.on("guildMemberAdd", async (member) => {
         const db = load();
         const guildId = member.guild.id;
-        const greets = db[guildId] || [];
 
-        if (greets.length === 0) return;
+        // Check if greet exists
+        if (!db[guildId] || !db[guildId].greet) return;
 
-        // pick random greet
-        const greet = greets[Math.floor(Math.random() * greets.length)];
+        const greet = db[guildId].greet;
+        const channelId = db[guildId].channel || member.guild.systemChannelId;
+        if (!channelId) return;
 
+        const channel = member.guild.channels.cache.get(channelId);
+        if (!channel) return;
+
+        // Replace placeholders
         let text = greet.text || "";
         text = text
-            .replace(/{user}/g, `${member}`)
-            .replace(/{server}/g, member.guild.name)
-            .replace(/{count}/g, member.guild.memberCount);
+            .replace(/{user}/gi, member.toString())
+            .replace(/{server}/gi, member.guild.name)
+            .replace(/{count}/gi, member.guild.memberCount.toString());
+
+        // Build embed
+        const embed = new EmbedBuilder()
+            .setColor("Blue")
+            .setDescription(text || "👋 Welcome!")
+            .setFooter({ text: `Added by ${greet.author}` });
 
         try {
-            await member.guild.systemChannel?.send({
-                content: text,
+            await channel.send({
+                embeds: [embed],
                 files: greet.attachment ? [greet.attachment] : []
             });
-        } catch (e) {
-            console.error("Failed to send greet:", e);
+        } catch (err) {
+            console.error("Failed to send greet:", err);
         }
-    }
+    });
 };
