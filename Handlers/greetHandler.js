@@ -2,10 +2,17 @@
 const fs = require("fs");
 const path = require("path");
 
-const file = path.join(__dirname, "../Data/greet.json");
+// greet.json will be created in project root (same place as index.js)
+const file = path.join(process.cwd(), "greet.json");
+
+function ensureFile() {
+    if (!fs.existsSync(file)) {
+        fs.writeFileSync(file, JSON.stringify({}, null, 2));
+    }
+}
 
 function load() {
-    if (!fs.existsSync(file)) return {};
+    ensureFile();
     try {
         return JSON.parse(fs.readFileSync(file, "utf8"));
     } catch (e) {
@@ -15,6 +22,7 @@ function load() {
 }
 
 function save(data) {
+    ensureFile();
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
