@@ -32,7 +32,7 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMembers, // required for greet + autorole
         GatewayIntentBits.GuildMessageReactions
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
@@ -58,7 +58,9 @@ for (const file of commandFiles) {
         client.commands.set(command.data.name, command);
         commandsData.push(command.data.toJSON());
         console.log(`✅ Loaded command: ${command.data.name}`);
-    } else console.log(`⚠️ Skipped invalid command: ${file}`);
+    } else {
+        console.log(`⚠️ Skipped invalid command: ${file}`);
+    }
 }
 
 // ====================
@@ -67,12 +69,20 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
     try {
         if (process.env.GUILD_ID) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commandsData });
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+                { body: commandsData }
+            );
             console.log("✅ Guild commands deployed!");
         }
-        await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commandsData });
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commandsData }
+        );
         console.log("✅ Global commands deployed!");
-    } catch (err) { console.error("❌ Error deploying commands:", err); }
+    } catch (err) {
+        console.error("❌ Error deploying commands:", err);
+    }
 })();
 
 // ====================
@@ -81,6 +91,7 @@ require("./events/autorole")(client, getAutorole, saveAutorole);
 require("./events/snipe")(client);
 require("./events/message")(client, getPrefixes, savePrefixes, blockHelpers);
 require("./events/interaction")(client, blockHelpers);
+require("./events/guildMemberAdd")(client); // 👈 greet handler
 
 // ====================
 // 🔑 Login
