@@ -29,7 +29,8 @@ module.exports = {
         ),
 
     async execute({ interaction, message }) {
-        const guildId = interaction?.guildId || message.guild.id;
+        const guild = interaction?.guild || message.guild;
+        const guildId = guild.id;
         const user = interaction?.user || message.author;
 
         // --- SAFE REPLY WRAPPER ---
@@ -66,8 +67,8 @@ module.exports = {
 
         // --- ADD ---
         if (sub === "add") {
-            const db = load()[guildId] || [];
-            if (db.length > 0) {
+            const db = load()[guildId] || null;
+            if (db) {
                 return reply("❌ This server already has a greet message! Remove it first.");
             }
 
@@ -97,15 +98,21 @@ module.exports = {
 
         // --- VIEW ---
         if (sub === "view") {
-            const db = load()[guildId] || [];
-            if (db.length === 0) return reply("✨ No greet message set.");
+            const g = load()[guildId];
+            if (!g) return reply("✨ No greet message set.");
 
-            const g = db[0];
+            // 🔄 Replace placeholders
+            let preview = g.text || "";
+            preview = preview
+                .replace(/{user}/gi, user.toString()) // mention
+                .replace(/{server}/gi, guild.name)
+                .replace(/{count}/gi, guild.memberCount.toString());
+
             return reply({
                 embeds: [new EmbedBuilder()
                     .setColor("Blue")
-                    .setTitle("🌸 Current Greet Message")
-                    .setDescription(g.text || "(attachment only)")
+                    .setTitle("🌸 Current Greet Message (Preview)")
+                    .setDescription(preview || "(attachment only)")
                     .setFooter({ text: `Added by ${g.author}` })
                 ],
                 files: g.attachment ? [g.attachment] : []
