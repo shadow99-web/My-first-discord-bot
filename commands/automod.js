@@ -1,116 +1,139 @@
-// Commands/automod.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { setRule, removeRule, listRules, load } = require("../Handlers/automodHandler");
+const { setAutoMod, getAutoMod, addBadWord, removeBadWord } = require("../Handlers/autoModHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("automod")
-        .setDescription("Manage AutoMod rules")
+        .setDescription("Manage AutoMod settings")
         .addSubcommand(sub =>
-            sub.setName("add")
-                .setDescription("Add an AutoMod rule")
+            sub.setName("toggle")
+                .setDescription("Enable or disable AutoMod features")
                 .addStringOption(opt =>
-                    opt.setName("type")
-                        .setDescription("Rule type (word/mention/link)")
+                    opt.setName("feature")
+                        .setDescription("Feature to toggle (antilinks, antispam)")
                         .setRequired(true)
+                        .addChoices(
+                            { name: "Anti Links", value: "antiLinks" },
+                            { name: "Anti Spam", value: "antiSpam" }
+                        )
                 )
-                .addStringOption(opt =>
+                .addBooleanOption(opt =>
                     opt.setName("value")
-                        .setDescription("Word, link or mention count")
+                        .setDescription("true = enable, false = disable")
                         .setRequired(true)
                 )
         )
         .addSubcommand(sub =>
-            sub.setName("remove")
-                .setDescription("Remove an AutoMod rule")
-                .addIntegerOption(opt =>
-                    opt.setName("index")
-                        .setDescription("Index of the rule (see list)")
+            sub.setName("badword")
+                .setDescription("Add or remove a bad word")
+                .addStringOption(opt =>
+                    opt.setName("action")
+                        .setDescription("Choose add or remove")
+                        .setRequired(true)
+                        .addChoices(
+                            { name: "Add", value: "add" },
+                            { name: "Remove", value: "remove" }
+                        )
+                )
+                .addStringOption(opt =>
+                    opt.setName("word")
+                        .setDescription("The bad word")
                         .setRequired(true)
                 )
         )
         .addSubcommand(sub =>
-            sub.setName("list")
-                .setDescription("List all AutoMod rules")
+            sub.setName("settings")
+                .setDescription("View current AutoMod settings")
         ),
 
     async execute({ interaction, message }) {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // ✅ Safe reply wrapper
-        const safeReply = async (content, options = {}) => {
-            try {
-                if (interaction) {
-                    if (interaction.deferred || interaction.replied) {
-                        return interaction.editReply(content);
-                    } else {
-                        return interaction.reply({ ...options, ...(typeof content === "string" ? { content } : content), flags: 1 << 6 });
-                    }
-                } else if (message) {
-                    return message.reply(content);
-                }
-            } catch (err) {
-                console.error("Reply failed:", err);
+        // ✅ Helper for replying both in slash + prefix
+        const reply = async (content) => {
+            if (interaction) {
+                if (typeof content === "string") return interaction.reply({ content, ephemeral: true });
+                return interaction.reply({ ...content, ephemeral: true });
+            } else if (message) {
+                if (typeof content === "string") return message.reply(content);
+                return message.reply(content);
             }
         };
 
-        let sub, type, value, index;
+        let sub, feature, value, action, word;
+
         if (interaction) {
             sub = interaction.options.getSubcommand();
-            type = interaction.options.getString("type");
-            value = interaction.options.getString("value");
-            index = interaction.options.getInteger("index");
-        } else {
+            feature = interaction.options.getString("feature");
+            value = interaction.options.getBoolean("value");
+            action = interaction.options.getString("action");
+            word = interaction.options.getString("word");
+        } else if (message) {
+            // Example: !automod toggle antiLinks true
             const args = message.content.trim().split(/\s+/).slice(1);
             sub = args.shift()?.toLowerCase();
-            if (sub === "add") {
-                type = args.shift();
-                value = args.join(" ");
-            } else if (sub === "remove") {
-                index = parseInt(args[0]);
+
+            if (sub === "toggle") {
+                feature = args[0];
+                value = args[1] === "true";
+            } else if (sub === "badword") {
+                action = args[0];
+                word = args[1];
             }
         }
 
-        // --- ADD ---
-        if (sub === "add") {
-            if (!type || !value) return safeReply("❌ Provide type and value.");
-            setRule(guildId, { type, value, author: user.tag });
-            return safeReply({
+        // --- TOGGLE ---
+        if (sub === "toggle") {
+            if (!feature) return reply("❌ Provide a feature: `antiLinks` or `antiSpam`.");
+            if (value === undefined) return reply("❌ Provide a value: `true` or `false`.");
+
+            const updated = await setAutoMod(guildId, { [feature]: value });
+
+            return reply({
                 embeds: [
                     new EmbedBuilder()
-                        .setColor("Green")
-                        .setTitle("✅ AutoMod Rule Added")
-                        .setDescription(`**Type:** ${type}\n**Value:** ${value}`)
-                        .setFooter({ text: `Added by ${user.tag}` })
+                        .setColor(value ? "Green" : "Red")
+                        .setTitle("⚙️ AutoMod Updated")
+                        .setDescription(`**${feature}** is now **${value ? "Enabled ✅" : "Disabled ❌"}**`)
+                        .setFooter({ text: `Updated by ${user.tag}` })
+                        .setTimestamp()
                 ]
             });
         }
 
-        // --- REMOVE ---
-        if (sub === "remove") {
-            const ok = removeRule(guildId, index);
-            return safeReply(ok ? `✅ Removed AutoMod rule #${index}` : "❌ Invalid index.");
+        // --- BADWORD ---
+        if (sub === "badword") {
+            if (!action || !word) return reply("❌ Usage: `badword add <word>` or `badword remove <word>`");
+
+            if (action === "add") {
+                await addBadWord(guildId, word);
+                return reply(`✅ Added bad word: \`${word}\``);
+            } else if (action === "remove") {
+                await removeBadWord(guildId, word);
+                return reply(`✅ Removed bad word: \`${word}\``);
+            }
         }
 
-        // --- LIST ---
-        if (sub === "list") {
-            const db = load()[guildId] || [];
-            if (db.length === 0) return safeReply("✨ No AutoMod rules set.");
+        // --- SETTINGS ---
+        if (sub === "settings") {
+            const settings = await getAutoMod(guildId);
 
-            const description = db.map((r, i) =>
-                `#${i} → **${r.type}**: ${r.value} (by ${r.author})`
-            ).join("\n");
+            const embed = new EmbedBuilder()
+                .setColor("Blue")
+                .setTitle("🔒 AutoMod Settings")
+                .addFields(
+                    { name: "Anti Links", value: settings.antiLinks ? "✅ Enabled" : "❌ Disabled", inline: true },
+                    { name: "Anti Spam", value: settings.antiSpam ? "✅ Enabled" : "❌ Disabled", inline: true },
+                    { name: "Mute Duration", value: `${settings.muteDuration} min`, inline: true },
+                    { name: "Bad Words", value: settings.badWords.length ? settings.badWords.join(", ") : "None" }
+                )
+                .setFooter({ text: `Requested by ${user.tag}` })
+                .setTimestamp();
 
-            return safeReply({
-                embeds: [new EmbedBuilder()
-                    .setColor("Blue")
-                    .setTitle("🛡️ AutoMod Rules")
-                    .setDescription(description)
-                ]
-            });
+            return reply({ embeds: [embed] });
         }
 
-        return safeReply("❌ Invalid subcommand.");
+        return reply("❌ Invalid subcommand! Use `toggle`, `badword`, or `settings`.");
     }
 };
