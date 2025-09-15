@@ -1,5 +1,5 @@
 // Handlers/autoroleHandler.js
-const Autorole = require("../Models/autoroleSchema");
+const Autorole = require("../models/autoroleSchema");
 
 async function getAutorole(guildId) {
     let doc = await Autorole.findOne({ guildId });
