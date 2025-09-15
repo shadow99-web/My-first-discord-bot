@@ -2,9 +2,9 @@ const { Schema, model } = require("mongoose");
 
 const autoResponseSchema = new Schema({
     guildId: { type: String, required: true },
-    triggers: { type: [String], required: true }, // list of trigger words/phrases
-    response: { type: String, required: true },   // reply text
-    author: { type: String },                     // who added it
+    trigger: { type: String, required: true }, // single trigger word/phrase
+    responses: { type: [String], default: [] }, // multiple possible replies
+    author: { type: String } // who added it
 }, { timestamps: true });
 
 module.exports = model("AutoResponse", autoResponseSchema);
