@@ -104,11 +104,13 @@ module.exports = function(client, getPrefixes, blockHelpers) {
         }
 
         // ---------- Execute Command ----------
-        try {
-            await command.execute({ message, args, client, isPrefix: true });
-        } catch (err) {
-            console.error(err);
-            message.reply("❌ Something went wrong executing this command.").catch(() => {});
-        }
-    });
-};
+try {
+    if (command.prefixExecute) {
+        await command.prefixExecute(message, args, client); // ✅ use prefixExecute if available
+    } else {
+        await command.execute({ message, args, client, isPrefix: true });
+    }
+} catch (err) {
+    console.error("❌ Prefix command failed:", err);
+    message.reply("❌ Something went wrong executing this command.").catch(() => {});
+}
