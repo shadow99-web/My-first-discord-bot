@@ -1,6 +1,5 @@
-// Commands/autoresponse.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { addResponse, removeResponse, load } = require("../Handlers/autoresponseHandler");
+const { addResponse, removeResponse, listResponses } = require("../Handlers/autoresponseHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,13 +10,12 @@ module.exports = {
                 .setDescription("Add an autoresponse")
                 .addStringOption(opt =>
                     opt.setName("trigger")
-                        .setDescription("Trigger word")
+                        .setDescription("Trigger word/phrase")
                         .setRequired(true)
                 )
                 .addStringOption(opt =>
                     opt.setName("response")
                         .setDescription("Text response")
-                        .setRequired(false)
                 )
                 .addAttachmentOption(opt =>
                     opt.setName("file")
@@ -29,7 +27,7 @@ module.exports = {
                 .setDescription("Remove an autoresponse")
                 .addStringOption(opt =>
                     opt.setName("trigger")
-                        .setDescription("Trigger word")
+                        .setDescription("Trigger word/phrase")
                         .setRequired(true)
                 )
         )
@@ -42,7 +40,7 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // ✅ safe reply wrapper
+        // ✅ Safe reply wrapper
         const reply = async (content) => {
             if (!content) return;
 
@@ -78,51 +76,44 @@ module.exports = {
             if (message.attachments.size > 0) file = message.attachments.first();
         }
 
-        // --- Add Autoresponse ---
+        // --- ADD ---
         if (sub === "add") {
             if (!trigger) return reply("❌ You must provide a trigger word.");
             if (!response && !file) return reply("❌ Provide at least a response message or an attachment!");
 
-            const entry = {
-                text: response || "",
-                attachments: file ? [file.url] : []
-            };
-
-            addResponse(guildId, trigger, entry);
+            const entry = response || (file ? file.url : null);
+            await addResponse(guildId, trigger, entry, user.tag);
 
             return reply({
                 embeds: [
                     new EmbedBuilder()
                         .setColor("Green")
                         .setTitle("✅ Autoresponse Added")
-                        .setDescription(`**Trigger:** \`${trigger}\`\n**Response:** ${response || "(attachment only)"}`)
+                        .setDescription(`**Trigger:** \`${trigger}\`\n**Response:** ${response || "(attachment)"} `)
                         .setFooter({ text: `Added by ${user.tag}` })
                         .setTimestamp()
                 ]
             });
         }
 
-        // --- Remove Autoresponse ---
+        // --- REMOVE ---
         if (sub === "remove") {
             if (!trigger) return reply("❌ Provide a trigger word to remove.");
-            const success = removeResponse(guildId, trigger);
+            const success = await removeResponse(guildId, trigger);
             if (success) return reply(`✅ Removed autoresponse for \`${trigger}\``);
             return reply("❌ No autoresponse found for that trigger.");
         }
 
-        // --- List Autoresponses ---
+        // --- LIST ---
         if (sub === "list") {
-            const data = load()[guildId] || {};
-            const entries = Object.entries(data);
+            const docs = await listResponses(guildId);
 
-            if (entries.length === 0) return reply("✨ No autoresponses set.");
+            if (!docs.length) return reply("✨ No autoresponses set.");
 
-            const description = entries.map(([t, r]) => {
-                const arr = Array.isArray(r) ? r : [r];
-                return arr.map(item =>
-                    `🔹 **${t}** → ${item.text || ""} ${item.attachments?.length ? `📎 [${item.attachments.length} file(s)]` : ""}`
-                ).join("\n");
-            }).join("\n");
+            const description = docs.map(doc => {
+                const resList = doc.responses.map(r => `→ ${r}`).join("\n");
+                return `🔹 **${doc.trigger}**\n${resList}`;
+            }).join("\n\n");
 
             const embed = new EmbedBuilder()
                 .setColor("Blue")
