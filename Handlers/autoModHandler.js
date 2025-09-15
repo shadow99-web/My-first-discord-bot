@@ -1,5 +1,5 @@
 // Handlers/autoModHandler.js
-const AutoMod = require("../Models/autoModSchema"); // ✅ Your mongoose schema
+const AutoMod = require("../models/autoModSchema"); // ✅ Your mongoose schema
 
 // --- Save or update AutoMod settings ---
 async function setAutoMod(guildId, updates) {
