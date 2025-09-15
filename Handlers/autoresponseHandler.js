@@ -1,94 +1,58 @@
-// Handlers/autoresponseHandler.js
-const fs = require("fs");
-const path = require("path");
+const AutoResponse = require("../models/AutoResponse");
 
-// Always resolve to the project root, not relative
-const file = path.resolve(__dirname, "..", "autoresponse.json");
+// ➕ Add autoresponse
+async function addResponse(guildId, trigger, response, author) {
+    trigger = trigger.toLowerCase();
 
-// ✅ Ensure file exists
-function ensure() {
-    if (!fs.existsSync(file)) {
-        fs.writeFileSync(file, JSON.stringify({}, null, 4));
+    let doc = await AutoResponse.findOne({ guildId, trigger });
+
+    if (!doc) {
+        // create new entry
+        doc = await AutoResponse.create({
+            guildId,
+            trigger,
+            responses: [response],
+            author
+        });
+    } else {
+        // update existing entry (append new response)
+        doc.responses.push(response);
+        await doc.save();
     }
+
+    return doc;
 }
 
-// 🔄 Load data safely
-const load = () => {
-    try {
-        ensure();
-        const raw = fs.readFileSync(file, "utf8");
-        return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-        console.error("❌ Failed to read autoresponse.json:", e);
-        return {};
-    }
-};
+// ➖ Remove autoresponse
+async function removeResponse(guildId, trigger) {
+    trigger = trigger.toLowerCase();
+    const doc = await AutoResponse.findOneAndDelete({ guildId, trigger });
+    return !!doc;
+}
 
-// 💾 Save data safely (atomic write)
-const save = (data) => {
-    try {
-        ensure();
-        const tmp = file + ".tmp";
-        fs.writeFileSync(tmp, JSON.stringify(data, null, 4));
-        fs.renameSync(tmp, file);
-    } catch (e) {
-        console.error("❌ Failed to save autoresponse.json:", e);
-    }
-};
-
-// ➕ Add response
-const addResponse = (guildId, trigger, response) => {
-    const data = load();
-    if (!data[guildId]) data[guildId] = {};
-
-    const key = trigger.toLowerCase();
-    if (!data[guildId][key]) data[guildId][key] = [];
-
-    if (!Array.isArray(data[guildId][key])) {
-        data[guildId][key] = [data[guildId][key]];
-    }
-
-    data[guildId][key].push(response);
-    save(data);
-};
-
-// ➖ Remove response
-const removeResponse = (guildId, trigger) => {
-    const data = load();
-    const key = trigger.toLowerCase();
-    if (data[guildId]?.[key]) {
-        delete data[guildId][key];
-        save(data);
-        return true;
-    }
-    return false;
-};
-
-// 🔍 Get response
-const getResponse = (guildId, messageContent) => {
-    const data = load();
-    if (!data[guildId]) return null;
-
+// 🔍 Get a response (random from multiple)
+async function getResponse(guildId, messageContent) {
     const msg = messageContent.toLowerCase();
-    for (const [trigger, responses] of Object.entries(data[guildId])) {
-        if (msg.includes(trigger)) {
-            const resList = Array.isArray(responses) ? responses : [responses];
-            return resList[Math.floor(Math.random() * resList.length)];
+    const docs = await AutoResponse.find({ guildId });
+    if (!docs.length) return null;
+
+    for (const doc of docs) {
+        if (msg.includes(doc.trigger)) {
+            const responses = doc.responses;
+            return responses[Math.floor(Math.random() * responses.length)];
         }
     }
     return null;
-};
+}
 
-// 📜 List all
-const listResponses = (guildId) => {
-    const data = load();
-    return data[guildId] || {};
-};
+// 📜 List all responses for guild
+async function listResponses(guildId) {
+    return await AutoResponse.find({ guildId });
+}
 
 module.exports = {
     addResponse,
     removeResponse,
     getResponse,
     listResponses,
-    load,
 };
