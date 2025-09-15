@@ -13,7 +13,7 @@ module.exports = (client, blockHelpers) => {
                 const guildId = interaction.guildId;
                 const userId = interaction.user.id;
 
-                // Block check (fixed param order)
+                // Block check
                 if (blockHelpers.isBlocked?.(guildId, userId)) {
                     return interaction.reply({
                         embeds: [
@@ -24,6 +24,11 @@ module.exports = (client, blockHelpers) => {
                         ],
                         ephemeral: true
                     }).catch(() => {});
+                }
+
+                // ✅ Defer reply so we don’t hit "Unknown interaction"
+                if (!interaction.deferred && !interaction.replied) {
+                    await interaction.deferReply({ ephemeral: true });
                 }
 
                 await command.execute({ interaction, client, isPrefix: false });
@@ -40,10 +45,15 @@ module.exports = (client, blockHelpers) => {
             }
         } catch (err) {
             console.error("❌ Interaction handler error:", err);
+
             if (!interaction.replied && !interaction.deferred) {
                 interaction.reply({
                     content: "⚠️ Something went wrong!",
                     ephemeral: true
+                }).catch(() => {});
+            } else {
+                interaction.editReply({
+                    content: "⚠️ Something went wrong!"
                 }).catch(() => {});
             }
         }
