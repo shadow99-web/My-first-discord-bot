@@ -1,17 +1,17 @@
 // events/guildMemberAdd.js
 const { EmbedBuilder } = require("discord.js");
-const { load, getChannel } = require("../Handlers/greetHandler");
+const { getGreet, getChannel } = require("../Handlers/greetHandler");
 
 module.exports = (client) => {
     client.on("guildMemberAdd", async (member) => {
-        const db = load();
         const guildId = member.guild.id;
 
-        // Check if greet exists
-        if (!db[guildId] || !db[guildId].greet) return;
+        // ⏳ Fetch greet from Mongo
+        const greet = await getGreet(guildId);
+        if (!greet) return;
 
-        const greet = db[guildId].greet;
-        const channelId = db[guildId].channel || member.guild.systemChannelId;
+        // ⏳ Get channel from Mongo or fallback to system channel
+        const channelId = await getChannel(guildId) || member.guild.systemChannelId;
         if (!channelId) return;
 
         const channel = member.guild.channels.cache.get(channelId);
@@ -28,7 +28,7 @@ module.exports = (client) => {
         const embed = new EmbedBuilder()
             .setColor("Blue")
             .setDescription(text || "👋 Welcome!")
-            .setFooter({ text: `Added by ${greet.author}` });
+            .setFooter({ text: `Added by ${greet.author || "Unknown"}` });
 
         try {
             await channel.send({
@@ -36,7 +36,7 @@ module.exports = (client) => {
                 files: greet.attachment ? [greet.attachment] : []
             });
         } catch (err) {
-            console.error("Failed to send greet:", err);
+            console.error("❌ Failed to send greet:", err);
         }
     });
 };
