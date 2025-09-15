@@ -1,3 +1,4 @@
+// events/guildMemberAdd.js
 const { EmbedBuilder } = require("discord.js");
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
@@ -38,6 +39,8 @@ module.exports = (client) => {
         // ---------- Autorole System (MongoDB) ----------
         try {
             const guildConfig = await getAutoroleConfig(guildId);
+            if (!guildConfig) return; // ⬅️ Prevents crash if no config found
+
             const roleIds = member.user.bot ? guildConfig.bots : guildConfig.humans;
             if (!roleIds || roleIds.length === 0) return;
 
@@ -60,6 +63,7 @@ module.exports = (client) => {
                     .setTitle(`Welcome to ${member.guild.name}!`)
                     .setDescription(`${blueHeart} You have been given the following role(s):\n${applied.join(", ")}`)
                     .setTimestamp();
+
                 member.send({ embeds: [dmEmbed] }).catch(() => {});
             }
         } catch (err) {
