@@ -33,15 +33,21 @@ module.exports = function(client, getPrefixes, blockHelpers) {
         }
 
         // ---------- Autoresponse ----------
-        const response = getResponse(message.guild.id, message.content.toLowerCase());
-        if (response) {
-            const payload = {};
-            if (response.text?.trim()) payload.content = response.text;
-            if (response.attachments?.length > 0) payload.files = response.attachments;
-            if (Object.keys(payload).length > 0) {
-                return message.channel.send(payload).catch(() => {});
-            }
+try {
+    const response = await getResponse(message.guild.id, message.content.toLowerCase());
+    if (response) {
+        const payload = {};
+        if (response.text?.trim()) payload.content = response.text;
+        if (response.attachments?.length > 0) payload.files = response.attachments;
+
+        if (Object.keys(payload).length > 0) {
+            await message.channel.send(payload).catch(() => {});
+            return;
         }
+    }
+} catch (err) {
+    console.error("❌ Autoresponse failed:", err);
+}
 
         // ---------- Prefix Commands ----------
         const prefixes = getPrefixes();
