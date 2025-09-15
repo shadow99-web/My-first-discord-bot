@@ -6,13 +6,11 @@ module.exports = (client) => {
     client.on("guildMemberAdd", async (member) => {
         const guildId = member.guild.id;
 
-        // ⏳ Fetch greet from Mongo
+        // Fetch greet message & channel from DB
         const greet = await getGreet(guildId);
-        if (!greet) return;
-
-        // ⏳ Get channel from Mongo or fallback to system channel
         const channelId = await getChannel(guildId) || member.guild.systemChannelId;
-        if (!channelId) return;
+
+        if (!greet || !channelId) return;
 
         const channel = member.guild.channels.cache.get(channelId);
         if (!channel) return;
@@ -28,7 +26,7 @@ module.exports = (client) => {
         const embed = new EmbedBuilder()
             .setColor("Blue")
             .setDescription(text || "👋 Welcome!")
-            .setFooter({ text: `Added by ${greet.author || "Unknown"}` });
+            .setFooter({ text: `Added by ${greet.author}` });
 
         try {
             await channel.send({
