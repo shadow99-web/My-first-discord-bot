@@ -42,6 +42,17 @@ module.exports = {
                 )
         )
         .addSubcommand(sub =>
+            sub.setName("mute-duration")
+                .setDescription("Set mute duration for AutoMod punishments")
+                .addIntegerOption(opt =>
+                    opt.setName("minutes")
+                        .setDescription("Duration in minutes")
+                        .setMinValue(1)
+                        .setMaxValue(1440) // up to 1 day
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(sub =>
             sub.setName("settings")
                 .setDescription("View current AutoMod settings")
         ),
@@ -50,7 +61,7 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // ✅ Helper for replying both in slash + prefix
+        // ✅ Safe reply helper
         const reply = async (content) => {
             if (interaction) {
                 if (typeof content === "string") return interaction.reply({ content, ephemeral: true });
@@ -61,7 +72,7 @@ module.exports = {
             }
         };
 
-        let sub, feature, value, action, word;
+        let sub, feature, value, action, word, minutes;
 
         if (interaction) {
             sub = interaction.options.getSubcommand();
@@ -69,6 +80,7 @@ module.exports = {
             value = interaction.options.getBoolean("value");
             action = interaction.options.getString("action");
             word = interaction.options.getString("word");
+            minutes = interaction.options.getInteger("minutes");
         } else if (message) {
             // Example: !automod toggle antiLinks true
             const args = message.content.trim().split(/\s+/).slice(1);
@@ -80,6 +92,8 @@ module.exports = {
             } else if (sub === "badword") {
                 action = args[0];
                 word = args[1];
+            } else if (sub === "mute-duration") {
+                minutes = parseInt(args[0]);
             }
         }
 
@@ -88,7 +102,7 @@ module.exports = {
             if (!feature) return reply("❌ Provide a feature: `antiLinks` or `antiSpam`.");
             if (value === undefined) return reply("❌ Provide a value: `true` or `false`.");
 
-            const updated = await setAutoMod(guildId, { [feature]: value });
+            await setAutoMod(guildId, { [feature]: value });
 
             return reply({
                 embeds: [
@@ -115,6 +129,24 @@ module.exports = {
             }
         }
 
+        // --- MUTE DURATION ---
+        if (sub === "mute-duration") {
+            if (!minutes || isNaN(minutes)) return reply("❌ Please provide a valid number of minutes (1–1440).");
+
+            await setAutoMod(guildId, { muteDuration: minutes });
+
+            return reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor("Orange")
+                        .setTitle("⏱️ AutoMod Mute Duration Updated")
+                        .setDescription(`Users will now be muted for **${minutes} minutes**.`)
+                        .setFooter({ text: `Updated by ${user.tag}` })
+                        .setTimestamp()
+                ]
+            });
+        }
+
         // --- SETTINGS ---
         if (sub === "settings") {
             const settings = await getAutoMod(guildId);
@@ -134,6 +166,6 @@ module.exports = {
             return reply({ embeds: [embed] });
         }
 
-        return reply("❌ Invalid subcommand! Use `toggle`, `badword`, or `settings`.");
+        return reply("❌ Invalid subcommand! Use `toggle`, `badword`, `mute-duration`, or `settings`.");
     }
 };
