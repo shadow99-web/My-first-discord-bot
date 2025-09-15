@@ -1,41 +1,58 @@
-const AutoMod = require("../models/AutoMod");
+// Handlers/autoModHandler.js
+const AutoMod = require("../Models/autoModSchema"); // ✅ Your mongoose schema
 
-// ➕ Create or update AutoMod settings
-async function setAutoMod(guildId, settings) {
-    return await AutoMod.findOneAndUpdate(
-        { guildId },
-        { $set: settings },
-        { upsert: true, new: true }
-    );
+// --- Save or update AutoMod settings ---
+async function setAutoMod(guildId, updates) {
+    let doc = await AutoMod.findOne({ guildId });
+    if (!doc) {
+        doc = new AutoMod({ guildId });
+    }
+
+    // Apply updates (toggle features, mute duration, etc.)
+    for (const key of Object.keys(updates)) {
+        doc[key] = updates[key];
+    }
+
+    await doc.save();
+    return doc;
 }
 
-// 🔍 Get AutoMod settings
+// --- Fetch AutoMod settings (default if none exists) ---
 async function getAutoMod(guildId) {
-    return await AutoMod.findOne({ guildId }) || {
-        guildId,
-        antiLinks: false,
-        antiSpam: false,
-        badWords: [],
-        muteDuration: 5
-    };
+    let doc = await AutoMod.findOne({ guildId });
+    if (!doc) {
+        doc = new AutoMod({
+            guildId,
+            antiLinks: false,
+            antiSpam: false,
+            muteDuration: 5,
+            badWords: []
+        });
+        await doc.save();
+    }
+    return doc;
 }
 
-// ➕ Add bad word
+// --- Add a bad word ---
 async function addBadWord(guildId, word) {
-    return await AutoMod.findOneAndUpdate(
-        { guildId },
-        { $addToSet: { badWords: word.toLowerCase() } },
-        { upsert: true, new: true }
-    );
+    const doc = await getAutoMod(guildId);
+
+    if (!doc.badWords.includes(word.toLowerCase())) {
+        doc.badWords.push(word.toLowerCase());
+        await doc.save();
+    }
+
+    return doc;
 }
 
-// ➖ Remove bad word
+// --- Remove a bad word ---
 async function removeBadWord(guildId, word) {
-    return await AutoMod.findOneAndUpdate(
-        { guildId },
-        { $pull: { badWords: word.toLowerCase() } },
-        { new: true }
-    );
+    const doc = await getAutoMod(guildId);
+
+    doc.badWords = doc.badWords.filter(w => w !== word.toLowerCase());
+    await doc.save();
+
+    return doc;
 }
 
 module.exports = {
