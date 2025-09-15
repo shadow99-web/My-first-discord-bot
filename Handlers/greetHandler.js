@@ -1,76 +1,50 @@
 // Handlers/greetHandler.js
-const fs = require("fs");
-const path = require("path");
+const Greet = require("../models/Greet");
 
-// ✅ Always resolve greet.json in project root
-const file = path.resolve(__dirname, "..", "greet.json");
-
-// Ensure file exists
-function ensure() {
-    if (!fs.existsSync(file)) {
-        fs.writeFileSync(file, JSON.stringify({}, null, 4));
-    }
+// ➕ Add or update greet message
+async function addGreet(guildId, greetData) {
+    return await Greet.findOneAndUpdate(
+        { guildId },
+        { $set: { greet: greetData } },
+        { upsert: true, new: true }
+    );
 }
 
-// 🔄 Load data safely
-const load = () => {
-    try {
-        ensure();
-        const raw = fs.readFileSync(file, "utf8");
-        return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-        console.error("❌ Failed to read greet.json:", e);
-        return {};
-    }
-};
+// ➖ Remove greet message
+async function removeGreet(guildId) {
+    const doc = await Greet.findOneAndUpdate(
+        { guildId },
+        { $unset: { greet: "" } },
+        { new: true }
+    );
+    return !!doc;
+}
 
-// 💾 Save data safely (atomic write)
-const save = (data) => {
-    try {
-        ensure();
-        const tmp = file + ".tmp";
-        fs.writeFileSync(tmp, JSON.stringify(data, null, 4));
-        fs.renameSync(tmp, file);
-    } catch (e) {
-        console.error("❌ Failed to save greet.json:", e);
-    }
-};
+// 🔍 Get greet message
+async function getGreet(guildId) {
+    const doc = await Greet.findOne({ guildId });
+    return doc?.greet || null;
+}
 
-// ➕ Add or update greet
-const addGreet = (guildId, greetData) => {
-    const db = load();
-    db[guildId] = greetData;
-    save(db);
-};
-
-// ➖ Remove greet
-const removeGreet = (guildId) => {
-    const db = load();
-    if (db[guildId]) {
-        delete db[guildId];
-        save(db);
-        return true;
-    }
-    return false;
-};
-
-// 🔍 Get greet data
-const getGreet = (guildId) => {
-    const db = load();
-    return db[guildId] || null;
-};
+// ➕ Set greet channel
+async function setChannel(guildId, channelId) {
+    return await Greet.findOneAndUpdate(
+        { guildId },
+        { $set: { channel: channelId } },
+        { upsert: true, new: true }
+    );
+}
 
 // 🔍 Get greet channel
-const getChannel = (guildId) => {
-    const db = load();
-    return db[guildId]?.channel || null;
-};
+async function getChannel(guildId) {
+    const doc = await Greet.findOne({ guildId });
+    return doc?.channel || null;
+}
 
 module.exports = {
-    load,
-    save,
     addGreet,
     removeGreet,
     getGreet,
+    setChannel,
     getChannel,
 };
