@@ -3,17 +3,21 @@ const { EmbedBuilder } = require("discord.js");
 const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
-const { checkMessage } = require("../Handlers/autoModHandler");
+const { getAutoMod } = require("../Handlers/autoModHandler"); // We'll use getAutoMod for checking
 
 module.exports = function(client, getPrefixes, blockHelpers) {
     client.on("messageCreate", async (message) => {
         if (!message.guild || message.author.bot) return;
 
+        const guildId = message.guild.id;
+
         // ---------- AFK Remove ----------
         if (client.afk.has(message.author.id)) {
             client.afk.delete(message.author.id);
             message.reply({
-                embeds: [new EmbedBuilder().setColor("Green").setDescription("✅ You are no longer AFK.")]
+                embeds: [new EmbedBuilder()
+                    .setColor("Green")
+                    .setDescription("✅ You are no longer AFK.")]
             }).catch(() => {});
         }
 
@@ -32,34 +36,54 @@ module.exports = function(client, getPrefixes, blockHelpers) {
                 }
             });
         }
-        
-// ---------- AutoMod ----------
-try {
-    const violated = await checkMessage(message);
-    if (violated) return; // Stop further processing if violation occurs
-} catch (err) {
-    console.error("❌ AutoMod check failed:", err);
-}
-        // ---------- Autoresponse ----------
-try {
-    const response = await getResponse(message.guild.id, message.content.toLowerCase());
-    if (response) {
-        const payload = {};
-        if (response.text?.trim()) payload.content = response.text;
-        if (response.attachments?.length > 0) payload.files = response.attachments;
 
-        if (Object.keys(payload).length > 0) {
-            await message.channel.send(payload).catch(() => {});
-            return;
+        // ---------- AutoMod ----------
+        try {
+            const autoMod = await getAutoMod(guildId);
+            const content = message.content.toLowerCase();
+
+            // --- Bad Words ---
+            for (const badWord of autoMod.badWords) {
+                if (content.includes(badWord.toLowerCase())) {
+                    await message.delete().catch(() => {});
+                    return message.channel.send({
+                        embeds: [new EmbedBuilder()
+                            .setColor("Red")
+                            .setDescription(`❌ ${message.author} your message contained a forbidden word!`)]
+                    }).catch(() => {});
+                }
+            }
+
+            // --- Anti Links ---
+            if (autoMod.antiLinks) {
+                const linkRegex = /(https?:\/\/[^\s]+)/gi;
+                if (linkRegex.test(content)) {
+                    await message.delete().catch(() => {});
+                    return message.channel.send({
+                        embeds: [new EmbedBuilder()
+                            .setColor("Red")
+                            .setDescription(`❌ ${message.author} posting links is not allowed!`)]
+                    }).catch(() => {});
+                }
+            }
+        } catch (err) {
+            console.error("❌ AutoMod check failed:", err);
         }
-    }
-} catch (err) {
-    console.error("❌ Autoresponse failed:", err);
-}
+
+        // ---------- Autoresponse ----------
+        try {
+            const response = await getResponse(guildId, message.content);
+            if (response) {
+                await message.channel.send(response).catch(() => {});
+                return;
+            }
+        } catch (err) {
+            console.error("❌ Autoresponse failed:", err);
+        }
 
         // ---------- Prefix Commands ----------
         const prefixes = getPrefixes();
-        const guildPrefix = prefixes[message.guild.id] || defaultPrefix;
+        const guildPrefix = prefixes[guildId] || defaultPrefix;
         if (!message.content.startsWith(guildPrefix)) return;
 
         const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
@@ -69,7 +93,7 @@ try {
         if (!command) return;
 
         // ---------- Block Check ----------
-        if (blockHelpers?.isBlocked && blockHelpers.isBlocked(message.author.id, message.guild.id, commandName)) {
+        if (blockHelpers?.isBlocked && blockHelpers.isBlocked(message.author.id, guildId, commandName)) {
             return message.reply("🚫 You are blocked from using this command.");
         }
 
