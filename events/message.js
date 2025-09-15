@@ -32,7 +32,14 @@ module.exports = function(client, getPrefixes, blockHelpers) {
                 }
             });
         }
-
+        
+// ---------- AutoMod ----------
+try {
+    const violated = await checkMessage(message);
+    if (violated) return; // Stop further processing if violation occurs
+} catch (err) {
+    console.error("❌ AutoMod check failed:", err);
+}
         // ---------- Autoresponse ----------
 try {
     const response = await getResponse(message.guild.id, message.content.toLowerCase());
