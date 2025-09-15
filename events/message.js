@@ -106,11 +106,15 @@ module.exports = function(client, getPrefixes, blockHelpers) {
         // ---------- Execute Command ----------
 try {
     if (command.prefixExecute) {
-        await command.prefixExecute(message, args, client); // ✅ use prefixExecute if available
-    } else {
+        // For commands that have a dedicated prefix handler (like greet.js)
+        await command.prefixExecute(message, args, client);
+    } else if (command.execute) {
+        // For slash commands or dual-usage commands
         await command.execute({ message, args, client, isPrefix: true });
+    } else {
+        console.warn(`⚠️ Command "${commandName}" has no execute or prefixExecute.`);
     }
 } catch (err) {
-    console.error("❌ Prefix command failed:", err);
+    console.error("❌ Command execution failed:", err);
     message.reply("❌ Something went wrong executing this command.").catch(() => {});
 }
