@@ -1,76 +1,138 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+// commands/ban.js
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
-  name: "ban",
-  description: "Ban a member by mention, username, or ID",
-  // Slash command setup
   data: new SlashCommandBuilder()
     .setName("ban")
     .setDescription("Ban a member")
-    .addStringOption(option => 
-      option.setName("user")
-        .setDescription("User ID or mention")
-        .setRequired(true))
-    .addStringOption(option =>
-      option.setName("reason")
+    .addStringOption(opt =>
+      opt.setName("user")
+        .setDescription("User ID, mention or username")
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("reason")
         .setDescription("Reason for the ban")
-        .setRequired(false)),
-  async execute(interaction, client) {
-    const userInput = interaction.options.getString("user");
-    const reason = interaction.options.getString("reason") || "No reason provided";
+        .setRequired(false)
+    ),
 
-    let member;
-    try {
-      // Try fetching by ID
-      member = await interaction.guild.members.fetch(userInput).catch(() => null);
-      // If not found by ID, try mention/username
-      if (!member) {
-        const userMention = userInput.replace(/[<@!>]/g, "");
-        member = await interaction.guild.members.fetch(userMention).catch(() => null);
+  // Unified execute signature used across your project
+  async execute({ interaction, message, args, client, isPrefix }) {
+    const guild = interaction?.guild || message.guild;
+    const invoker = interaction?.user || message.author;
+    const isSlash = Boolean(interaction);
+
+    // Permission checks for the invoker
+    if (isSlash) {
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.BanMembers)) {
+        return interaction.reply({ content: "❌ You don't have permission to ban members.", ephemeral: true });
       }
-    } catch {}
-    
-    if (!member) return interaction.reply({ content: "User not found.", ephemeral: true });
-
-    if (!member.bannable) return interaction.reply({ content: "I cannot ban this user.", ephemeral: true });
-
-    await member.ban({ reason });
-
-    const embed = new EmbedBuilder()
-      .setTitle("Member Banned")
-      .setDescription(`💙 **${member.user.tag}** has been banned!\n**Reason:** ${reason}`)
-      .setColor("Blue")
-      .setTimestamp();
-
-    interaction.reply({ embeds: [embed] });
-  }
-};
-
-// ====== PREFIX COMMAND ======
-module.exports.prefix = async (message, args) => {
-  if (!message.member.permissions.has("BanMembers")) return message.reply("You cannot use this command!");
-  if (!args[0]) return message.reply("Please provide a user ID or mention.");
-  
-  let member;
-  try {
-    member = await message.guild.members.fetch(args[0]).catch(() => null);
-    if (!member && args[0].match(/^<@!?(\d+)>$/)) {
-      const id = args[0].replace(/[<@!>]/g, "");
-      member = await message.guild.members.fetch(id).catch(() => null);
+    } else {
+      if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+        return message.reply("❌ You don't have permission to ban members.");
+      }
     }
-  } catch {}
-  
-  if (!member) return message.reply("User not found.");
-  if (!member.bannable) return message.reply("I cannot ban this user.");
 
-  const reason = args.slice(1).join(" ") || "No reason provided";
-  await member.ban({ reason });
+    // Bot permission check
+    if (!guild.members.me.permissions.has(PermissionFlagsBits.BanMembers)) {
+      const replyText = "❌ I need the `Ban Members` permission to do that.";
+      return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+    }
 
-  const embed = new EmbedBuilder()
-    .setTitle("Member Banned")
-    .setDescription(`💙 **${member.user.tag}** has been banned!\n**Reason:** ${reason}`)
-    .setColor("Blue")
-    .setTimestamp();
+    // Get input and reason
+    const input = isSlash ? interaction.options.getString("user") : (args && args[0]) || null;
+    const reason = isSlash ? (interaction.options.getString("reason") || "No reason provided") : (args && args.slice(1).join(" ")) || "No reason provided";
 
-  message.channel.send({ embeds: [embed] });
+    if (!input) {
+      const replyText = "❌ Please provide a user ID, mention or username.";
+      return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+    }
+
+    // Helper: resolve member by ID/mention/username search
+    async function resolveMember(guild, raw) {
+      const cleaned = raw.replace(/[<@!>]/g, "").trim();
+
+      // If it looks like an ID, try fetch by ID
+      if (/^\d{16,20}$/.test(cleaned)) {
+        try {
+          const fetched = await guild.members.fetch(cleaned).catch(() => null);
+          if (fetched) return fetched;
+        } catch {}
+      }
+
+      // Try fetch by query (username/nickname). Requires Guild Members intent (you have that).
+      try {
+        const results = await guild.members.fetch({ query: raw, limit: 1 }).catch(() => null);
+        if (results && results.size > 0) return results.first();
+      } catch {}
+
+      // No member found
+      return null;
+    }
+
+    // Try to resolve a GuildMember
+    let targetMember = await resolveMember(guild, input);
+
+    // If member not found but input is ID-like, attempt ban by ID (non-member ban)
+    const idCandidate = input.replace(/[<@!>]/g, "").trim();
+    const isId = /^\d{16,20}$/.test(idCandidate);
+
+    // Prevent banning yourself or guild owner
+    if (targetMember) {
+      if (targetMember.id === invoker.id) {
+        const replyText = "❌ You cannot ban yourself.";
+        return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+      }
+      if (targetMember.id === guild.ownerId) {
+        const replyText = "❌ I cannot ban the server owner.";
+        return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+      }
+
+      // Check if the bot can ban them (role hierarchy)
+      if (!targetMember.bannable) {
+        const replyText = "❌ I cannot ban that user (role hierarchy or missing permissions).";
+        return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+      }
+
+      // Proceed to ban the member
+      try {
+        await guild.members.ban(targetMember.id, { reason });
+      } catch (err) {
+        console.error("Ban error:", err);
+        const replyText = "❌ Failed to ban the user. Check my permissions and role position.";
+        return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("Member Banned")
+        .setColor("Blue")
+        .setDescription(`💙 **${targetMember.user.tag}** has been banned.\n**Reason:** ${reason}`)
+        .setTimestamp();
+
+      return isSlash ? interaction.reply({ embeds: [embed] }) : message.channel.send({ embeds: [embed] });
+    }
+
+    // If no member found but input is an ID, attempt guild.members.ban(id)
+    if (!targetMember && isId) {
+      try {
+        await guild.members.ban(idCandidate, { reason });
+      } catch (err) {
+        console.error("Ban by ID error:", err);
+        const replyText = "❌ Failed to ban that ID. Either it's invalid, already banned, or I lack permission.";
+        return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("User Banned (by ID)")
+        .setColor("Blue")
+        .setDescription(`💙 User with ID \`${idCandidate}\` has been banned.\n**Reason:** ${reason}`)
+        .setTimestamp();
+
+      return isSlash ? interaction.reply({ embeds: [embed] }) : message.channel.send({ embeds: [embed] });
+    }
+
+    // Not found at all
+    const replyText = "❌ User not found. Try a mention, full username, or ID.";
+    return isSlash ? interaction.reply({ content: replyText, ephemeral: true }) : message.reply(replyText);
+  }
 };
