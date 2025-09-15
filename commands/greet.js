@@ -1,6 +1,6 @@
 // Commands/greet.js
 const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require("discord.js");
-const { addGreet, removeGreet, load, setChannel } = require("../Handlers/greetHandler");
+const { addGreet, removeGreet, getGreet, setChannel, getChannel } = require("../Handlers/greetHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -76,14 +76,14 @@ module.exports = {
 
         // --- ADD ---
         if (sub === "add") {
-            const db = load()[guildId]?.greet || null;
-            if (db) {
+            const existing = await getGreet(guildId);
+            if (existing) {
                 return reply("❌ This server already has a greet message! Remove it first.");
             }
 
             if (!text && !file) return reply("❌ Provide at least text or an attachment!");
 
-            addGreet(guildId, {
+            await addGreet(guildId, {
                 text: text || "",
                 attachment: file ? file.url : null,
                 author: user.tag
@@ -101,19 +101,19 @@ module.exports = {
 
         // --- REMOVE ---
         if (sub === "remove") {
-            const ok = removeGreet(guildId);
+            const ok = await removeGreet(guildId);
             return reply(ok ? "✅ Greet removed." : "❌ No greet message set.");
         }
 
         // --- VIEW ---
         if (sub === "view") {
-            const g = load()[guildId]?.greet;
+            const g = await getGreet(guildId);
             if (!g) return reply("✨ No greet message set.");
 
             // 🔄 Replace placeholders
             let preview = g.text || "";
             preview = preview
-                .replace(/{user}/gi, user.toString()) // mention
+                .replace(/{user}/gi, user.toString())
                 .replace(/{server}/gi, guild.name)
                 .replace(/{count}/gi, guild.memberCount.toString());
 
@@ -132,7 +132,7 @@ module.exports = {
         if (sub === "channel") {
             if (!channel) return reply("❌ Please specify a valid text channel.");
 
-            setChannel(guildId, channel.id);
+            await setChannel(guildId, channel.id);
 
             return reply({
                 embeds: [new EmbedBuilder()
