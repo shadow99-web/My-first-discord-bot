@@ -2,27 +2,22 @@ const { Events } = require("discord.js");
 const { getReactionRoles } = require("../Handlers/reactionRoleHandler");
 
 module.exports = (client) => {
-    // When someone adds a reaction
+    // Reaction Added
     client.on(Events.MessageReactionAdd, async (reaction, user) => {
         if (user.bot) return;
 
-        // Make sure reaction + message is cached
-        if (reaction.partial) await reaction.fetch();
-        if (reaction.message.partial) await reaction.message.fetch();
+        if (reaction.partial) await reaction.fetch().catch(() => {});
+        if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
         const guildId = reaction.message.guildId;
         const member = reaction.message.guild.members.cache.get(user.id);
         if (!member) return;
 
-        // Get stored mappings
-        const roles = await getReactionRoles(guildId);
-        if (!roles) return;
-
-        const emoji = reaction.emoji.id ? reaction.emoji.id : reaction.emoji.name;
+        const roles = await getReactionRoles(guildId, reaction.message.id);
+        const emoji = reaction.emoji.id || reaction.emoji.name;
         const roleId = roles[emoji];
         if (!roleId) return;
 
-        // Add the role
         const role = reaction.message.guild.roles.cache.get(roleId);
         if (role) {
             try {
@@ -34,21 +29,19 @@ module.exports = (client) => {
         }
     });
 
-    // When someone removes a reaction
+    // Reaction Removed
     client.on(Events.MessageReactionRemove, async (reaction, user) => {
         if (user.bot) return;
 
-        if (reaction.partial) await reaction.fetch();
-        if (reaction.message.partial) await reaction.message.fetch();
+        if (reaction.partial) await reaction.fetch().catch(() => {});
+        if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
         const guildId = reaction.message.guildId;
         const member = reaction.message.guild.members.cache.get(user.id);
         if (!member) return;
 
-        const roles = await getReactionRoles(guildId);
-        if (!roles) return;
-
-        const emoji = reaction.emoji.id ? reaction.emoji.id : reaction.emoji.name;
+        const roles = await getReactionRoles(guildId, reaction.message.id);
+        const emoji = reaction.emoji.id || reaction.emoji.name;
         const roleId = roles[emoji];
         if (!roleId) return;
 
