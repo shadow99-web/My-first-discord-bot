@@ -26,16 +26,16 @@ module.exports = (client, blockHelpers) => {
                     }).catch(() => {});
                 }
 
-                // ✅ Defer reply (avoids "Unknown interaction" errors)
+                // ✅ Always defer early (keeps interaction alive)
                 if (!interaction.deferred && !interaction.replied) {
-                    await interaction.deferReply({ ephemeral: true });
+                    await interaction.deferReply({ ephemeral: false });
                 }
 
                 // Standardized execute call
                 await command.execute({
                     interaction,
-                    message: null,       // no message in slash
-                    args: [],            // no args in slash
+                    message: null,
+                    args: [],
                     client,
                     isPrefix: false
                 });
