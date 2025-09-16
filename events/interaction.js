@@ -26,19 +26,37 @@ module.exports = (client, blockHelpers) => {
                     }).catch(() => {});
                 }
 
-                // ✅ Always defer early (keeps interaction alive)
+                // ✅ Safe defer (don’t break existing command replies)
+                let deferred = false;
                 if (!interaction.deferred && !interaction.replied) {
-                    await interaction.deferReply({ ephemeral: false });
+                    try {
+                        await interaction.deferReply({ ephemeral: true });
+                        deferred = true;
+                    } catch (e) {
+                        console.warn("Could not defer:", e.message);
+                    }
                 }
 
-                // Standardized execute call
-                await command.execute({
-                    interaction,
-                    message: null,
-                    args: [],
-                    client,
-                    isPrefix: false
-                });
+                // Run command
+                try {
+                    await command.execute({
+                        interaction,
+                        message: null,
+                        args: [],
+                        client,
+                        isPrefix: false
+                    });
+                } catch (err) {
+                    console.error(`❌ Error in command ${interaction.commandName}:`, err);
+
+                    if (deferred && !interaction.replied) {
+                        await interaction.editReply("⚠️ Something went wrong!").catch(() => {});
+                    } else if (!interaction.replied) {
+                        await interaction.reply({ content: "⚠️ Something went wrong!", ephemeral: true }).catch(() => {});
+                    } else {
+                        await interaction.followUp({ content: "⚠️ Something went wrong!", ephemeral: true }).catch(() => {});
+                    }
+                }
             }
 
             // ---------- Ticket Menu ----------
