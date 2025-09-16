@@ -51,32 +51,22 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // 🔧 Safe reply function for both interactions & messages
-        const reply = async (content) => {
+        // 🔧 Universal reply (slash uses editReply, prefix uses reply)
+        const sendReply = async (payload) => {
             if (interaction) {
-                const payload = typeof content === "string" ? { content } : content;
-
-                if (interaction.deferred || interaction.replied) {
-                    // Already deferred → edit or follow up
-                    if (!interaction.replied) {
-                        return interaction.editReply(payload).catch(() =>
-                            interaction.followUp(payload).catch(() => {})
-                        );
-                    } else {
-                        return interaction.followUp(payload).catch(() => {});
-                    }
-                } else {
-                    // Fresh interaction → reply
-                    return interaction.reply({ ...payload, ephemeral: true }).catch(() => {});
-                }
+                const data = typeof payload === "string" ? { content: payload } : payload;
+                // Interaction already deferred in interaction.js
+                return interaction.editReply(data).catch(() =>
+                    interaction.followUp({ ...data, ephemeral: true }).catch(() => {})
+                );
             } else if (message) {
-                return typeof content === "string"
-                    ? message.reply(content).catch(() => {})
-                    : message.reply(content).catch(() => {});
+                return typeof payload === "string"
+                    ? message.reply(payload).catch(() => {})
+                    : message.reply(payload).catch(() => {});
             }
         };
 
-        const sendEmbed = (title, description, color = "Blue") =>
+        const makeEmbed = (title, description, color = "Blue") =>
             new EmbedBuilder()
                 .setColor(color)
                 .setAuthor({ name: title, iconURL: client.user.displayAvatarURL() })
@@ -99,30 +89,30 @@ module.exports = {
 
         // --- HUMANS ADD ---
         if (group === "humans" && sub === "add") {
-            if (!role) return reply("❌ Please mention a role.");
+            if (!role) return sendReply("❌ Please mention a role.");
             await addAutorole(guildId, "humans", role.id);
-            return reply({ embeds: [sendEmbed("Autorole Updated", `Added **${role.name}** to humans.`)] });
+            return sendReply({ embeds: [makeEmbed("Autorole Updated", `Added **${role.name}** to humans.`)] });
         }
 
         // --- HUMANS REMOVE ---
         if (group === "humans" && sub === "remove") {
-            if (!role) return reply("❌ Please mention a role.");
+            if (!role) return sendReply("❌ Please mention a role.");
             await removeAutorole(guildId, "humans", role.id);
-            return reply({ embeds: [sendEmbed("Autorole Updated", `Removed **${role.name}** from humans.`)] });
+            return sendReply({ embeds: [makeEmbed("Autorole Updated", `Removed **${role.name}** from humans.`)] });
         }
 
         // --- BOTS ADD ---
         if (group === "bots" && sub === "add") {
-            if (!role) return reply("❌ Please mention a role.");
+            if (!role) return sendReply("❌ Please mention a role.");
             await addAutorole(guildId, "bots", role.id);
-            return reply({ embeds: [sendEmbed("Autorole Updated", `Added **${role.name}** to bots.`)] });
+            return sendReply({ embeds: [makeEmbed("Autorole Updated", `Added **${role.name}** to bots.`)] });
         }
 
         // --- BOTS REMOVE ---
         if (group === "bots" && sub === "remove") {
-            if (!role) return reply("❌ Please mention a role.");
+            if (!role) return sendReply("❌ Please mention a role.");
             await removeAutorole(guildId, "bots", role.id);
-            return reply({ embeds: [sendEmbed("Autorole Updated", `Removed **${role.name}** from bots.`)] });
+            return sendReply({ embeds: [makeEmbed("Autorole Updated", `Removed **${role.name}** from bots.`)] });
         }
 
         // --- CONFIG ---
@@ -130,15 +120,15 @@ module.exports = {
             const config = await getAutorole(guildId);
             const humans = config.humans.map(r => `<@&${r}>`).join(", ") || "None";
             const bots = config.bots.map(r => `<@&${r}>`).join(", ") || "None";
-            return reply({ embeds: [sendEmbed("Autorole Config", `👤 Humans: ${humans}\n🤖 Bots: ${bots}`, "Yellow")] });
+            return sendReply({ embeds: [makeEmbed("Autorole Config", `👤 Humans: ${humans}\n🤖 Bots: ${bots}`, "Yellow")] });
         }
 
         // --- RESET ---
         if (sub === "reset") {
             await resetAutorole(guildId);
-            return reply({ embeds: [sendEmbed("Autorole Reset", "All autorole settings have been reset.", "Red")] });
+            return sendReply({ embeds: [makeEmbed("Autorole Reset", "All autorole settings have been reset.", "Red")] });
         }
 
-        return reply("❌ Invalid usage. Use `humans`, `bots`, `config`, or `reset`.");
+        return sendReply("❌ Invalid usage. Use `humans`, `bots`, `config`, or `reset`.");
     }
 };
