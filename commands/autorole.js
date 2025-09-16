@@ -51,13 +51,28 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
+        // 🔧 Safe reply function for both interactions & messages
         const reply = async (content) => {
             if (interaction) {
-                if (typeof content === "string") return interaction.reply({ content, ephemeral: true });
-                return interaction.reply({ ...content, ephemeral: true });
+                const payload = typeof content === "string" ? { content } : content;
+
+                if (interaction.deferred || interaction.replied) {
+                    // Already deferred → edit or follow up
+                    if (!interaction.replied) {
+                        return interaction.editReply(payload).catch(() =>
+                            interaction.followUp(payload).catch(() => {})
+                        );
+                    } else {
+                        return interaction.followUp(payload).catch(() => {});
+                    }
+                } else {
+                    // Fresh interaction → reply
+                    return interaction.reply({ ...payload, ephemeral: true }).catch(() => {});
+                }
             } else if (message) {
-                if (typeof content === "string") return message.reply(content);
-                return message.reply(content);
+                return typeof content === "string"
+                    ? message.reply(content).catch(() => {})
+                    : message.reply(content).catch(() => {});
             }
         };
 
