@@ -4,6 +4,20 @@ const { sendTicketPanel, handleTicketMenu, handleTicketClose } = require("../Han
 
 module.exports = (client, blockHelpers) => {
     client.on("interactionCreate", async (interaction) => {
+
+        // Helper to safely reply or followUp
+        const safeReply = async (options) => {
+            try {
+                if (interaction.replied || interaction.deferred) {
+                    await interaction.followUp(options).catch(() => {});
+                } else {
+                    await interaction.reply(options).catch(() => {});
+                }
+            } catch (e) {
+                console.error("❌ safeReply error:", e);
+            }
+        };
+
         try {
             // ---------- Slash Commands ----------
             if (interaction.isChatInputCommand()) {
@@ -15,7 +29,7 @@ module.exports = (client, blockHelpers) => {
 
                 // Block check
                 if (blockHelpers.isBlocked?.(guildId, userId)) {
-                    return interaction.reply({
+                    return safeReply({
                         embeds: [
                             new EmbedBuilder()
                                 .setColor("Red")
@@ -23,64 +37,45 @@ module.exports = (client, blockHelpers) => {
                                 .setDescription(`You are blocked from using \`${interaction.commandName}\``)
                         ],
                         ephemeral: true
-                    }).catch(() => {});
+                    });
                 }
 
-                // ✅ Safe defer (don’t break existing command replies)
-                let deferred = false;
-                if (!interaction.deferred && !interaction.replied) {
-                    try {
-                        await interaction.deferReply({ ephemeral: true });
-                        deferred = true;
-                    } catch (e) {
-                        console.warn("Could not defer:", e.message);
-                    }
-                }
-
-                // Run command
+                // Run command safely
                 try {
+                    // Pass safeReply to command if needed
                     await command.execute({
                         interaction,
                         message: null,
                         args: [],
                         client,
-                        isPrefix: false
+                        isPrefix: false,
+                        safeReply // optional for commands
                     });
                 } catch (err) {
                     console.error(`❌ Error in command ${interaction.commandName}:`, err);
-
-                    if (deferred && !interaction.replied) {
-                        await interaction.editReply("⚠️ Something went wrong!").catch(() => {});
-                    } else if (!interaction.replied) {
-                        await interaction.reply({ content: "⚠️ Something went wrong!", ephemeral: true }).catch(() => {});
-                    } else {
-                        await interaction.followUp({ content: "⚠️ Something went wrong!", ephemeral: true }).catch(() => {});
-                    }
+                    await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
                 }
             }
 
             // ---------- Ticket Menu ----------
             if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
-                await handleTicketMenu(interaction);
+                await handleTicketMenu(interaction).catch(async (err) => {
+                    console.error("❌ Ticket menu error:", err);
+                    await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+                });
             }
 
             // ---------- Ticket Close Button ----------
             if (interaction.isButton() && interaction.customId === "ticket_close_button") {
-                await handleTicketClose(interaction);
+                await handleTicketClose(interaction).catch(async (err) => {
+                    console.error("❌ Ticket close error:", err);
+                    await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+                });
             }
+
         } catch (err) {
             console.error("❌ Interaction handler error:", err);
-
-            if (!interaction.replied && !interaction.deferred) {
-                interaction.reply({
-                    content: "⚠️ Something went wrong!",
-                    ephemeral: true
-                }).catch(() => {});
-            } else {
-                interaction.editReply({
-                    content: "⚠️ Something went wrong!"
-                }).catch(() => {});
-            }
+            await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
         }
     });
 };
