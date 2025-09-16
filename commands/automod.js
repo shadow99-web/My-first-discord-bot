@@ -61,14 +61,26 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // ✅ Safe reply helper
+        // ✅ Safe reply helper (handles both slash & prefix, prevents double reply)
         const reply = async (content) => {
             if (interaction) {
-                if (typeof content === "string") return interaction.reply({ content, ephemeral: true });
-                return interaction.reply({ ...content, ephemeral: true });
+                const payload = typeof content === "string" ? { content } : content;
+
+                if (interaction.deferred || interaction.replied) {
+                    // Already deferred → edit or follow up
+                    try {
+                        return await interaction.editReply(payload);
+                    } catch {
+                        return interaction.followUp(payload).catch(() => {});
+                    }
+                } else {
+                    // Fresh interaction → reply
+                    return interaction.reply({ ...payload, ephemeral: true }).catch(() => {});
+                }
             } else if (message) {
-                if (typeof content === "string") return message.reply(content);
-                return message.reply(content);
+                return typeof content === "string"
+                    ? message.reply(content).catch(() => {})
+                    : message.reply(content).catch(() => {});
             }
         };
 
@@ -87,10 +99,10 @@ module.exports = {
             sub = args.shift()?.toLowerCase();
 
             if (sub === "toggle") {
-                feature = args[0];
+                feature = args[0]?.toLowerCase();
                 value = args[1] === "true";
             } else if (sub === "badword") {
-                action = args[0];
+                action = args[0]?.toLowerCase();
                 word = args[1];
             } else if (sub === "mute-duration") {
                 minutes = parseInt(args[0]);
