@@ -3,9 +3,9 @@ const { EmbedBuilder } = require("discord.js");
 const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
-const { getAutoMod } = require("../Handlers/autoModHandler"); // We'll use getAutoMod for checking
+const { getAutoMod } = require("../Handlers/autoModHandler");
 
-module.exports = function(client, getPrefixes, blockHelpers) {
+module.exports = function (client, getPrefixes, blockHelpers) {
     client.on("messageCreate", async (message) => {
         if (!message.guild || message.author.bot) return;
 
@@ -15,23 +15,27 @@ module.exports = function(client, getPrefixes, blockHelpers) {
         if (client.afk.has(message.author.id)) {
             client.afk.delete(message.author.id);
             message.reply({
-                embeds: [new EmbedBuilder()
-                    .setColor("Green")
-                    .setDescription("✅ You are no longer AFK.")]
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor("Green")
+                        .setDescription("✅ You are no longer AFK."),
+                ],
             }).catch(() => {});
         }
 
         // ---------- AFK Mentions ----------
         if (message.mentions.users.size > 0) {
-            message.mentions.users.forEach(user => {
+            message.mentions.users.forEach((user) => {
                 if (client.afk.has(user.id)) {
                     const data = client.afk.get(user.id);
                     const since = `<t:${Math.floor(data.since / 1000)}:R>`;
                     message.reply({
-                        embeds: [new EmbedBuilder()
-                            .setColor("Blue")
-                            .setTitle(`${user.tag} is AFK`)
-                            .setDescription(`✨ Reason: **${data.reason}**\nSince: ${since}`)]
+                        embeds: [
+                            new EmbedBuilder()
+                                .setColor("Blue")
+                                .setTitle(`${user.tag} is AFK`)
+                                .setDescription(`✨ Reason: **${data.reason}**\nSince: ${since}`),
+                        ],
                     }).catch(() => {});
                 }
             });
@@ -47,9 +51,13 @@ module.exports = function(client, getPrefixes, blockHelpers) {
                 if (content.includes(badWord.toLowerCase())) {
                     await message.delete().catch(() => {});
                     return message.channel.send({
-                        embeds: [new EmbedBuilder()
-                            .setColor("Red")
-                            .setDescription(`❌ ${message.author} your message contained a forbidden word!`)]
+                        embeds: [
+                            new EmbedBuilder()
+                                .setColor("Red")
+                                .setDescription(
+                                    `❌ ${message.author} your message contained a forbidden word!`
+                                ),
+                        ],
                     }).catch(() => {});
                 }
             }
@@ -60,9 +68,13 @@ module.exports = function(client, getPrefixes, blockHelpers) {
                 if (linkRegex.test(content)) {
                     await message.delete().catch(() => {});
                     return message.channel.send({
-                        embeds: [new EmbedBuilder()
-                            .setColor("Red")
-                            .setDescription(`❌ ${message.author} posting links is not allowed!`)]
+                        embeds: [
+                            new EmbedBuilder()
+                                .setColor("Red")
+                                .setDescription(
+                                    `❌ ${message.author} posting links is not allowed!`
+                                ),
+                        ],
                     }).catch(() => {});
                 }
             }
@@ -93,7 +105,10 @@ module.exports = function(client, getPrefixes, blockHelpers) {
         if (!command) return;
 
         // ---------- Block Check ----------
-        if (blockHelpers?.isBlocked && blockHelpers.isBlocked(message.author.id, guildId, commandName)) {
+        if (
+            blockHelpers?.isBlocked &&
+            blockHelpers.isBlocked(guildId, message.author.id, commandName)
+        ) {
             return message.reply("🚫 You are blocked from using this command.");
         }
 
@@ -105,18 +120,16 @@ module.exports = function(client, getPrefixes, blockHelpers) {
 
         // ---------- Execute Command ----------
         try {
-            if (typeof command.prefixExecute === "function") {
-                // For commands that define prefixExecute (like greet.js)
-                await command.prefixExecute(message, args, client);
-            } else if (typeof command.execute === "function") {
-                // For commands that only define execute
-                await command.execute({ message, args, client, isPrefix: true });
-            } else {
-                console.warn(`⚠️ Command "${commandName}" has no valid execute or prefixExecute.`);
-            }
+            await command.execute({
+                interaction: null, // not slash
+                message,
+                args,
+                client,
+                isPrefix: true,
+            });
         } catch (err) {
             console.error("❌ Command execution failed:", err);
             message.reply("❌ Something went wrong executing this command.").catch(() => {});
         }
-    }); // closes client.on("messageCreate")
-}; // closes module.exports = function
+    });
+};
