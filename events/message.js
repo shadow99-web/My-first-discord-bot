@@ -41,46 +41,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
             });
         }
 
-        // ---------- AutoMod ----------
-        try {
-            const autoMod = await getAutoMod(guildId);
-            const content = message.content.toLowerCase();
-
-            // --- Bad Words ---
-            for (const badWord of autoMod.badWords) {
-                if (content.includes(badWord.toLowerCase())) {
-                    await message.delete().catch(() => {});
-                    return message.channel.send({
-                        embeds: [
-                            new EmbedBuilder()
-                                .setColor("Red")
-                                .setDescription(
-                                    `❌ ${message.author} your message contained a forbidden word!`
-                                ),
-                        ],
-                    }).catch(() => {});
-                }
-            }
-
-            // --- Anti Links ---
-            if (autoMod.antiLinks) {
-                const linkRegex = /(https?:\/\/[^\s]+)/gi;
-                if (linkRegex.test(content)) {
-                    await message.delete().catch(() => {});
-                    return message.channel.send({
-                        embeds: [
-                            new EmbedBuilder()
-                                .setColor("Red")
-                                .setDescription(
-                                    `❌ ${message.author} posting links is not allowed!`
-                                ),
-                        ],
-                    }).catch(() => {});
-                }
-            }
-        } catch (err) {
-            console.error("❌ AutoMod check failed:", err);
-        }
+     
 
         // ---------- Autoresponse ----------
         try {
