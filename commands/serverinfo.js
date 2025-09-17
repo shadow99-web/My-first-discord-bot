@@ -1,81 +1,73 @@
-const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require("discord.js");
-const heart = "<a:blue_heart:1414309560231002194>";
-
-function formatList(items, limit = 1000) {
-    if (!items || items.length === 0) return "None";
-    let joined = items.join(", ");
-    if (joined.length > limit) {
-        const cut = joined.slice(0, limit);
-        const lastComma = cut.lastIndexOf(",");
-        const trimmed = cut.slice(0, lastComma > 0 ? lastComma : limit);
-        return `${trimmed} …and ${items.length - trimmed.split(",").length} more`;
-    }
-    return joined;
-}
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("Get detailed server information"),
-    async execute(context) {
-        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
+        .setDescription("Get detailed information about this server"),
 
-        const totalMembers = guild.memberCount.toString();
-        const botCount = guild.members.cache.filter(m => m.user.bot).size.toString();
+    name: "serverinfo",
+    description: "Get detailed information about this server",
 
-        const emojis = formatList(guild.emojis.cache.map(e => e.toString()), 500);
-        const stickers = formatList(guild.stickers.cache.map(s => s.name), 500);
+    async execute({ interaction, message, client }) {
+        const guild = interaction?.guild || message.guild;
+        const owner = await guild.fetchOwner();
 
-        const boosters = formatList(
-            guild.members.cache.filter(m => m.premiumSince).map(m => `<@${m.id}>`),
-            800
-        );
+        const createdTimestamp = `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`;
+        const memberCount = guild.memberCount;
+        const boostCount = guild.premiumSubscriptionCount;
+        const boostLevel = guild.premiumTier;
 
-        const textChannels = formatList(
-            guild.channels.cache.filter(c => c.type === ChannelType.GuildText).map(c => `#${c.name}`),
-            800
-        );
-        const voiceChannels = formatList(
-            guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice).map(c => `🔊 ${c.name}`),
-            800
-        );
-        const categories = formatList(
-            guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).map(c => `📂 ${c.name}`),
-            800
-        );
+        const roles = guild.roles.cache.size;
+        const channels = guild.channels.cache.size;
+        const textChannels = guild.channels.cache.filter(c => c.type === 0).size;
+        const voiceChannels = guild.channels.cache.filter(c => c.type === 2).size;
+        const emojis = guild.emojis.cache.size;
+        const stickers = guild.stickers.cache.size;
 
-        const roles = formatList(
-            guild.roles.cache.filter(r => r.id !== guild.id).map(r => r.toString()),
-            800
-        );
-
-        const description = guild.description || "This guild has no description set";
-        const verificationLevel = guild.verificationLevel.toString();
+        const iconURL = guild.iconURL({ dynamic: true, size: 1024 });
+        const bannerURL = guild.bannerURL({ size: 2048 });
+        const splashURL = guild.splashURL({ size: 2048 });
+        const discoverySplashURL = guild.discoverySplashURL({ size: 2048 });
 
         const embed = new EmbedBuilder()
-            .setTitle(`🏰 Server Info: ${guild.name}`)
-            .setThumbnail(guild.iconURL({ dynamic: true }))
             .setColor("Blue")
-            .setTimestamp()
+            .setAuthor({
+                name: `${guild.name} - Server Information`,
+                iconURL: iconURL
+            })
+            .setThumbnail(iconURL)
             .addFields(
-                { name: '__Server Name__', value: guild.name, inline: true },
-                { name: '__Server ID__', value: guild.id.toString(), inline: true },
-                { name: '__Description__', value: description, inline: false },
-                { name: '__Founder__', value: `<@${guild.ownerId}>`, inline: true },
-                { name: '__Creation Date__', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:f>`, inline: true },
-                { name: '__Verify Level__', value: verificationLevel, inline: true },
-                { name: '__Total Members__', value: totalMembers, inline: true },
-                { name: '__Bot Count__', value: botCount, inline: true },
-                { name: '__Emojis__', value: emojis, inline: false },
-                { name: '__Stickers__', value: stickers, inline: false },
-                { name: '__Boosters__', value: `${heart} ${boosters}`, inline: false },
-                { name: '__Categories__', value: categories, inline: false },
-                { name: '__Text Channels__', value: textChannels, inline: false },
-                { name: '__Voice Channels__', value: voiceChannels, inline: false },
-                { name: '__Roles__', value: roles, inline: false }
-            );
+                { name: "<a:blue_heart:1414309560231002194> Server Name", value: guild.name, inline: true },
+                { name: "Server ID", value: guild.id, inline: true },
+                { name: " Owner", value: `${owner.user.tag}`, inline: true },
 
-        if (context.isPrefix) await context.message.reply({ embeds: [embed] });
-        else await context.interaction.reply({ embeds: [embed] });
+                { name: " Created", value: createdTimestamp, inline: true },
+                { name: " Members", value: `${memberCount}`, inline: true },
+                { name: "<a:blue_heart:1414309560231002194> Boosts", value: `${boostCount} (Level ${boostLevel})`, inline: true },
+
+                { name: " Roles", value: `${roles}`, inline: true },
+                { name: "Text Channels", value: `${textChannels}`, inline: true },
+                { name: "🎙 Voice Channels", value: `${voiceChannels}`, inline: true },
+
+                { name: " Emojis", value: `${emojis}`, inline: true },
+                { name: " Stickers", value: `${stickers}`, inline: true },
+                { name: "<a:blue_heart:1414309560231002194> Verification Level", value: `${guild.verificationLevel}`, inline: true }
+            )
+            .setFooter({
+                text: `Requested by ${interaction?.user?.tag || message.author.tag}`,
+                iconURL: (interaction?.user || message.author).displayAvatarURL({ dynamic: true })
+            })
+            .setTimestamp();
+
+        // Attach banner / splash if they exist
+        if (bannerURL) embed.addFields({ name: "🏞️ Banner", value: `[Click Here](${bannerURL})` });
+        if (splashURL) embed.addFields({ name: "🌊 Invite Splash", value: `[Click Here](${splashURL})` });
+        if (discoverySplashURL) embed.addFields({ name: "✨ Discovery Splash", value: `[Click Here](${discoverySplashURL})` });
+
+        if (interaction) {
+            await interaction.reply({ embeds: [embed] });
+        } else if (message) {
+            await message.reply({ embeds: [embed] });
+        }
     }
 };
