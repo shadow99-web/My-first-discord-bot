@@ -93,7 +93,7 @@ require("./events/snipe")(client);
 require("./events/message")(client, getPrefixes, savePrefixes, blockHelpers);
 require("./events/interaction")(client, blockHelpers);
 require("./events/guildMemberAdd")(client); // 👈 greet handler
-
+require("./events/autoMod")(client);
 // ====================
 // 🔑 Login
 client.login(process.env.TOKEN);
