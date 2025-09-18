@@ -21,7 +21,9 @@ module.exports = (client, blockHelpers) => {
       // ---------- Slash Commands ----------
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-        if (!command) return;
+        if (!command) {
+          return safeReply({ content: "❌ Command not found.", ephemeral: true });
+        }
 
         const guildId = interaction.guildId;
         const userId = interaction.user.id;
@@ -41,36 +43,64 @@ module.exports = (client, blockHelpers) => {
 
         // Run command safely
         try {
-          if (command.execute) {
-            await command.execute(interaction); // <--- pass interaction directly
+          if (typeof command.execute === "function") {
+            // ✅ Pass interaction safely
+            await command.execute(interaction);
           } else {
-            await safeReply({ content: "❌ Command cannot be used as a slash command.", ephemeral: true });
+            await safeReply({ content: "❌ This command cannot be used as a slash command.", ephemeral: true });
           }
         } catch (err) {
           console.error(`❌ Error in command ${interaction.commandName}:`, err);
-          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+          await safeReply({ content: "⚠️ Something went wrong while executing the command!", ephemeral: true });
         }
+        return; // Exit after handling slash command
       }
 
-      // ---------- Ticket Menu ----------
-      if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
+      // ---------- Context Menu Commands ----------
+      if (interaction.isUserContextMenuCommand() || interaction.isMessageContextMenuCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+
         try {
-          await handleTicketMenu(interaction);
+          if (typeof command.execute === "function") {
+            await command.execute(interaction);
+          }
         } catch (err) {
-          console.error("❌ Ticket menu error:", err);
+          console.error(`❌ Error in context menu command ${interaction.commandName}:`, err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
         }
+        return;
       }
 
-      // ---------- Ticket Close Button ----------
-      if (interaction.isButton() && interaction.customId === "ticket_close_button") {
+      // ---------- Buttons ----------
+      if (interaction.isButton()) {
         try {
-          await handleTicketClose(interaction);
+          if (interaction.customId === "ticket_close_button") {
+            await handleTicketClose(interaction);
+          }
         } catch (err) {
-          console.error("❌ Ticket close error:", err);
+          console.error("❌ Button interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
         }
+        return;
       }
+
+      // ---------- Select Menus ----------
+      if (interaction.isStringSelectMenu()) {
+        try {
+          if (interaction.customId === "ticket_menu") {
+            await handleTicketMenu(interaction);
+          }
+        } catch (err) {
+          console.error("❌ Select menu interaction error:", err);
+          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+        }
+        return;
+      }
+
+      // If interaction type is unknown
+      console.warn("⚠️ Unknown interaction type:", interaction.type);
+
     } catch (err) {
       console.error("❌ Interaction handler error:", err);
       await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
