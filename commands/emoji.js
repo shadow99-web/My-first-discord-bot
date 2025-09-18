@@ -12,10 +12,10 @@ const blueHeart = "<a:blue_heart:1414309560231002194>";
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("emoji")
-        .setDescription("Search and add emojis from Discadia")
+        .setDescription("Search and add emojis from discadia API")
         .addSubcommand(sub =>
             sub.setName("search")
-                .setDescription("Search emojis from Discadia")
+                .setDescription("Search emojis from discadia")
                 .addStringOption(opt =>
                     opt.setName("name")
                         .setDescription("Emoji name")
@@ -24,20 +24,27 @@ module.exports = {
         ),
 
     async execute({ interaction, message }) {
-        const guild = interaction?.guild || message.guild;
-        const user = interaction?.user || message.author;
-        let query;
+        // ✅ Get guild safely
+        const guild = interaction ? interaction.guild : message.guild;
+        if (!guild) {
+            return interaction
+                ? interaction.reply("❌ This command can only be used inside a server.")
+                : message.reply("❌ This command can only be used inside a server.");
+        }
 
-        // ✅ Parse input
+        const guildId = guild.id;
+        const user = interaction ? interaction.user : message.author;
+
+        let query;
         if (interaction) {
             query = interaction.options.getString("name");
         } else {
             const args = message.content.trim().split(/\s+/).slice(1);
-            if (args[0] !== "search") return message.reply("❌ Usage: !emoji search <name>");
+            if (args[0] !== "search")
+                return message.reply("❌ Usage: !emoji search <name>");
             query = args.slice(1).join(" ");
         }
 
-        // ✅ Fetch emojis
         const emojis = await searchEmojis(query);
         if (!emojis.length) {
             return interaction
@@ -47,35 +54,40 @@ module.exports = {
 
         let page = 0;
 
-        // ✅ Embed builder
         const getEmbed = (page) => {
             const emoji = emojis[page];
             return new EmbedBuilder()
                 .setColor("Blue")
                 .setTitle(`${blueHeart} Emoji Search`)
                 .setDescription(`Result **${page + 1}/${emojis.length}**`)
-                .setThumbnail(emoji.url)
+                .setThumbnail(emoji.image)
                 .addFields(
-                    { name: "Name", value: emoji.name || "Unknown", inline: true },
-                    { name: "Animated", value: emoji.animated ? "Yes" : "No", inline: true }
+                    { name: "Name", value: emoji.title || "Unknown", inline: true },
+                    { name: "ID", value: emoji.id?.toString() || "N/A", inline: true }
                 )
                 .setFooter({ text: `Requested by ${user.tag}` })
                 .setTimestamp();
         };
 
-        // ✅ Buttons
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("prev").setLabel("☚").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId("next").setLabel("☛").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId("add").setLabel("➕ Add").setStyle(ButtonStyle.Success)
+            new ButtonBuilder()
+                .setCustomId("prev")
+                .setLabel("☚")
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId("next")
+                .setLabel("☛")
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId("add")
+                .setLabel("➕ Add")
+                .setStyle(ButtonStyle.Success)
         );
 
-        // ✅ Send message
         const reply = interaction
-            ? await interaction.reply({ embeds: [getEmbed(page)], components: [row], fetchReply: true })
+            ? await interaction.reply({ embeds: [getEmbed(page)], components: [row], ephemeral: false })
             : await message.reply({ embeds: [getEmbed(page)], components: [row] });
 
-        // ✅ Collector
         const collector = reply.createMessageComponentCollector({ time: 60000 });
 
         collector.on("collect", async (btn) => {
@@ -92,30 +104,18 @@ module.exports = {
                 try {
                     const emoji = emojis[page];
                     const added = await guild.emojis.create({
-                        attachment: emoji.url,
-                        name: emoji.name.replace(/ /g, "_")
+                        attachment: emoji.image,
+                        name: emoji.title.replace(/ /g, "_")
                     });
 
-                    await logEmoji(guild.id, user.id, added.name, added.url);
+                    await logEmoji(guildId, user.id, added.name, added.url);
 
-                    return btn.reply({
-                        content: `✅ Added emoji: ${added} (\`${added.name}\`)`,
-                        ephemeral: true
-                    });
+                    return btn.reply({ content: `✅ Added emoji: ${added} (\`${added.name}\`)`, ephemeral: true });
                 } catch (err) {
                     console.error(err);
-                    return btn.reply({
-                        content: "❌ Failed to add emoji (permissions or server limit).",
-                        ephemeral: true
-                    });
+                    return btn.reply({ content: "❌ Failed to add emoji (permissions or limit).", ephemeral: true });
                 }
             }
-        });
-
-        collector.on("end", async () => {
-            try {
-                await reply.edit({ components: [] }); // disable buttons after timeout
-            } catch {}
         });
     }
 };
