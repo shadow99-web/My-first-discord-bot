@@ -75,8 +75,9 @@ module.exports = function (client, getPrefixes, blockHelpers) {
 
     // ---------- Execute Prefix Command ----------
     try {
-      if (command.prefixRun) {
-        await command.prefixRun(message, args); // <--- Safe call for prefix commands
+      if (typeof command.execute === "function") {
+        // 🔑 Match same format as interaction.js
+        await command.execute(client, message, args);
       } else {
         message.reply("❌ This command cannot be used with a prefix.").catch(() => {});
       }
