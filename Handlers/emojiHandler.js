@@ -4,8 +4,15 @@ const EmojiLog = require("../models/emojiLogSchema");
 async function searchEmojis(query) {
     try {
         const { data } = await axios.get("https://emoji.gg/api/");
-        // Filter by name/title
-        return data.filter(e => e.title.toLowerCase().includes(query.toLowerCase())).slice(0, 20); 
+        
+        // Defensive check + fallback search
+        return data
+            .filter(e => 
+                (e.title && e.title.toLowerCase().includes(query.toLowerCase())) || 
+                (e.slug && e.slug.toLowerCase().includes(query.toLowerCase())) || 
+                (e.id && e.id.toString().includes(query))
+            )
+            .slice(0, 20); // limit results
     } catch (err) {
         console.error("EmojiGG API Error:", err);
         return [];
