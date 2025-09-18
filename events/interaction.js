@@ -4,7 +4,6 @@ const { sendTicketPanel, handleTicketMenu, handleTicketClose } = require("../Han
 
 module.exports = (client, blockHelpers) => {
   client.on("interactionCreate", async (interaction) => {
-    // Helper to safely reply or followUp
     const safeReply = async (options) => {
       try {
         if (interaction.replied || interaction.deferred) {
@@ -41,11 +40,10 @@ module.exports = (client, blockHelpers) => {
           });
         }
 
-        // Run command safely
         try {
           if (typeof command.execute === "function") {
-            // ✅ Pass interaction safely
-            await command.execute(interaction);
+            // 🔑 Always pass the same structure (client, ctx, args)
+            await command.execute(client, interaction, []);
           } else {
             await safeReply({ content: "❌ This command cannot be used as a slash command.", ephemeral: true });
           }
@@ -53,7 +51,7 @@ module.exports = (client, blockHelpers) => {
           console.error(`❌ Error in command ${interaction.commandName}:`, err);
           await safeReply({ content: "⚠️ Something went wrong while executing the command!", ephemeral: true });
         }
-        return; // Exit after handling slash command
+        return;
       }
 
       // ---------- Context Menu Commands ----------
@@ -63,7 +61,7 @@ module.exports = (client, blockHelpers) => {
 
         try {
           if (typeof command.execute === "function") {
-            await command.execute(interaction);
+            await command.execute(client, interaction, []);
           }
         } catch (err) {
           console.error(`❌ Error in context menu command ${interaction.commandName}:`, err);
@@ -98,7 +96,6 @@ module.exports = (client, blockHelpers) => {
         return;
       }
 
-      // If interaction type is unknown
       console.warn("⚠️ Unknown interaction type:", interaction.type);
 
     } catch (err) {
