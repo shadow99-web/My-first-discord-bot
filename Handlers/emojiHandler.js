@@ -1,22 +1,40 @@
 const axios = require("axios");
 const EmojiLog = require("../models/emojiLogSchema");
 
-// ✅ Search emojis using Discadia API
+/**
+ * Search emojis from Discadia API
+ * @param {string} query - Emoji name to search
+ * @returns {Array} List of emojis
+ */
 async function searchEmojis(query) {
     try {
-        const { data } = await axios.get(`https://discord.com/api/discadia/emojis/search?query=${encodeURIComponent(query)}`);
-        
-        // Make sure we only return what’s valid (some APIs include partial results)
-        return data.emojis
-            .filter(e => e.name && e.url) // ensure name and URL exist
-            .slice(0, 20); // limit to 20 results
+        const { data } = await axios.get(
+            `https://emoji.discadia.com/emojis/search?q=${encodeURIComponent(query)}`
+        );
+
+        if (!Array.isArray(data)) return [];
+
+        // Normalize results
+        return data.slice(0, 20).map(e => {
+            const url = e.url;
+            const format = url.endsWith(".gif") ? "GIF" : "PNG"; // format detection
+            return {
+                name: e.name || "Unknown",
+                url,
+                animated: e.animated || false,
+                format,
+                size: e.size || "Unknown" // Discadia sometimes returns size in KB
+            };
+        });
     } catch (err) {
-        console.error("Discadia API Error:", err.message);
+        console.error("Discadia API Error:", err.message || err);
         return [];
     }
 }
 
-// ✅ Log to MongoDB when emoji is added
+/**
+ * Log emoji additions to MongoDB
+ */
 async function logEmoji(guildId, userId, emojiName, emojiUrl) {
     try {
         const log = new EmojiLog({
