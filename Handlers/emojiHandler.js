@@ -1,24 +1,22 @@
 const axios = require("axios");
 const EmojiLog = require("../models/emojiLogSchema");
 
+// ✅ Search emojis using Discadia API
 async function searchEmojis(query) {
     try {
-        const { data } = await axios.get("https://emoji.gg/api/");
+        const { data } = await axios.get(`https://discord.com/api/discadia/emojis/search?query=${encodeURIComponent(query)}`);
         
-        // Defensive check + fallback search
-        return data
-            .filter(e => 
-                (e.title && e.title.toLowerCase().includes(query.toLowerCase())) || 
-                (e.slug && e.slug.toLowerCase().includes(query.toLowerCase())) || 
-                (e.id && e.id.toString().includes(query))
-            )
-            .slice(0, 20); // limit results
+        // Make sure we only return what’s valid (some APIs include partial results)
+        return data.emojis
+            .filter(e => e.name && e.url) // ensure name and URL exist
+            .slice(0, 20); // limit to 20 results
     } catch (err) {
-        console.error("EmojiGG API Error:", err);
+        console.error("Discadia API Error:", err.message);
         return [];
     }
 }
 
+// ✅ Log to MongoDB when emoji is added
 async function logEmoji(guildId, userId, emojiName, emojiUrl) {
     try {
         const log = new EmojiLog({
