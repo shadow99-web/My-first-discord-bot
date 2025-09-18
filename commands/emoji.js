@@ -12,10 +12,10 @@ const blueHeart = "<a:blue_heart:1414309560231002194>";
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("emoji")
-        .setDescription("Search and add emojis from emoji.gg")
+        .setDescription("Search and add emojis from Discadia")
         .addSubcommand(sub =>
             sub.setName("search")
-                .setDescription("Search emojis from emoji.gg")
+                .setDescription("Search emojis from Discadia")
                 .addStringOption(opt =>
                     opt.setName("name")
                         .setDescription("Emoji name")
@@ -24,73 +24,63 @@ module.exports = {
         ),
 
     async execute({ interaction, message }) {
-        const guildId = interaction?.guildId || message?.guild?.id;
-        const user = interaction?.user || message?.author;
-
-        // ✅ Safe reply helper
-        const reply = async (content) => {
-            const payload = typeof content === "string" ? { content } : content;
-
-            if (interaction) {
-                if (interaction.deferred || interaction.replied) {
-                    try {
-                        return await interaction.editReply(payload);
-                    } catch {
-                        return interaction.followUp(payload).catch(() => {});
-                    }
-                } else {
-                    return interaction.reply({ ...payload, ephemeral: false }).catch(() => {});
-                }
-            } else if (message) {
-                return message.reply(payload).catch(() => {});
-            }
-        };
-
+        const guild = interaction?.guild || message.guild;
+        const user = interaction?.user || message.author;
         let query;
+
+        // ✅ Parse input
         if (interaction) {
             query = interaction.options.getString("name");
-        } else if (message) {
+        } else {
             const args = message.content.trim().split(/\s+/).slice(1);
-            if (args[0] !== "search") return reply("❌ Usage: !emoji search <name>");
+            if (args[0] !== "search") return message.reply("❌ Usage: !emoji search <name>");
             query = args.slice(1).join(" ");
         }
 
+        // ✅ Fetch emojis
         const emojis = await searchEmojis(query);
-        if (!emojis?.length) {
-            return reply(`❌ No emojis found for **${query}**`);
+        if (!emojis.length) {
+            return interaction
+                ? interaction.reply(`❌ No emojis found for **${query}**`)
+                : message.reply(`❌ No emojis found for **${query}**`);
         }
 
         let page = 0;
 
+        // ✅ Embed builder
         const getEmbed = (page) => {
             const emoji = emojis[page];
             return new EmbedBuilder()
                 .setColor("Blue")
                 .setTitle(`${blueHeart} Emoji Search`)
                 .setDescription(`Result **${page + 1}/${emojis.length}**`)
-                .setThumbnail(emoji.image)
+                .setThumbnail(emoji.url)
                 .addFields(
-                    { name: "Name", value: emoji.title || "Unknown", inline: true },
-                    { name: "ID", value: emoji.id?.toString() || "N/A", inline: true }
+                    { name: "Name", value: emoji.name || "Unknown", inline: true },
+                    { name: "Animated", value: emoji.animated ? "Yes" : "No", inline: true }
                 )
-                .setFooter({ text: `Requested by ${user?.tag}` })
+                .setFooter({ text: `Requested by ${user.tag}` })
                 .setTimestamp();
         };
 
+        // ✅ Buttons
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId("prev").setLabel("☚").setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId("next").setLabel("☛").setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId("add").setLabel("➕ Add").setStyle(ButtonStyle.Success)
         );
 
-        const sent = await reply({ embeds: [getEmbed(page)], components: [row] });
+        // ✅ Send message
+        const reply = interaction
+            ? await interaction.reply({ embeds: [getEmbed(page)], components: [row], fetchReply: true })
+            : await message.reply({ embeds: [getEmbed(page)], components: [row] });
 
-        const collector = sent.createMessageComponentCollector({ time: 60000 });
+        // ✅ Collector
+        const collector = reply.createMessageComponentCollector({ time: 60000 });
 
         collector.on("collect", async (btn) => {
-            if (btn.user.id !== user.id) {
+            if (btn.user.id !== user.id)
                 return btn.reply({ content: "❌ Not your menu!", ephemeral: true });
-            }
 
             if (btn.customId === "prev") {
                 page = (page > 0) ? page - 1 : emojis.length - 1;
@@ -101,19 +91,31 @@ module.exports = {
             } else if (btn.customId === "add") {
                 try {
                     const emoji = emojis[page];
-                    const added = await btn.guild.emojis.create({
-                        attachment: emoji.image,
-                        name: emoji.title.replace(/ /g, "_")
+                    const added = await guild.emojis.create({
+                        attachment: emoji.url,
+                        name: emoji.name.replace(/ /g, "_")
                     });
 
-                    await logEmoji(guildId, user.id, added.name, added.url);
+                    await logEmoji(guild.id, user.id, added.name, added.url);
 
-                    return btn.reply({ content: `✅ Added emoji: ${added} (\`${added.name}\`)`, ephemeral: true });
+                    return btn.reply({
+                        content: `✅ Added emoji: ${added} (\`${added.name}\`)`,
+                        ephemeral: true
+                    });
                 } catch (err) {
                     console.error(err);
-                    return btn.reply({ content: "❌ Failed to add emoji (permissions or limit).", ephemeral: true });
+                    return btn.reply({
+                        content: "❌ Failed to add emoji (permissions or server limit).",
+                        ephemeral: true
+                    });
                 }
             }
+        });
+
+        collector.on("end", async () => {
+            try {
+                await reply.edit({ components: [] }); // disable buttons after timeout
+            } catch {}
         });
     }
 };
