@@ -42,10 +42,12 @@ module.exports = (client, blockHelpers) => {
 
         try {
           if (typeof command.execute === "function") {
-            // ✅ Unified structure for ALL commands
+            // 🔑 Pass everything so commands work the same as prefix
             await command.execute({
+              client,
               interaction,
               message: null,
+              args: [],
               isPrefix: false,
             });
           } else {
@@ -64,7 +66,13 @@ module.exports = (client, blockHelpers) => {
         if (!command) return;
         try {
           if (typeof command.execute === "function") {
-            await command.execute({ interaction, message: null, isPrefix: false });
+            await command.execute({
+              client,
+              interaction,
+              message: null,
+              args: [],
+              isPrefix: false,
+            });
           }
         } catch (err) {
           console.error(`❌ Error in context menu command ${interaction.commandName}:`, err);
