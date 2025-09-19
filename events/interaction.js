@@ -6,11 +6,13 @@ module.exports = (client, blockHelpers) => {
   client.on("interactionCreate", async (interaction) => {
     const safeReply = async (options) => {
       try {
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(options).catch(() => {});
-        } else {
-          await interaction.reply(options).catch(() => {});
+        if (interaction.replied) {
+          return await interaction.followUp(options).catch(() => {});
         }
+        if (interaction.deferred) {
+          return await interaction.editReply(options).catch(() => {});
+        }
+        return await interaction.reply(options).catch(() => {});
       } catch (e) {
         console.error("❌ safeReply error:", e);
       }
@@ -27,8 +29,8 @@ module.exports = (client, blockHelpers) => {
         const guildId = interaction.guildId;
         const userId = interaction.user.id;
 
-        // Block check
-        if (blockHelpers?.isBlocked?.(guildId, userId, interaction.commandName)) {
+        // Block check (userId first!)
+        if (blockHelpers?.isBlocked?.(userId, guildId, interaction.commandName)) {
           return safeReply({
             embeds: [
               new EmbedBuilder()
@@ -42,7 +44,6 @@ module.exports = (client, blockHelpers) => {
 
         try {
           if (typeof command.execute === "function") {
-            // 🔑 Pass everything so commands work the same as prefix
             await command.execute({
               client,
               interaction,
