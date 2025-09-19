@@ -6,25 +6,51 @@ module.exports = {
         .setDescription("Set your AFK status with an optional reason")
         .addStringOption(option =>
             option.setName("reason")
-                  .setDescription("Reason for going AFK")
-                  .setRequired(false)
+                .setDescription("Reason for going AFK")
+                .setRequired(false)
         ),
 
     async execute({ message, interaction, isPrefix, client, args }) {
-        const blueHeart = "<a:blue_heart:1414309560231002194>";
-        const user = isPrefix ? message.author : interaction.user;
-        const reason = isPrefix ? args.join(" ") || "No reason provided" : interaction.options.getString("reason") || "No reason provided";
+        try {
+            const blueHeart = "<a:blue_heart:1414309560231002194>";
+            const user = isPrefix ? message.author : interaction.user;
 
-        // Store AFK data
-        client.afk.set(user.id, { reason, since: Date.now(), mentions: [] });
+            // ✅ Fallback for reason
+            const reason = isPrefix
+                ? (args.join(" ") || "No reason provided")
+                : (interaction?.options?.getString("reason") || "No reason provided");
 
-        const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setAuthor({ name: `${user.tag} is now AFK`, iconURL: user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`${blueHeart} Reason: **${reason}**`)
-            .setTimestamp();
+            // ✅ Ensure AFK map always exists
+            if (!client.afk) client.afk = new Map();
 
-        if (isPrefix) message.reply({ embeds: [embed] });
-        else interaction.reply({ embeds: [embed] });
+            // ✅ Store AFK data safely
+            client.afk.set(user.id, { reason, since: Date.now(), mentions: [] });
+
+            // ✅ Build embed
+            const embed = new EmbedBuilder()
+                .setColor("Blue")
+                .setAuthor({
+                    name: `${user.tag} is now AFK`,
+                    iconURL: user.displayAvatarURL({ dynamic: true })
+                })
+                .setDescription(`${blueHeart} Reason: **${reason}**`)
+                .setTimestamp();
+
+            // ✅ Reply safely (prefix or slash)
+            if (isPrefix) {
+                await message.reply({ embeds: [embed] }).catch(() => {});
+            } else {
+                await interaction.reply({ embeds: [embed] }).catch(() => {});
+            }
+        } catch (err) {
+            console.error("❌ AFK command failed:", err);
+
+            // ✅ Fail gracefully
+            if (isPrefix) {
+                message.reply("❌ Something went wrong setting AFK.").catch(() => {});
+            } else {
+                interaction.reply({ content: "❌ Something went wrong setting AFK.", ephemeral: true }).catch(() => {});
+            }
+        }
     }
 };
