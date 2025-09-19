@@ -28,7 +28,7 @@ module.exports = (client, blockHelpers) => {
         const userId = interaction.user.id;
 
         // Block check
-        if (blockHelpers.isBlocked?.(guildId, userId, interaction.commandName)) {
+        if (blockHelpers?.isBlocked?.(guildId, userId, interaction.commandName)) {
           return safeReply({
             embeds: [
               new EmbedBuilder()
@@ -42,8 +42,12 @@ module.exports = (client, blockHelpers) => {
 
         try {
           if (typeof command.execute === "function") {
-            // 🔑 Always pass the same structure (client, ctx, args)
-            await command.execute(client, interaction, []);
+            // ✅ Unified structure for ALL commands
+            await command.execute({
+              interaction,
+              message: null,
+              isPrefix: false,
+            });
           } else {
             await safeReply({ content: "❌ This command cannot be used as a slash command.", ephemeral: true });
           }
@@ -54,14 +58,13 @@ module.exports = (client, blockHelpers) => {
         return;
       }
 
-      // ---------- Context Menu Commands ----------
+      // ---------- Context Menu ----------
       if (interaction.isUserContextMenuCommand() || interaction.isMessageContextMenuCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
-
         try {
           if (typeof command.execute === "function") {
-            await command.execute(client, interaction, []);
+            await command.execute({ interaction, message: null, isPrefix: false });
           }
         } catch (err) {
           console.error(`❌ Error in context menu command ${interaction.commandName}:`, err);
@@ -97,7 +100,6 @@ module.exports = (client, blockHelpers) => {
       }
 
       console.warn("⚠️ Unknown interaction type:", interaction.type);
-
     } catch (err) {
       console.error("❌ Interaction handler error:", err);
       await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
