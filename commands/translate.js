@@ -1,13 +1,12 @@
 // commands/translate.js
 const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
-const fetch = require("node-fetch");
 
 // Cache supported languages
 let LANG_CACHE = {};
 
 async function fetchLanguages() {
   try {
-    const res = await fetch("https://libretranslate.de/languages");
+    const res = await fetch("https://libretranslate.de/languages"); // ✅ Native fetch
     const langs = await res.json();
     LANG_CACHE = {};
     langs.forEach(lang => {
@@ -107,6 +106,7 @@ module.exports = {
       }
 
       // ---------- Build Embed ----------
+      const blueHeart = "<a:blue_heart:1414309560231002194>";
       const embed = new EmbedBuilder()
         .setColor("Blue")
         .setTitle("🌍 Translation Result")
@@ -114,7 +114,7 @@ module.exports = {
           { name: "Original", value: `\`\`\`${text}\`\`\`` },
           { name: `Translated (${LANG_CACHE[targetLang] || targetLang})`, value: `\`\`\`${data.translatedText}\`\`\`` }
         )
-        .setFooter({ text: "💙 Translation powered by LibreTranslate" });
+        .setFooter({ text: `${blueHeart} Translation powered by LibreTranslate` });
 
       if (isPrefix) {
         await message.reply({ embeds: [embed] });
