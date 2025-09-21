@@ -41,23 +41,33 @@ module.exports = {
 
     // ========= Slash Command =========
     async execute(interaction) {
+        if (!interaction.guild) {
+            return interaction.reply({ content: "❌ This command can only be used in a server.", ephemeral: true });
+        }
+
         const guildId = interaction.guild.id;
         const user = interaction.user;
 
         try {
             const sub = interaction.options.getSubcommand();
 
+            // ----- ADD -----
             if (sub === "add") {
-                const text = interaction.options.getString("text");
+                const text = interaction.options.getString("text") || "";
                 const file = interaction.options.getAttachment("file");
 
+                if (!text && !file) {
+                    return interaction.reply({ content: "❌ Provide text or an attachment!", ephemeral: true });
+                }
+
                 const existing = await getGreet(guildId);
-                if (existing) return interaction.reply({ content: "❌ A greet already exists! Remove it first.", ephemeral: true });
-                if (!text && !file) return interaction.reply({ content: "❌ Provide text or an attachment!", ephemeral: true });
+                if (existing) {
+                    return interaction.reply({ content: "❌ A greet already exists! Remove it first.", ephemeral: true });
+                }
 
                 await addGreet(guildId, {
-                    text: text || "",
-                    attachment: file ? file.url : null,
+                    text,
+                    attachment: file?.url || null,
                     author: user.tag,
                 });
 
@@ -72,20 +82,22 @@ module.exports = {
                 });
             }
 
+            // ----- REMOVE -----
             if (sub === "remove") {
                 const ok = await removeGreet(guildId);
                 return interaction.reply({ content: ok ? "✅ Greet removed." : "❌ No greet set.", ephemeral: true });
             }
 
+            // ----- VIEW -----
             if (sub === "view") {
                 const g = await getGreet(guildId);
                 if (!g) return interaction.reply({ content: "✨ No greet message set.", ephemeral: true });
 
                 let preview = g.text || "";
                 preview = preview
-                    .replace(/{user}/gi, user.toString())
-                    .replace(/{server}/gi, interaction.guild.name)
-                    .replace(/{count}/gi, interaction.guild.memberCount.toString());
+                    .replace(/{user}/gi, user?.toString() || "")
+                    .replace(/{server}/gi, interaction.guild?.name || "")
+                    .replace(/{count}/gi, interaction.guild?.memberCount?.toString() || "");
 
                 return interaction.reply({
                     embeds: [new EmbedBuilder()
@@ -99,8 +111,14 @@ module.exports = {
                 });
             }
 
+            // ----- CHANNEL -----
             if (sub === "channel") {
                 const channel = interaction.options.getChannel("target");
+
+                if (!channel?.id || channel.type !== ChannelType.GuildText) {
+                    return interaction.reply({ content: "❌ Please select a valid text channel!", ephemeral: true });
+                }
+
                 await setChannel(guildId, channel.id);
 
                 return interaction.reply({
@@ -113,14 +131,17 @@ module.exports = {
                     ephemeral: true,
                 });
             }
+
         } catch (err) {
             console.error("❌ Greet Slash Command failed:", err);
-            interaction.reply({ content: "⚠️ Error running greet command.", ephemeral: true }).catch(() => {});
+            return interaction.reply({ content: "⚠️ Error running greet command.", ephemeral: true }).catch(() => {});
         }
     },
 
     // ========= Prefix Command =========
-    async prefixExecute(message, args, client) {
+    async prefixExecute(message, args) {
+        if (!message.guild) return;
+
         const guildId = message.guild.id;
         const user = message.author;
         const sub = args[0]?.toLowerCase();
@@ -130,33 +151,31 @@ module.exports = {
         }
 
         try {
+            // ----- ADD -----
             if (sub === "add") {
                 const text = args.slice(1).join(" ");
                 if (!text) return message.reply("❌ Provide greet text.");
 
-                await addGreet(guildId, {
-                    text,
-                    attachment: null,
-                    author: user.tag,
-                });
-
+                await addGreet(guildId, { text, attachment: null, author: user.tag });
                 return message.reply(`✅ Greet message added: ${text}`);
             }
 
+            // ----- REMOVE -----
             if (sub === "remove") {
                 const ok = await removeGreet(guildId);
                 return message.reply(ok ? "✅ Greet removed." : "❌ No greet set.");
             }
 
+            // ----- VIEW -----
             if (sub === "view") {
                 const g = await getGreet(guildId);
                 if (!g) return message.reply("✨ No greet message set.");
 
                 let preview = g.text || "";
                 preview = preview
-                    .replace(/{user}/gi, user.toString())
-                    .replace(/{server}/gi, message.guild.name)
-                    .replace(/{count}/gi, message.guild.memberCount.toString());
+                    .replace(/{user}/gi, user?.toString() || "")
+                    .replace(/{server}/gi, message.guild?.name || "")
+                    .replace(/{count}/gi, message.guild?.memberCount?.toString() || "");
 
                 const embed = new EmbedBuilder()
                     .setColor("Blue")
@@ -167,16 +186,21 @@ module.exports = {
                 return message.reply({ embeds: [embed] });
             }
 
+            // ----- CHANNEL -----
             if (sub === "channel") {
                 const channel = message.mentions.channels.first();
-                if (!channel) return message.reply("❌ Mention a valid channel.");
+
+                if (!channel?.id || channel.type !== ChannelType.GuildText) {
+                    return message.reply("❌ Mention a valid text channel.");
+                }
 
                 await setChannel(guildId, channel.id);
                 return message.reply(`✅ Greet channel set to ${channel}`);
             }
+
         } catch (err) {
             console.error("❌ Greet Prefix Command failed:", err);
-            message.reply("⚠️ Error running greet command.").catch(() => {});
+            return message.reply("⚠️ Error running greet command.").catch(() => {});
         }
     }
 };
