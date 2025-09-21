@@ -1,12 +1,15 @@
 // commands/rename.js
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require("discord.js");
 
+const blueHeart = "<a:blue_heart:1414309560231002194>";
+
 module.exports = {
   name: "rename",
   description: "Rename a channel or role (Admins only)",
   usage: "!rename <channel|role> <new_name>",
 
-  slash: new SlashCommandBuilder()
+  // Required for slash registration
+  data: new SlashCommandBuilder()
     .setName("rename")
     .setDescription("Rename a channel or role")
     .addSubcommand(sub =>
@@ -33,12 +36,11 @@ module.exports = {
         )
     ),
 
-  async execute({ client, message, interaction, args, isPrefix }) {
-    const blueHeart = "<a:blue_heart:1414309560231002194>";
-    let subcommand, newName, role;
+  // Some loaders also accept "slash"
+  slash: this.data,
 
+  async execute({ client, message, interaction, args, isPrefix }) {
     try {
-      // ------- Common Permission Check -------
       const member = isPrefix ? message.member : interaction.member;
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return isPrefix
@@ -48,7 +50,7 @@ module.exports = {
 
       const botMember = await (isPrefix ? message.guild.members.fetchMe() : interaction.guild.members.fetchMe());
 
-      // ------- PREFIX -------
+      // ---------- Prefix ----------
       if (isPrefix) {
         const type = args.shift();
         if (!["channel", "role"].includes(type)) {
@@ -60,76 +62,63 @@ module.exports = {
             return message.reply("⚠️ I don’t have **Manage Channels** permission.");
           }
 
-          newName = args.join(" ");
+          const newName = args.join(" ");
           if (!newName) return message.reply("❌ Please provide a new name.");
+
           await message.channel.setName(newName);
+          return message.reply({ embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Channel renamed to **${newName}** ✅`)] });
+        }
 
-          return message.reply({
-            embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Channel renamed to **${newName}** ✅`)]
-          });
-
-        } else if (type === "role") {
-          role = message.mentions.roles.first();
-          if (!role) return message.reply("❌ Please mention a role to rename.");
-          newName = args.slice(1).join(" ");
+        if (type === "role") {
+          const role = message.mentions.roles.first();
+          if (!role) return message.reply("❌ Please mention a role.");
+          const newName = args.slice(1).join(" ");
           if (!newName) return message.reply("❌ Please provide a new name.");
 
           if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
             return message.reply("⚠️ I don’t have **Manage Roles** permission.");
           }
-
           if (role.position >= botMember.roles.highest.position) {
             return message.reply("⚠️ I can’t rename this role because it’s higher or equal to my highest role.");
           }
 
           await role.setName(newName);
+          return message.reply({ embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Role renamed to **${newName}** ✅`)] });
+        }
+      }
 
-          return message.reply({
-            embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Role renamed to **${newName}** ✅`)]
-          });
+      // ---------- Slash ----------
+      const subcommand = interaction.options.getSubcommand();
+
+      if (subcommand === "channel") {
+        const newName = interaction.options.getString("new_name");
+        if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+          return interaction.reply({ content: "⚠️ I don’t have **Manage Channels** permission.", ephemeral: true });
+        }
+        await interaction.channel.setName(newName);
+        return interaction.reply({ embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Channel renamed to **${newName}** ✅`)] });
+      }
+
+      if (subcommand === "role") {
+        const role = interaction.options.getRole("role");
+        const newName = interaction.options.getString("new_name");
+
+        if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+          return interaction.reply({ content: "⚠️ I don’t have **Manage Roles** permission.", ephemeral: true });
+        }
+        if (role.position >= botMember.roles.highest.position) {
+          return interaction.reply({ content: "⚠️ I can’t rename this role because it’s higher or equal to my highest role.", ephemeral: true });
         }
 
-      } else {
-        // ------- SLASH -------
-        subcommand = interaction.options.getSubcommand();
-
-        if (subcommand === "channel") {
-          if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-            return interaction.reply({ content: "⚠️ I don’t have **Manage Channels** permission.", ephemeral: true });
-          }
-
-          newName = interaction.options.getString("new_name");
-          await interaction.channel.setName(newName);
-
-          return interaction.reply({
-            embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Channel renamed to **${newName}** ✅`)]
-          });
-
-        } else if (subcommand === "role") {
-          role = interaction.options.getRole("role");
-          newName = interaction.options.getString("new_name");
-
-          if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-            return interaction.reply({ content: "⚠️ I don’t have **Manage Roles** permission.", ephemeral: true });
-          }
-
-          if (role.position >= botMember.roles.highest.position) {
-            return interaction.reply({ content: "⚠️ I can’t rename this role because it’s higher or equal to my highest role.", ephemeral: true });
-          }
-
-          await role.setName(newName);
-
-          return interaction.reply({
-            embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Role renamed to **${newName}** ✅`)]
-          });
-        }
+        await role.setName(newName);
+        return interaction.reply({ embeds: [new EmbedBuilder().setColor("Blue").setDescription(`${blueHeart} Role renamed to **${newName}** ✅`)] });
       }
     } catch (err) {
       console.error("❌ Rename command failed:", err);
       if (isPrefix) {
-        return message.reply("⚠️ Failed to rename. Do I have permission?");
+        return message.reply("⚠️ Rename failed. Check permissions?");
       } else {
-        return interaction.reply({ content: "⚠️ Failed to rename. Do I have permission?", ephemeral: true });
+        return interaction.reply({ content: "⚠️ Rename failed. Check permissions?", ephemeral: true });
       }
     }
   }
