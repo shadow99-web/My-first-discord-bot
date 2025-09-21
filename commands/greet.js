@@ -41,6 +41,13 @@ module.exports = {
 
     // ========= Slash Command =========
     async execute(interaction) {
+        // Safety: only run if valid interaction
+        if (!interaction || typeof interaction.reply !== "function") {
+            console.error("❌ execute() called with invalid interaction object", interaction);
+            return;
+        }
+
+        // Safety: must be in a guild
         if (!interaction.guild) {
             return interaction.reply({ content: "❌ This command can only be used in a server.", ephemeral: true });
         }
@@ -75,7 +82,7 @@ module.exports = {
                     embeds: [new EmbedBuilder()
                         .setColor("Green")
                         .setTitle("✅ Greet Added")
-                        .setDescription(`Text: ${text || "(attachment only)"}`)
+                        .setDescription(text || "(attachment only)")
                         .setFooter({ text: `Added by ${user.tag}` })
                     ],
                     ephemeral: true,
@@ -99,16 +106,23 @@ module.exports = {
                     .replace(/{server}/gi, interaction.guild?.name || "")
                     .replace(/{count}/gi, interaction.guild?.memberCount?.toString() || "");
 
-                return interaction.reply({
-                    embeds: [new EmbedBuilder()
-                        .setColor("Blue")
-                        .setTitle("🌸 Current Greet Message (Preview)")
-                        .setDescription(preview || "(attachment only)")
-                        .setFooter({ text: `Added by ${g.author}` })
-                    ],
-                    files: g.attachment ? [g.attachment] : [],
-                    ephemeral: true,
-                });
+                const embed = new EmbedBuilder()
+                    .setColor("Blue")
+                    .setTitle("🌸 Current Greet Message (Preview)")
+                    .setDescription(preview || "")
+                    .setFooter({ text: `Added by ${g.author}` });
+
+                if (g.attachment) {
+                    // Show image in embed if image, otherwise attach file
+                    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(g.attachment)) {
+                        embed.setImage(g.attachment);
+                        return interaction.reply({ embeds: [embed], ephemeral: true });
+                    } else {
+                        return interaction.reply({ embeds: [embed], files: [g.attachment], ephemeral: true });
+                    }
+                }
+
+                return interaction.reply({ embeds: [embed], ephemeral: true });
             }
 
             // ----- CHANNEL -----
@@ -182,6 +196,15 @@ module.exports = {
                     .setTitle("🌸 Current Greet Message (Preview)")
                     .setDescription(preview)
                     .setFooter({ text: `Added by ${g.author}` });
+
+                if (g.attachment) {
+                    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(g.attachment)) {
+                        embed.setImage(g.attachment);
+                        return message.reply({ embeds: [embed] });
+                    } else {
+                        return message.reply({ embeds: [embed], files: [g.attachment] });
+                    }
+                }
 
                 return message.reply({ embeds: [embed] });
             }
