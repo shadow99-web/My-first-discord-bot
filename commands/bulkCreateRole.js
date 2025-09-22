@@ -2,7 +2,8 @@
 const { 
     SlashCommandBuilder, 
     PermissionFlagsBits, 
-    EmbedBuilder 
+    EmbedBuilder, 
+    MessageFlags 
 } = require("discord.js");
 
 const templates = {
@@ -55,10 +56,14 @@ module.exports = {
         const guild = ctx.guild;
 
         // 🔒 Permission check
-        if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        const hasPerms = isInteraction
+            ? ctx.member.permissions.has(PermissionFlagsBits.ManageRoles)
+            : ctx.member?.permissions.has(PermissionFlagsBits.ManageRoles);
+
+        if (!hasPerms) {
             const reply = "❌ You don’t have permission to manage roles.";
             return isInteraction 
-                ? ctx.reply({ content: reply, ephemeral: true }) 
+                ? ctx.reply({ content: reply, flags: MessageFlags.Ephemeral }) 
                 : ctx.channel.send(reply);
         }
 
@@ -80,7 +85,7 @@ module.exports = {
         if (!rolesInput) {
             const reply = "❌ Please provide roles separated by commas.";
             return isInteraction 
-                ? ctx.reply({ content: reply, ephemeral: true }) 
+                ? ctx.reply({ content: reply, flags: MessageFlags.Ephemeral }) 
                 : ctx.channel.send(reply);
         }
 
@@ -96,7 +101,7 @@ module.exports = {
                 const formattedName = templates[templateChoice](roleName);
                 const role = await guild.roles.create({
                     name: formattedName,
-                    permissions: permissions,
+                    permissions,
                     reason: "Bulk role creation with template",
                 });
                 createdRoles.push(role.toString());
