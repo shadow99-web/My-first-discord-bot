@@ -51,14 +51,17 @@ module.exports = {
         const guildId = interaction?.guildId || message.guild.id;
         const user = interaction?.user || message.author;
 
-        // 🔧 Universal reply (slash uses editReply, prefix uses reply)
+        // --- Defer interaction if slash command ---
+        if (interaction && !interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        }
+
         const sendReply = async (payload) => {
+            const data = typeof payload === "string" ? { content: payload } : payload;
             if (interaction) {
-                const data = typeof payload === "string" ? { content: payload } : payload;
-                // Interaction already deferred in interaction.js
-                return interaction.editReply(data).catch(() =>
-                    interaction.followUp({ ...data, ephemeral: true }).catch(() => {})
-                );
+                if (interaction.deferred) return interaction.editReply(data).catch(() => {});
+                if (interaction.replied) return interaction.followUp({ ...data, ephemeral: true }).catch(() => {});
+                return interaction.reply(data).catch(() => {});
             } else if (message) {
                 return typeof payload === "string"
                     ? message.reply(payload).catch(() => {})
@@ -80,7 +83,6 @@ module.exports = {
             sub = interaction.options.getSubcommand();
             role = interaction.options.getRole("role");
         } else if (message) {
-            // Example: !autorole humans add @role
             const args = message.content.trim().split(/\s+/).slice(1);
             group = args.shift()?.toLowerCase();
             sub = args.shift()?.toLowerCase();
