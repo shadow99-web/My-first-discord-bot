@@ -1,130 +1,122 @@
 // commands/bulkCreateRole.js
-const { 
-    SlashCommandBuilder, 
-    PermissionFlagsBits, 
-    EmbedBuilder, 
-    MessageFlags 
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  EmbedBuilder,
 } = require("discord.js");
 
-const templates = {
-    none: (name) => name,
-    fancy1: (name) => `╰›。🜲┆${name}┆🜲`,
-    fancy2: (name) => `✧･ﾟ: *✧ ${name} ✧*:･ﾟ✧`,
-    fancy3: (name) => `⟡₊ ${name} ₊⟡`,
-};
+const BLUE_HEART = "<a:blue_heart:1414309560231002194>";
 
 module.exports = {
-    name: "bulkcreaterole",
-    description: "Create multiple roles in bulk with optional permissions & templates",
-    data: new SlashCommandBuilder()
-        .setName("bulkcreaterole")
-        .setDescription("Create multiple roles in bulk with optional permissions & templates")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-        .addStringOption(option =>
-            option.setName("roles")
-                .setDescription("Comma-separated list of roles to create")
-                .setRequired(true)
+  data: new SlashCommandBuilder()
+    .setName("bulkcreaterole")
+    .setDescription("Create multiple roles at once with templates and permissions")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+    .addStringOption((option) =>
+      option
+        .setName("roles")
+        .setDescription("Comma-separated role names (e.g. Warrior,Guardian,Mage)")
+        .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("permissions")
+        .setDescription("Choose permissions for the roles")
+        .setRequired(false)
+        .addChoices(
+          { name: "No special perms", value: "none" },
+          { name: "Administrator", value: "ADMINISTRATOR" },
+          { name: "Manage Server", value: "MANAGE_GUILD" },
+          { name: "Manage Channels", value: "MANAGE_CHANNELS" },
+          { name: "Manage Roles", value: "MANAGE_ROLES" },
+          { name: "Kick Members", value: "KICK_MEMBERS" },
+          { name: "Ban Members", value: "BAN_MEMBERS" },
+          { name: "Manage Messages", value: "MANAGE_MESSAGES" },
+          { name: "Mention Everyone", value: "MENTION_EVERYONE" }
         )
-        .addStringOption(option =>
-            option.setName("perms")
-                .setDescription("Select one or more permissions (comma separated)")
-                .setRequired(false)
-                .addChoices(
-                    { name: "Administrator", value: "Administrator" },
-                    { name: "Manage Channels", value: "ManageChannels" },
-                    { name: "Manage Roles", value: "ManageRoles" },
-                    { name: "Send Messages", value: "SendMessages" },
-                    { name: "Ban Members", value: "BanMembers" },
-                    { name: "Kick Members", value: "KickMembers" },
-                    { name: "Mute Members", value: "MuteMembers" }
-                )
-        )
-        .addStringOption(option =>
-            option.setName("template")
-                .setDescription("Choose a role template style")
-                .setRequired(false)
-                .addChoices(
-                    { name: "None", value: "none" },
-                    { name: "Fancy Style 1", value: "fancy1" },
-                    { name: "Fancy Style 2", value: "fancy2" },
-                    { name: "Fancy Style 3", value: "fancy3" }
-                )
-        ),
+    ),
 
-    async execute(ctx) {
-        const isInteraction = typeof ctx.isChatInputCommand === "function";
-        const guild = ctx.guild;
+  name: "bulkcreaterole",
+  aliases: ["bcr"],
 
-        // 🔒 Permission check
-        const hasPerms = isInteraction
-            ? ctx.member.permissions.has(PermissionFlagsBits.ManageRoles)
-            : ctx.member?.permissions.has(PermissionFlagsBits.ManageRoles);
+  async execute(ctx) {
+    const { interaction, message, isPrefix } = ctx;
 
-        if (!hasPerms) {
-            const reply = "❌ You don’t have permission to manage roles.";
-            return isInteraction 
-                ? ctx.reply({ content: reply, flags: MessageFlags.Ephemeral }) 
-                : ctx.channel.send(reply);
+    // -------- Safe reply helper --------
+    const safeSend = async (options) => {
+      if (isPrefix && message) return message.channel.send(options);
+      if (interaction) {
+        if (interaction.replied || interaction.deferred) {
+          return interaction.followUp(options);
         }
+        return interaction.reply(options);
+      }
+    };
 
-        // 📌 Inputs
-        const rolesInput = isInteraction 
-            ? ctx.options.getString("roles") 
-            : ctx.args.join(" ");
+    // -------- Permission check --------
+    const member = isPrefix ? message.member : interaction.member;
+    if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return safeSend({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Red")
+            .setDescription("❌ You don’t have permission to manage roles."),
+        ],
+        ephemeral: !isPrefix,
+      });
+    }
 
-        const permsInput = isInteraction 
-            ? ctx.options.getString("perms") 
-            : null;
+    // -------- Get roles input --------
+    const input = isPrefix
+      ? args.join(" ") // prefix: !bulkcreaterole Warrior,Guardian,Mage
+      : interaction.options.getString("roles");
 
-        const templateChoice = isInteraction
-            ? (ctx.options.getString("template") || "none")
-            : (ctx.args.includes("--template=fancy1") ? "fancy1" :
-               ctx.args.includes("--template=fancy2") ? "fancy2" :
-               ctx.args.includes("--template=fancy3") ? "fancy3" : "none");
+    const roleNames = input.split(",").map((r) => r.trim()).filter(Boolean);
 
-        if (!rolesInput) {
-            const reply = "❌ Please provide roles separated by commas.";
-            return isInteraction 
-                ? ctx.reply({ content: reply, flags: MessageFlags.Ephemeral }) 
-                : ctx.channel.send(reply);
-        }
+    if (roleNames.length === 0) {
+      return safeSend({ content: "⚠️ Please provide at least one role name." });
+    }
 
-        const roles = rolesInput.split(",").map(r => r.trim()).filter(Boolean);
-        const permissions = permsInput 
-            ? permsInput.split(",").map(p => p.trim()) 
-            : [];
+    // -------- Permissions --------
+    let chosenPerm = isPrefix
+      ? null
+      : interaction.options.getString("permissions");
 
-        // ✅ Role creation
-        const createdRoles = [];
-        for (const roleName of roles) {
-            try {
-                const formattedName = templates[templateChoice](roleName);
-                const role = await guild.roles.create({
-                    name: formattedName,
-                    permissions,
-                    reason: "Bulk role creation with template",
-                });
-                createdRoles.push(role.toString());
-            } catch (err) {
-                console.error(`❌ Failed to create role ${roleName}:`, err);
-            }
-        }
+    let perms = [];
+    if (chosenPerm && chosenPerm !== "none") {
+      if (PermissionFlagsBits[chosenPerm]) {
+        perms = [PermissionFlagsBits[chosenPerm]];
+      }
+    }
 
-        // 💙 Blue Heart Embed
-        const blueHeart = "<a:blue_heart:1414309560231002194>";
-        const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setTitle(`${blueHeart} Bulk Role Creation`)
-            .setDescription(
-                createdRoles.length > 0
-                    ? `✅ Created roles:\n${createdRoles.join("\n")}`
-                    : "❌ No roles could be created."
-            )
-            .setFooter({ text: `Template: ${templateChoice}` })
-            .setTimestamp();
+    // -------- Create roles --------
+    const created = [];
+    for (const roleName of roleNames) {
+      try {
+        const role = await (interaction?.guild || message.guild).roles.create({
+          name: `╰›。🜲┆${roleName}┆🜲`, // template applied
+          permissions: perms,
+          reason: "Bulk role creation",
+        });
+        created.push(role.name);
+      } catch (err) {
+        console.error(`❌ Failed to create role ${roleName}:`, err);
+      }
+    }
 
-        return isInteraction 
-            ? ctx.reply({ embeds: [embed] }) 
-            : ctx.channel.send({ embeds: [embed] });
-    },
+    // -------- Send result --------
+    return safeSend({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("Blue")
+          .setTitle(`${BLUE_HEART} Bulk Role Creation`)
+          .setDescription(
+            created.length > 0
+              ? `✅ Created roles:\n${created.map((r) => `- ${r}`).join("\n")}`
+              : "⚠️ No roles were created."
+          )
+          .setTimestamp(),
+      ],
+    });
+  },
 };
