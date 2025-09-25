@@ -1,31 +1,33 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, InteractionResponseFlags } = require("discord.js");
 
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("truthdare")
-        .setDescription("Creates a Truth or Dare panel with buttons!"),
-    
-    async execute({ interaction }) {
+async function handleTruthDare(interaction) {
+    try {
+        let type;
+        if (interaction.customId === "td_random") type = Math.random() < 0.5 ? "truth" : "dare";
+        else if (interaction.customId === "td_truth") type = "truth";
+        else if (interaction.customId === "td_dare") type = "dare";
+        else return;
+
+        const res = await fetch(`https://api.truthordarebot.xyz/v1/${type}`);
+        const data = await res.json();
+
         const embed = new EmbedBuilder()
-            .setTitle("🤞🏻 Truth or Dare")
-            .setDescription("Click a button to get Truth, Dare, or Random!")
+            .setTitle(`🤞🏻 ${type.toUpperCase()}`)
+            .setDescription(data.question || data.text)
             .setColor("Random");
 
-        const buttons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId("td_truth")
-                .setLabel("Truth")
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId("td_dare")
-                .setLabel("Dare")
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId("td_random")
-                .setLabel("Random")
-                .setStyle(ButtonStyle.Success)
-        );
-
-        await interaction.reply({ embeds: [embed], components: [buttons] });
+        // Check if already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            await interaction.editReply({ embeds: [embed], flags: 64 }).catch(() => {});
+        } else {
+            await interaction.reply({ embeds: [embed], flags: 64 });
+        }
+    } catch (err) {
+        console.error("❌ Truth-Dare handler error:", err);
+        if (!interaction.replied) {
+            await interaction.reply({ content: "⚠️ Something went wrong!", flags: 64 }).catch(() => {});
+        }
     }
-};
+}
+
+module.exports = { handleTruthDare };
