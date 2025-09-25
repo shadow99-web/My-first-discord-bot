@@ -95,5 +95,8 @@ require("./events/interaction")(client, blockHelpers);
 require("./events/guildMemberAdd")(client); // 👈 greet handler
 require("./events/autoMod")(client);
 // ====================
+client.once("ready", () => {
+    console.log(`🤖 Logged in as ${client.user.tag}`);
+});
 // 🔑 Login
 client.login(process.env.TOKEN);
