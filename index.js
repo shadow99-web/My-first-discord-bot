@@ -5,7 +5,7 @@ console.log("DEBUG TOKEN:", process.env.TOKEN ? "FOUND" : "NOT FOUND");
 console.log("DEBUG CLIENT_ID:", process.env.CLIENT_ID ? "FOUND" : "NOT FOUND");
 
 // ====================
-// 🤖 Import Discord.js and other modules
+// 🤖 Import modules
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
 const fs = require("fs");
@@ -25,7 +25,7 @@ const mongoose = require("mongoose");
 })();
 
 // ====================
-// ⚡ HTTP Server (optional for Render)
+// ⚡ HTTP Server for Render
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -33,22 +33,21 @@ http.createServer((req, res) => {
 }).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
 
 // ====================
-// 🔁 Self-ping (optional)
+// 🔁 Self-ping to prevent sleep
 const renderURL = process.env.RENDER_URL;
 if (renderURL) {
     setInterval(async () => {
         try {
             const res = await fetch(renderURL);
-            if (res.ok) console.log("✅ Self-ping successful");
-            else console.log(`❌ Self-ping failed: ${res.status}`);
+            console.log(res.ok ? "✅ Self-ping successful" : `❌ Self-ping failed: ${res.status}`);
         } catch (err) {
             console.log("❌ Self-ping error:", err.message);
         }
-    }, 4 * 60 * 1000);
+    }, 4 * 60 * 1000); // every 4 minutes
 }
 
 // ====================
-// 🤖 Client Setup
+// 🤖 Discord Client Setup
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -115,7 +114,7 @@ try {
 })();
 
 // ====================
-// 🔔 Load Event Handlers safely
+// 🔔 Safe event loader
 const safeRequireEvent = (path, ...args) => {
     try {
         require(path)(...args);
@@ -125,7 +124,7 @@ const safeRequireEvent = (path, ...args) => {
     }
 };
 
-// Events with extra arguments
+// Events with extra args
 safeRequireEvent("./events/message", client, getPrefixes, savePrefixes, blockHelpers);
 safeRequireEvent("./events/autorole", client, getAutorole, saveAutorole);
 safeRequireEvent("./events/interaction", client, blockHelpers);
@@ -134,9 +133,10 @@ safeRequireEvent("./events/interaction", client, blockHelpers);
 safeRequireEvent("./events/snipe", client);
 safeRequireEvent("./events/guildMemberAdd", client);
 safeRequireEvent("./events/autoMod", client);
-try { require("./events/truthdare")(client); } catch (err) { console.warn("⚠️ Truth-Dare event failed:", err.message); }
+safeRequireEvent("./events/truthdare", client);
+
 // ====================
-// 🔑 Login
+// 🔑 Client login with safe logging
 client.once("ready", () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
 });
@@ -144,3 +144,9 @@ client.once("ready", () => {
 client.login(process.env.TOKEN).catch(err => {
     console.error("❌ Discord login failed:", err.message);
 });
+
+// ====================
+// 🔴 Global error handlers
+process.on("unhandledRejection", (err) => console.error("❌ Unhandled Promise Rejection:", err));
+process.on("uncaughtException", (err) => console.error("❌ Uncaught Exception:", err));
+process.on("warning", (warn) => console.warn("⚠️ Warning:", warn));
