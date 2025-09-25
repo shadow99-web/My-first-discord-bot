@@ -1,17 +1,13 @@
-// events/interaction.js
 const { EmbedBuilder } = require("discord.js");
 const { sendTicketPanel, handleTicketMenu, handleTicketClose } = require("../Handlers/ticketHandler");
 
 module.exports = (client, blockHelpers) => {
   client.on("interactionCreate", async (interaction) => {
+
     const safeReply = async (options) => {
       try {
-        if (interaction.replied) {
-          return await interaction.followUp(options).catch(() => {});
-        }
-        if (interaction.deferred) {
-          return await interaction.editReply(options).catch(() => {});
-        }
+        if (interaction.replied) return await interaction.followUp(options).catch(() => {});
+        if (interaction.deferred) return await interaction.editReply(options).catch(() => {});
         return await interaction.reply(options).catch(() => {});
       } catch (e) {
         console.error("❌ safeReply error:", e);
@@ -19,17 +15,16 @@ module.exports = (client, blockHelpers) => {
     };
 
     try {
+
       // ---------- Slash Commands ----------
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-        if (!command) {
-          return safeReply({ content: "❌ Command not found.", ephemeral: true });
-        }
+        if (!command) return safeReply({ content: "❌ Command not found.", ephemeral: true });
 
         const guildId = interaction.guildId;
         const userId = interaction.user.id;
 
-        // Block check (userId first!)
+        // Block check
         if (blockHelpers?.isBlocked?.(userId, guildId, interaction.commandName)) {
           return safeReply({
             embeds: [
@@ -43,17 +38,17 @@ module.exports = (client, blockHelpers) => {
         }
 
         try {
-          if (typeof command.execute === "function") {
-            await command.execute({
-              client,
-              interaction,
-              message: null,
-              args: [],
-              isPrefix: false,
-            });
-          } else {
-            await safeReply({ content: "❌ This command cannot be used as a slash command.", ephemeral: true });
-          }
+          // ✅ If your command may take >3s, defer reply first
+          if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+
+          await command.execute({
+            client,
+            interaction,
+            message: null,
+            args: [],
+            isPrefix: false,
+          });
+
         } catch (err) {
           console.error(`❌ Error in command ${interaction.commandName}:`, err);
           await safeReply({ content: "⚠️ Something went wrong while executing the command!", ephemeral: true });
@@ -61,22 +56,15 @@ module.exports = (client, blockHelpers) => {
         return;
       }
 
-      // ---------- Context Menu ----------
+      // ---------- Context Menus ----------
       if (interaction.isUserContextMenuCommand() || interaction.isMessageContextMenuCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
         try {
-          if (typeof command.execute === "function") {
-            await command.execute({
-              client,
-              interaction,
-              message: null,
-              args: [],
-              isPrefix: false,
-            });
-          }
+          if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+          await command.execute({ client, interaction, message: null, args: [], isPrefix: false });
         } catch (err) {
-          console.error(`❌ Error in context menu command ${interaction.commandName}:`, err);
+          console.error(`❌ Context menu error ${interaction.commandName}:`, err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
         }
         return;
@@ -85,9 +73,7 @@ module.exports = (client, blockHelpers) => {
       // ---------- Buttons ----------
       if (interaction.isButton()) {
         try {
-          if (interaction.customId === "ticket_close_button") {
-            await handleTicketClose(interaction);
-          }
+          if (interaction.customId === "ticket_close_button") await handleTicketClose(interaction);
         } catch (err) {
           console.error("❌ Button interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
@@ -98,9 +84,7 @@ module.exports = (client, blockHelpers) => {
       // ---------- Select Menus ----------
       if (interaction.isStringSelectMenu()) {
         try {
-          if (interaction.customId === "ticket_menu") {
-            await handleTicketMenu(interaction);
-          }
+          if (interaction.customId === "ticket_menu") await handleTicketMenu(interaction);
         } catch (err) {
           console.error("❌ Select menu interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
@@ -109,6 +93,7 @@ module.exports = (client, blockHelpers) => {
       }
 
       console.warn("⚠️ Unknown interaction type:", interaction.type);
+
     } catch (err) {
       console.error("❌ Interaction handler error:", err);
       await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
