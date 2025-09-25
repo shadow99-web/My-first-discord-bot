@@ -92,28 +92,6 @@ try {
 }
 
 // ====================
-// 🚀 Deploy Slash Commands safely
-(async () => {
-    try {
-        const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-        if (process.env.GUILD_ID) {
-            await rest.put(
-                Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-                { body: commandsData }
-            );
-            console.log("✅ Guild commands deployed!");
-        }
-        await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
-            { body: commandsData }
-        );
-        console.log("✅ Global commands deployed!");
-    } catch (err) {
-        console.error("❌ Error deploying commands:", err.message);
-    }
-})();
-
-// ====================
 // 🔔 Safe event loader
 const safeRequireEvent = (path, ...args) => {
     try {
@@ -136,14 +114,34 @@ safeRequireEvent("./events/autoMod", client);
 safeRequireEvent("./events/truthdare", client);
 
 // ====================
-// 🔑 Client login with safe logging
-client.once("ready", () => {
-    console.log(`🤖 Logged in as ${client.user.tag}`);
-});
+// 🚀 Deploy commands and login safely
+async function deployCommandsAndLogin() {
+    try {
+        const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-client.login(process.env.TOKEN).catch(err => {
-    console.error("❌ Discord login failed:", err.message);
-});
+        if (process.env.GUILD_ID) {
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+                { body: commandsData }
+            );
+            console.log("✅ Guild commands deployed!");
+        }
+
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commandsData }
+        );
+        console.log("✅ Global commands deployed!");
+
+        await client.login(process.env.TOKEN);
+        console.log(`🤖 Logged in as ${client.user.tag}`);
+    } catch (err) {
+        console.error("❌ Failed to deploy commands or login:", err);
+    }
+}
+
+// Start everything
+deployCommandsAndLogin();
 
 // ====================
 // 🔴 Global error handlers
