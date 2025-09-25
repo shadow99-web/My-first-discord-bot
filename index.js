@@ -134,7 +134,7 @@ safeRequireEvent("./events/interaction", client, blockHelpers);
 safeRequireEvent("./events/snipe", client);
 safeRequireEvent("./events/guildMemberAdd", client);
 safeRequireEvent("./events/autoMod", client);
-
+safeRequireEvent("./events/truthdare")(client); } catch (err) { console.warn("⚠️ Truth-Dare event failed:", err.message); }
 // ====================
 // 🔑 Login
 client.once("ready", () => {
