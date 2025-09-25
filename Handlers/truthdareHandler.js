@@ -1,5 +1,4 @@
 const { EmbedBuilder, InteractionResponseFlags } = require("discord.js");
-const fetch = require("node-fetch"); // make sure node-fetch installed
 
 async function handleTruthDare(interaction) {
     try {
