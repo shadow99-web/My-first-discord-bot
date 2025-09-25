@@ -1,18 +1,29 @@
+// ====================
+// ⚡ Load Environment Variables
 require("dotenv").config();
+console.log("DEBUG TOKEN:", process.env.TOKEN ? "FOUND" : "NOT FOUND");
+
+// ====================
+// 🤖 Import Discord.js
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
 const fs = require("fs");
+
+// ====================
+// 🔌 Database (optional)
 const connectDB = require("./db");
 connectDB();
+
 // ====================
-// ⚡ HTTP Server (Render)
+// ⚡ HTTP Server (optional for Render)
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("Bot is running!\n");
 }).listen(port, () => console.log(`✅ HTTP server listening on port ${port}`));
 
-// 🔁 Self-ping (Render)
+// ====================
+// 🔁 Self-ping (optional)
 const renderURL = process.env.RENDER_URL;
 if (renderURL) {
     setInterval(async () => {
@@ -33,7 +44,7 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers, // required for greet + autorole
+        GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessageReactions
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
@@ -44,30 +55,29 @@ client.snipes = new Map();
 client.afk = new Map();
 
 // ====================
-// 📦 Load Utils
-const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
-const blockHelpers = require("./utils/block");
-
-// ====================
 // 📂 Load Commands
 const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
 const commandsData = [];
 
 for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
-    if (command?.data?.name && command?.execute) {
-        client.commands.set(command.data.name, command);
-        commandsData.push(command.data.toJSON());
-        console.log(`✅ Loaded command: ${command.data.name}`);
-    } else {
-        console.log(`⚠️ Skipped invalid command: ${file}`);
+    try {
+        const command = require(`./commands/${file}`);
+        if (command?.data?.name && command?.execute) {
+            client.commands.set(command.data.name, command);
+            commandsData.push(command.data.toJSON());
+            console.log(`✅ Loaded command: ${command.data.name}`);
+        } else {
+            console.log(`⚠️ Skipped invalid command: ${file}`);
+        }
+    } catch (err) {
+        console.log(`❌ Error loading command ${file}: ${err.message}`);
     }
 }
 
 // ====================
 // 🚀 Deploy Slash Commands
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
+    const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
     try {
         if (process.env.GUILD_ID) {
             await rest.put(
@@ -88,15 +98,19 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 // ====================
 // 🔔 Load Event Handlers
-require("./events/autorole")(client, getAutorole, saveAutorole);
-require("./events/snipe")(client);
-require("./events/message")(client, getPrefixes, savePrefixes, blockHelpers);
-require("./events/interaction")(client, blockHelpers);
-require("./events/guildMemberAdd")(client); // 👈 greet handler
-require("./events/autoMod")(client);
+try { require("./events/autorole")(client); } catch (err) { console.log(err); }
+try { require("./events/snipe")(client); } catch (err) { console.log(err); }
+try { require("./events/message")(client); } catch (err) { console.log(err); }
+try { require("./events/interaction")(client); } catch (err) { console.log(err); }
+try { require("./events/guildMemberAdd")(client); } catch (err) { console.log(err); }
+try { require("./events/autoMod")(client); } catch (err) { console.log(err); }
+
 // ====================
+// 🔑 Login
 client.once("ready", () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
 });
-// 🔑 Login
-client.login(process.env.TOKEN);
+
+client.login(process.env.TOKEN).catch(err => {
+    console.error("❌ Login failed:", err.message);
+});
