@@ -2,17 +2,27 @@
 // ⚡ Load Environment Variables
 require("dotenv").config();
 console.log("DEBUG TOKEN:", process.env.TOKEN ? "FOUND" : "NOT FOUND");
+console.log("DEBUG CLIENT_ID:", process.env.CLIENT_ID ? "FOUND" : "NOT FOUND");
 
 // ====================
 // 🤖 Import Discord.js
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
 const fs = require("fs");
+const mongoose = require("mongoose");
 
 // ====================
-// 🔌 Database (optional)
-const connectDB = require("./db");
-connectDB();
+// 🔌 Connect MongoDB safely
+(async () => {
+    try {
+        const mongoURL = process.env.MONGO_URI;
+        if (!mongoURL) throw new Error("MONGO_URI not found in environment variables");
+        await mongoose.connect(mongoURL);
+        console.log("✅ MongoDB connected successfully");
+    } catch (err) {
+        console.warn("⚠️ MongoDB connection failed:", err.message);
+    }
+})();
 
 // ====================
 // ⚡ HTTP Server (optional for Render)
@@ -55,30 +65,33 @@ client.snipes = new Map();
 client.afk = new Map();
 
 // ====================
-// 📂 Load Commands
-const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
+// 📂 Load Commands safely
 const commandsData = [];
-
-for (const file of commandFiles) {
-    try {
-        const command = require(`./commands/${file}`);
-        if (command?.data?.name && command?.execute) {
-            client.commands.set(command.data.name, command);
-            commandsData.push(command.data.toJSON());
-            console.log(`✅ Loaded command: ${command.data.name}`);
-        } else {
-            console.log(`⚠️ Skipped invalid command: ${file}`);
+try {
+    const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
+    for (const file of commandFiles) {
+        try {
+            const command = require(`./commands/${file}`);
+            if (command?.data?.name && command?.execute) {
+                client.commands.set(command.data.name, command);
+                commandsData.push(command.data.toJSON());
+                console.log(`✅ Loaded command: ${command.data.name}`);
+            } else {
+                console.log(`⚠️ Skipped invalid command: ${file}`);
+            }
+        } catch (err) {
+            console.log(`❌ Error loading command ${file}: ${err.message}`);
         }
-    } catch (err) {
-        console.log(`❌ Error loading command ${file}: ${err.message}`);
     }
+} catch (err) {
+    console.log("❌ Error reading commands folder:", err.message);
 }
 
 // ====================
-// 🚀 Deploy Slash Commands
+// 🚀 Deploy Slash Commands safely
 (async () => {
-    const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
     try {
+        const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
         if (process.env.GUILD_ID) {
             await rest.put(
                 Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
@@ -92,18 +105,27 @@ for (const file of commandFiles) {
         );
         console.log("✅ Global commands deployed!");
     } catch (err) {
-        console.error("❌ Error deploying commands:", err);
+        console.error("❌ Error deploying commands:", err.message);
     }
 })();
 
 // ====================
-// 🔔 Load Event Handlers
-try { require("./events/autorole")(client); } catch (err) { console.log(err); }
-try { require("./events/snipe")(client); } catch (err) { console.log(err); }
-try { require("./events/message")(client); } catch (err) { console.log(err); }
-try { require("./events/interaction")(client); } catch (err) { console.log(err); }
-try { require("./events/guildMemberAdd")(client); } catch (err) { console.log(err); }
-try { require("./events/autoMod")(client); } catch (err) { console.log(err); }
+// 🔔 Load Event Handlers safely
+const safeRequireEvent = (path, ...args) => {
+    try {
+        require(path)(...args);
+        console.log(`✅ Loaded event: ${path}`);
+    } catch (err) {
+        console.warn(`⚠️ Failed to load event ${path}:`, err.message);
+    }
+};
+
+safeRequireEvent("./events/autorole", client);
+safeRequireEvent("./events/snipe", client);
+safeRequireEvent("./events/message", client);
+safeRequireEvent("./events/interaction", client); // pass blockHelpers if needed
+safeRequireEvent("./events/guildMemberAdd", client);
+safeRequireEvent("./events/autoMod", client);
 
 // ====================
 // 🔑 Login
@@ -112,5 +134,5 @@ client.once("ready", () => {
 });
 
 client.login(process.env.TOKEN).catch(err => {
-    console.error("❌ Login failed:", err.message);
+    console.error("❌ Discord login failed:", err.message);
 });
