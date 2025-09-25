@@ -5,7 +5,7 @@ console.log("DEBUG TOKEN:", process.env.TOKEN ? "FOUND" : "NOT FOUND");
 console.log("DEBUG CLIENT_ID:", process.env.CLIENT_ID ? "FOUND" : "NOT FOUND");
 
 // ====================
-// 🤖 Import Discord.js
+// 🤖 Import Discord.js and other modules
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require("discord.js");
 const http = require("http");
 const fs = require("fs");
@@ -65,6 +65,11 @@ client.snipes = new Map();
 client.afk = new Map();
 
 // ====================
+// 📦 Load Utilities
+const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
+const blockHelpers = require("./utils/block");
+
+// ====================
 // 📂 Load Commands safely
 const commandsData = [];
 try {
@@ -120,10 +125,13 @@ const safeRequireEvent = (path, ...args) => {
     }
 };
 
-safeRequireEvent("./events/autorole", client);
+// Events with extra arguments
+safeRequireEvent("./events/message", client, getPrefixes, savePrefixes, blockHelpers);
+safeRequireEvent("./events/autorole", client, getAutorole, saveAutorole);
+safeRequireEvent("./events/interaction", client, blockHelpers);
+
+// Events with only client
 safeRequireEvent("./events/snipe", client);
-safeRequireEvent("./events/message", client);
-safeRequireEvent("./events/interaction", client); // pass blockHelpers if needed
 safeRequireEvent("./events/guildMemberAdd", client);
 safeRequireEvent("./events/autoMod", client);
 
