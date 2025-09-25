@@ -1,4 +1,4 @@
-const fetch = require("node-fetch"); // npm install node-fetch@2
+
 const { EmbedBuilder } = require("discord.js");
 
 async function handleTruthDare(interaction) {
