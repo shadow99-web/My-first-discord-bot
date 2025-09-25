@@ -45,21 +45,32 @@ module.exports = {
             if (!content) return;
 
             if (interaction) {
-                if (typeof content === "string") {
-                    return interaction.reply({ content, ephemeral: true });
+                try {
+                    if (interaction.replied || interaction.deferred) {
+                        // Already replied → follow up
+                        if (typeof content === "string") {
+                            return interaction.followUp({ content, ephemeral: true }).catch(() => {});
+                        }
+                        return interaction.followUp({ ...content, ephemeral: true }).catch(() => {});
+                    } else {
+                        // First reply
+                        if (typeof content === "string") {
+                            return interaction.reply({ content, ephemeral: true });
+                        }
+                        return interaction.reply({ ...content, ephemeral: true });
+                    }
+                } catch (err) {
+                    console.error("❌ Safe reply failed:", err);
                 }
-                return interaction.reply({ ...content, ephemeral: true });
             }
 
             if (message) {
-                if (typeof content === "string") {
-                    return message.reply(content);
-                }
-                return message.reply(content);
+                if (typeof content === "string") return message.reply(content).catch(() => {});
+                return message.reply(content).catch(() => {});
             }
         };
 
-        // --- Subcommand Parsing ---
+        // --- Parse subcommand ---
         let sub = null, trigger, response, file;
 
         if (interaction) {
@@ -89,7 +100,7 @@ module.exports = {
                     new EmbedBuilder()
                         .setColor("Green")
                         .setTitle("✅ Autoresponse Added")
-                        .setDescription(`**Trigger:** \`${trigger}\`\n**Response:** ${response || "(attachment)"} `)
+                        .setDescription(`**Trigger:** \`${trigger}\`\n**Response:** ${response || `[Attachment](${file.url})`} `)
                         .setFooter({ text: `Added by ${user.tag}` })
                         .setTimestamp()
                 ]
@@ -117,7 +128,7 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor("Blue")
-                .setTitle("💓 Autoresponses")
+                .setTitle("👏🏻 Autoresponses")
                 .setDescription(description || "⭐ No autoresponses set.")
                 .setTimestamp();
 
