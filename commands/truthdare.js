@@ -4,21 +4,21 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("truthdare")
     .setDescription("Generate a Truth-Dare panel"),
-  
+
   async execute({ interaction, message, isPrefix, safeReply }) {
-    // Create embed
+    // Embed for everyone
     const embed = new EmbedBuilder()
       .setColor("Purple")
       .setTitle("🤞🏻 Truth or Dare")
       .setDescription("Click a button below to choose your challenge!")
-      .setThumbnail(isPrefix ? interaction?.client?.user.displayAvatarURL() : interaction.client.user.displayAvatarURL())
+      .setThumbnail(interaction?.client.user.displayAvatarURL())
       .setFooter({
         text: `Requested by ${isPrefix ? message.author.tag : interaction.user.tag}`,
         iconURL: isPrefix ? message.author.displayAvatarURL() : interaction.user.displayAvatarURL(),
       })
       .setTimestamp();
 
-    // Create buttons
+    // Buttons
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("td_truth")
@@ -34,10 +34,11 @@ module.exports = {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    // Send response
+    // Send publicly
     if (isPrefix && message) {
       return message.channel.send({ embeds: [embed], components: [row] }).catch(() => {});
     } else if (interaction && safeReply) {
+      // Don't make ephemeral
       return safeReply({ embeds: [embed], components: [row] });
     }
   },
