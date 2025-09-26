@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 async function handleTruthDare(interaction, safeReply) {
   try {
@@ -12,17 +12,25 @@ async function handleTruthDare(interaction, safeReply) {
     const res = await fetch(`https://api.truthordarebot.xyz/v1/${type}`);
     const data = await res.json();
 
+    // Create embed
     const embed = new EmbedBuilder()
-      .setTitle(`✨ ${type.toUpperCase()}`)
+      .setTitle(`♥ ${type.toUpperCase()}`)
       .setDescription(`${interaction.user} got: ${data.question || data.text}`)
       .setColor(type === "truth" ? "Blue" : type === "dare" ? "Red" : "Random")
       .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
       .setTimestamp();
 
-    // Send publicly in the channel
-    await interaction.channel.send({ embeds: [embed] }).catch(() => {});
+    // Create buttons row
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("td_truth").setLabel("Truth").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("td_dare").setLabel("Dare").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("td_random").setLabel("Random").setStyle(ButtonStyle.Primary)
+    );
 
-    // Acknowledge button click to avoid "interaction failed"
+    // Send publicly
+    await interaction.channel.send({ embeds: [embed], components: [row] }).catch(() => {});
+
+    // Acknowledge interaction to avoid "This interaction failed"
     await interaction.deferUpdate().catch(() => {});
 
   } catch (err) {
