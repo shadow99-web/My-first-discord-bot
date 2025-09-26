@@ -38,17 +38,14 @@ module.exports = (client, blockHelpers) => {
         }
 
         try {
-          // ✅ If your command may take >3s, defer reply first
-          if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
-
+          // Command should use safeReply only
           await command.execute({
             client,
             interaction,
-            message: null,
+            safeReply,
             args: [],
             isPrefix: false,
           });
-
         } catch (err) {
           console.error(`❌ Error in command ${interaction.commandName}:`, err);
           await safeReply({ content: "⚠️ Something went wrong while executing the command!", ephemeral: true });
@@ -61,8 +58,7 @@ module.exports = (client, blockHelpers) => {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
         try {
-          if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
-          await command.execute({ client, interaction, message: null, args: [], isPrefix: false });
+          await command.execute({ client, interaction, safeReply, args: [], isPrefix: false });
         } catch (err) {
           console.error(`❌ Context menu error ${interaction.commandName}:`, err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
@@ -73,7 +69,7 @@ module.exports = (client, blockHelpers) => {
       // ---------- Buttons ----------
       if (interaction.isButton()) {
         try {
-          if (interaction.customId === "ticket_close_button") await handleTicketClose(interaction);
+          if (interaction.customId === "ticket_close_button") await handleTicketClose(interaction, safeReply);
         } catch (err) {
           console.error("❌ Button interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
@@ -84,7 +80,7 @@ module.exports = (client, blockHelpers) => {
       // ---------- Select Menus ----------
       if (interaction.isStringSelectMenu()) {
         try {
-          if (interaction.customId === "ticket_menu") await handleTicketMenu(interaction);
+          if (interaction.customId === "ticket_menu") await handleTicketMenu(interaction, safeReply);
         } catch (err) {
           console.error("❌ Select menu interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
