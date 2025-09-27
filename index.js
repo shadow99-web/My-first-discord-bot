@@ -69,13 +69,9 @@ client.afk = new Map();
 const { DisTube } = require("distube");
 const { SpotifyPlugin } = require("@distube/spotify");
 client.distube = new DisTube(client, {
-    emitNewSongOnly: true,
-    leaveOnFinish: true,
-    leaveOnStop: true,
+    emitNewSongOnly: true, // keep this if you want only new song events
     plugins: [
-        
-       new SpotifyPlugin()
-      
+        new SpotifyPlugin()
     ]
 });
 
