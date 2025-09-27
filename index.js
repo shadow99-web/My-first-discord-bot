@@ -67,17 +67,13 @@ client.afk = new Map();
 // ====================
 const { DisTube } = require("distube");
 const { SpotifyPlugin } = require("@distube/spotify");
-const { SoundCloudPlugin } = require("@distube/soundcloud");
-const { YtDlpPlugin } = require("@distube/yt-dlp");
-
 client.distube = new DisTube(client, {
     emitNewSongOnly: true,
     leaveOnFinish: true,
     leaveOnStop: true,
     plugins: [
         new SpotifyPlugin({ emitEventsAfterFetching: true }),
-        new SoundCloudPlugin(),
-        new YtDlpPlugin()
+      
     ]
 });
 
