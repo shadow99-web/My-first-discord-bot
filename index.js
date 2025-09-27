@@ -62,7 +62,37 @@ const client = new Client({
 client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map();
+// ====================
+// 🎵 Music Setup (DisTube)
+// ====================
+const { DisTube } = require("distube");
+const { SpotifyPlugin } = require("@distube/spotify");
+const { SoundCloudPlugin } = require("@distube/soundcloud");
+const { YtDlpPlugin } = require("@distube/yt-dlp");
 
+client.distube = new DisTube(client, {
+    emitNewSongOnly: true,
+    leaveOnFinish: true,
+    leaveOnStop: true,
+    plugins: [
+        new SpotifyPlugin({ emitEventsAfterFetching: true }),
+        new SoundCloudPlugin(),
+        new YtDlpPlugin()
+    ]
+});
+
+// DisTube Events
+client.distube
+    .on("playSong", (queue, song) =>
+        queue.textChannel?.send(`🎶 | Playing: **${song.name}** - \`${song.formattedDuration}\``)
+    )
+    .on("addSong", (queue, song) =>
+        queue.textChannel?.send(`➕ | Added: **${song.name}** - \`${song.formattedDuration}\``)
+    )
+    .on("error", (channel, e) => {
+        if (channel) channel.send(`⚠️ | Error: \`${e.toString().slice(0, 1974)}\``);
+        else console.error(e);
+    });
 // ====================
 // 📦 Load Utilities
 const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
