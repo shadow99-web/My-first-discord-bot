@@ -24,8 +24,8 @@ module.exports = {
   description: "Translate text into another language (default → English).",
   usage: "!translate <target_lang(optional)> <text or reply to message>",
 
-  // ---------- Slash Command ----------
-  slash: new SlashCommandBuilder()
+  // ✅ For loader: data must exist
+  data: new SlashCommandBuilder()
     .setName("translate")
     .setDescription("Translate text into another language")
     .addStringOption(option =>
@@ -47,19 +47,17 @@ module.exports = {
       await fetchLanguages();
     }
 
-    let targetLang, text;
+    let targetLang = "en"; // default
+    let text;
 
     if (isPrefix) {
-      // ---------- Prefix command ----------
       if (args.length === 0 && !message.reference) {
         return message.reply("❌ Please provide text or reply to a message.");
       }
 
-      // If first arg is a valid language code
+      // Check if first arg is a valid language code
       if (args.length > 0 && LANG_CACHE[args[0]]) {
         targetLang = args.shift();
-      } else {
-        targetLang = "en"; // default
       }
 
       if (message.reference) {
@@ -73,7 +71,7 @@ module.exports = {
         text = args.join(" ");
       }
     } else {
-      // ---------- Slash command ----------
+      // Slash command
       targetLang = interaction.options.getString("target") || "en";
       text = interaction.options.getString("text");
 
@@ -87,7 +85,6 @@ module.exports = {
       }
     }
 
-    // ---------- Call LibreTranslate API ----------
     try {
       const res = await fetch("https://libretranslate.de/translate", {
         method: "POST",
@@ -101,11 +98,8 @@ module.exports = {
       });
 
       const data = await res.json();
-      if (!data?.translatedText) {
-        throw new Error("Translation failed.");
-      }
+      if (!data?.translatedText) throw new Error("Translation failed.");
 
-      // ---------- Build Embed ----------
       const blueHeart = "<a:blue_heart:1414309560231002194>";
       const embed = new EmbedBuilder()
         .setColor("Blue")
