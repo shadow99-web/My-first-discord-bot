@@ -72,7 +72,8 @@ client.distube = new DisTube(client, {
     leaveOnFinish: true,
     leaveOnStop: true,
     plugins: [
-        new SpotifyPlugin({ emitEventsAfterFetching: true }),
+        
+       new SpotifyPlugin({ emitEventsAfterFetching: true })
       
     ]
 });
