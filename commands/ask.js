@@ -40,21 +40,22 @@ module.exports = {
                 if (!question) return reply("⚠️ Please provide a question!");
             }
 
-            // Call Libre AI endpoint
-            const res = await fetch("https://libreapi.de/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: question })
-            });
+            // Call AffiliatePlus chatbot API
+            const url = `https://api.affiliateplus.xyz/api/chatbot?message=${encodeURIComponent(question)}&botname=Bot&ownername=Owner`;
 
-            // Validate JSON response
-            const contentType = res.headers.get("content-type") || "";
-            if (!contentType.includes("application/json")) {
-                return reply("⚠️ AI API returned invalid response (HTML). Try again later.");
+            let aiReply = "⚠️ AI did not respond.";
+            try {
+                const res = await fetch(url);
+                const contentType = res.headers.get("content-type") || "";
+                if (!contentType.includes("application/json")) {
+                    return reply("⚠️ AI API returned invalid response. Try again later.");
+                }
+                const data = await res.json();
+                aiReply = data.message || aiReply;
+            } catch (err) {
+                console.error("❌ AI fetch failed:", err);
+                return reply("⚠️ Cannot reach AI API from this host.");
             }
-
-            const data = await res.json();
-            const aiReply = data.response || "⚠️ AI did not respond.";
 
             // Embed reply
             const embed = new EmbedBuilder()
@@ -70,7 +71,7 @@ module.exports = {
 
         } catch (err) {
             console.error("❌ Ask AI command error:", err);
-            return reply("❌ Something went wrong while contacting the AI!");
+            return reply("❌ Something went wrong while processing your request!");
         }
     }
 };
