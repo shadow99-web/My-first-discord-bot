@@ -25,7 +25,7 @@ module.exports = {
         };
 
         try {
-            // Get user input
+            // ---------- Get user input ----------
             let question;
             if (isPrefix) {
                 if (message.reference) {
@@ -40,7 +40,7 @@ module.exports = {
                 if (!question) return reply("⚠️ Please provide a question!");
             }
 
-            // Call AffiliatePlus chatbot API
+            // ---------- Call AffiliatePlus chatbot API ----------
             const url = `https://api.affiliateplus.xyz/api/chatbot?message=${encodeURIComponent(question)}&botname=Bot&ownername=Owner`;
 
             let aiReply = "⚠️ AI did not respond.";
@@ -57,7 +57,7 @@ module.exports = {
                 return reply("⚠️ Cannot reach AI API from this host.");
             }
 
-            // Embed reply
+            // ---------- Embed reply ----------
             const embed = new EmbedBuilder()
                 .setTitle(`${BLUE_HEART} Ask AI ${BLUE_HEART}`)
                 .addFields(
