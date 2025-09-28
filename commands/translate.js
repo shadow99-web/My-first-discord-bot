@@ -1,24 +1,20 @@
 // ============================
-// ⚡ Smart Translation Command
+// ⚡ Smart Translation Command (No OpenAI, No node-fetch)
 // Prefix + Slash + Auto Source + Auto Target
 // Embedded with Blue Heart Emoji
 // ============================
 
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const OpenAI = require("openai");
-const { Translate } = require("@vitalets/google-translate-api"); // Optional Google fallback
+const Translate = require("@vitalets/google-translate-api"); // Google Translate
+require("dotenv").config();
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
-
-// Your blue heart emoji
+// Blue heart animated emoji
 const BLUE_HEART = "<a:blue_heart:1414309560231002194>";
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("translate")
-        .setDescription("Smart translation with auto-detect languages")
+        .setDescription("Smart translation with auto-detect languages (No OpenAI)")
         .addStringOption(option =>
             option.setName("text")
                 .setDescription("Text to translate")
@@ -32,7 +28,6 @@ module.exports = {
         let text, targetLang;
 
         if (prefixCommand) {
-            // Example: !translate hi Hello world OR !translate Hello world
             const args = interaction.content.split(" ").slice(1);
             if (args.length === 0) return interaction.reply(`Usage: !translate <lang?> <text>`);
 
@@ -52,26 +47,25 @@ module.exports = {
         // ====================
         if (!targetLang) {
             try {
-                const detectResponse = await fetch("https://libretranslate.de/detect", {
+                const detectResp = await fetch("https://libretranslate.de/detect", {
                     method: "POST",
                     body: JSON.stringify({ q: text }),
                     headers: { "Content-Type": "application/json" }
                 });
-                const detectData = await detectResponse.json();
-                // If source is English, target Hindi; else target English
+                const detectData = await detectResp.json();
                 const sourceLang = detectData[0]?.language || "en";
-                targetLang = sourceLang === "en" ? "hi" : "en";
-            } catch (detectError) {
+                targetLang = sourceLang === "en" ? "hi" : "en"; // default fallback
+            } catch (err) {
                 console.warn("Language detection failed, defaulting to English");
                 targetLang = "en";
             }
         }
 
         // ====================
-        // 1️⃣ Try LibreTranslate
+        // 1️⃣ LibreTranslate
         // ====================
         try {
-            const response = await fetch("https://libretranslate.de/translate", {
+            const resp = await fetch("https://libretranslate.de/translate", {
                 method: "POST",
                 body: JSON.stringify({
                     q: text,
@@ -81,8 +75,7 @@ module.exports = {
                 }),
                 headers: { "Content-Type": "application/json" }
             });
-
-            const data = await response.json();
+            const data = await resp.json();
             if (data.translatedText) {
                 const embed = new EmbedBuilder()
                     .setTitle(`${BLUE_HEART} Translation (LibreTranslate) ${BLUE_HEART}`)
@@ -98,7 +91,7 @@ module.exports = {
         }
 
         // ====================
-        // 2️⃣ Try Google Translate
+        // 2️⃣ Google Translate
         // ====================
         try {
             const googleData = await Translate(text, { to: targetLang });
@@ -117,32 +110,30 @@ module.exports = {
         }
 
         // ====================
-        // 3️⃣ Fallback: OpenAI GPT
+        // 3️⃣ DeepL Fallback (optional, free-tier API)
         // ====================
-        try {
-            const gptResponse = await openai.chat.completions.create({
-                model: "gpt-5-mini",
-                messages: [
-                    { role: "system", content: "You are a professional translator." },
-                    { role: "user", content: `Translate the following text to ${targetLang} while preserving emojis, formatting, and context:\n\n${text}` }
-                ]
-            });
-
-            const translatedText = gptResponse.choices[0].message.content;
-
-            const embed = new EmbedBuilder()
-                .setTitle(`${BLUE_HEART} Translation (OpenAI Fallback) ${BLUE_HEART}`)
-                .addFields(
-                    { name: "Original", value: text },
-                    { name: "Translated", value: translatedText }
-                )
-                .setColor("Green");
-
-            return interaction.reply({ embeds: [embed] });
-
-        } catch (gptError) {
-            console.error("OpenAI translation failed:", gptError.message);
-            return interaction.reply(`⚠️ Translation failed completely: ${gptError.message}`);
+        if (process.env.DEEPL_API_KEY) {
+            try {
+                const deeplResp = await fetch(`https://api-free.deepl.com/v2/translate?auth_key=${process.env.DEEPL_API_KEY}&text=${encodeURIComponent(text)}&target_lang=${targetLang.toUpperCase()}`);
+                const deeplData = await deeplResp.json();
+                if (deeplData.translations && deeplData.translations[0].text) {
+                    const embed = new EmbedBuilder()
+                        .setTitle(`${BLUE_HEART} Translation (DeepL) ${BLUE_HEART}`)
+                        .addFields(
+                            { name: "Original", value: text },
+                            { name: "Translated", value: deeplData.translations[0].text }
+                        )
+                        .setColor("Purple");
+                    return interaction.reply({ embeds: [embed] });
+                }
+            } catch (deeplError) {
+                console.warn("DeepL translation failed:", deeplError.message);
+            }
         }
+
+        // ====================
+        // All engines failed
+        // ====================
+        return interaction.reply(`⚠️ Translation failed: All engines could not process the text.`);
     }
 };
