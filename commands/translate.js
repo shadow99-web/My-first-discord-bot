@@ -6,7 +6,7 @@ let LANG_CACHE = {};
 
 async function fetchLanguages() {
   try {
-    const res = await fetch("https://libretranslate.de/languages"); // ✅ Native fetch
+    const res = await fetch("https://libretranslate.de/languages");
     const langs = await res.json();
     LANG_CACHE = {};
     langs.forEach(lang => {
@@ -24,7 +24,7 @@ module.exports = {
   description: "Translate text into another language (default → English).",
   usage: "!translate <target_lang(optional)> <text or reply to message>",
 
-  // ✅ For loader: data must exist
+  // ✅ Slash command setup
   data: new SlashCommandBuilder()
     .setName("translate")
     .setDescription("Translate text into another language")
@@ -42,7 +42,7 @@ module.exports = {
     ),
 
   async execute({ client, message, interaction, args, isPrefix }) {
-    // Ensure we have language cache
+    // Load languages if cache is empty
     if (Object.keys(LANG_CACHE).length === 0) {
       await fetchLanguages();
     }
@@ -51,11 +51,12 @@ module.exports = {
     let text;
 
     if (isPrefix) {
+      // --- Prefix command ---
       if (args.length === 0 && !message.reference) {
         return message.reply("❌ Please provide text or reply to a message.");
       }
 
-      // Check if first arg is a valid language code
+      // First arg might be a valid language code
       if (args.length > 0 && LANG_CACHE[args[0]]) {
         targetLang = args.shift();
       }
@@ -63,6 +64,9 @@ module.exports = {
       if (message.reference) {
         try {
           const refMsg = await message.channel.messages.fetch(message.reference.messageId);
+          if (!refMsg?.content) {
+            return message.reply("⚠️ The replied message has no text to translate.");
+          }
           text = refMsg.content;
         } catch {
           return message.reply("❌ Could not fetch the replied message.");
@@ -71,21 +75,17 @@ module.exports = {
         text = args.join(" ");
       }
     } else {
-      // Slash command
+      // --- Slash command ---
       targetLang = interaction.options.getString("target") || "en";
       text = interaction.options.getString("text");
 
-      if (!text && interaction.reference) {
-        const refMsg = await interaction.channel.messages.fetch(interaction.reference.messageId).catch(() => null);
-        text = refMsg?.content;
-      }
-
       if (!text) {
-        return interaction.reply({ content: "❌ Please provide text or reply to a message.", ephemeral: true });
+        return interaction.reply({ content: "❌ Please provide text to translate.", ephemeral: true });
       }
     }
 
     try {
+      // Call API
       const res = await fetch("https://libretranslate.de/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,14 +101,30 @@ module.exports = {
       if (!data?.translatedText) throw new Error("Translation failed.");
 
       const blueHeart = "<a:blue_heart:1414309560231002194>";
+
+      // ✅ Handle long texts gracefully
+      const original = text.length > 1000 ? text.slice(0, 1000) + "..." : text;
+      const translated = data.translatedText.length > 1000
+        ? data.translatedText.slice(0, 1000) + "..."
+        : data.translatedText;
+
+      // ✅ Add detected language
+      const detectedLang =
+        data.detectedLanguage?.language &&
+        (LANG_CACHE[data.detectedLanguage.language] || data.detectedLanguage.language);
+
       const embed = new EmbedBuilder()
         .setColor("Blue")
         .setTitle("🌍 Translation Result")
         .addFields(
-          { name: "Original", value: `\`\`\`${text}\`\`\`` },
-          { name: `Translated (${LANG_CACHE[targetLang] || targetLang})`, value: `\`\`\`${data.translatedText}\`\`\`` }
+          { name: "Original", value: `\`\`\`${original}\`\`\`` },
+          { name: `Translated (${LANG_CACHE[targetLang] || targetLang})`, value: `\`\`\`${translated}\`\`\`` }
         )
-        .setFooter({ text: `${blueHeart} Translation powered by LibreTranslate` });
+        .setFooter({
+          text: `${blueHeart} Translation powered by LibreTranslate${
+            detectedLang ? ` | Detected: ${detectedLang}` : ""
+          }`,
+        });
 
       if (isPrefix) {
         await message.reply({ embeds: [embed] });
@@ -117,10 +133,11 @@ module.exports = {
       }
     } catch (err) {
       console.error("❌ Translate error:", err);
+      const errorMsg = "⚠️ Failed to translate text. Please try again later.";
       if (isPrefix) {
-        await message.reply("⚠️ Failed to translate text.");
+        await message.reply(errorMsg);
       } else {
-        await interaction.reply({ content: "⚠️ Failed to translate text.", ephemeral: true });
+        await interaction.reply({ content: errorMsg, ephemeral: true });
       }
     }
   },
