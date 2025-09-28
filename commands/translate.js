@@ -1,27 +1,25 @@
 // ============================
-// ⚡ Smart Translation Command (No OpenAI, No node-fetch)
-// Prefix + Slash + Auto Source + Auto Target
-// Embedded with Blue Heart Emoji
+// ⚡ Smart Translate Command
+// Auto-reply support + Fallback engines + Blue Heart Emoji
 // ============================
 
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const Translate = require("@vitalets/google-translate-api"); // Google Translate
+const Translate = require("@vitalets/google-translate-api");
 require("dotenv").config();
 
-// Blue heart animated emoji
 const BLUE_HEART = "<a:blue_heart:1414309560231002194>";
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("translate")
-        .setDescription("Smart translation with auto-detect languages (No OpenAI)")
+        .setDescription("Translate a message (auto-detect source/target, supports replies)")
         .addStringOption(option =>
             option.setName("text")
-                .setDescription("Text to translate")
-                .setRequired(true))
+                .setDescription("Text to translate (optional if replying)")
+                .setRequired(false))
         .addStringOption(option =>
             option.setName("lang")
-                .setDescription("Target language (optional, auto-detect if empty)")
+                .setDescription("Target language (optional)")
                 .setRequired(false)),
 
     async execute(interaction, client, prefixCommand = false) {
@@ -29,22 +27,38 @@ module.exports = {
 
         if (prefixCommand) {
             const args = interaction.content.split(" ").slice(1);
-            if (args.length === 0) return interaction.reply(`Usage: !translate <lang?> <text>`);
 
-            if (args[0].length === 2) {
-                targetLang = args.shift();
+            // Check if replying to a message
+            if (interaction.reference) {
+                const repliedMessage = await interaction.channel.messages.fetch(interaction.reference.messageId);
+                text = repliedMessage.content;
             } else {
-                targetLang = null; // auto detect
+                text = args.join(" ");
             }
-            text = args.join(" ");
+
+            // Optional target language
+            if (args[0] && args[0].length === 2) {
+                targetLang = args.shift();
+                text = text || args.join(" ");
+            }
+
+            if (!text) return interaction.reply("⚠️ No text found to translate!");
+
         } else {
+            // Slash command
             text = interaction.options.getString("text");
+
+            // If replying, use replied message content
+            if (!text && interaction.message?.reference) {
+                const repliedMessage = await interaction.channel.messages.fetch(interaction.message.reference.messageId);
+                text = repliedMessage.content;
+            }
+
             targetLang = interaction.options.getString("lang");
+            if (!text) return interaction.reply("⚠️ No text found to translate!");
         }
 
-        // ====================
-        // Auto-detect target language using LibreTranslate detection API
-        // ====================
+        // Auto-detect target language if not provided
         if (!targetLang) {
             try {
                 const detectResp = await fetch("https://libretranslate.de/detect", {
@@ -54,9 +68,8 @@ module.exports = {
                 });
                 const detectData = await detectResp.json();
                 const sourceLang = detectData[0]?.language || "en";
-                targetLang = sourceLang === "en" ? "hi" : "en"; // default fallback
-            } catch (err) {
-                console.warn("Language detection failed, defaulting to English");
+                targetLang = sourceLang === "en" ? "hi" : "en";
+            } catch {
                 targetLang = "en";
             }
         }
@@ -110,7 +123,7 @@ module.exports = {
         }
 
         // ====================
-        // 3️⃣ DeepL Fallback (optional, free-tier API)
+        // 3️⃣ DeepL Fallback (optional)
         // ====================
         if (process.env.DEEPL_API_KEY) {
             try {
@@ -134,6 +147,6 @@ module.exports = {
         // ====================
         // All engines failed
         // ====================
-        return interaction.reply(`⚠️ Translation failed: All engines could not process the text.`);
+        return interaction.reply("⚠️ Translation failed: All engines could not process the text.");
     }
 };
