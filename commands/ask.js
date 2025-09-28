@@ -1,13 +1,5 @@
-// ============================
-// ⚡ Ask AI Command
-// Supports Prefix + Slash, Replies, Embed Output
-// ============================
-
+// commands/ask.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-require("dotenv").config();
-
-// Optional AI endpoint (Libre, GPT, or custom API)
-const AI_API_URL = "https://api.affiliateplus.xyz/api/chatbot"; // Example free API
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -21,7 +13,7 @@ module.exports = {
     async execute({ client, message, interaction, args, isPrefix, safeReply }) {
         const BLUE_HEART = "<a:blue_heart:1414309560231002194>";
 
-        // ---------- Unified reply helper ----------
+        // Unified reply helper
         const reply = async (content) => {
             try {
                 if (isPrefix) return await message.reply(content).catch(() => {});
@@ -33,7 +25,7 @@ module.exports = {
         };
 
         try {
-            // ---------- Get user input ----------
+            // Get user input
             let question;
             if (isPrefix) {
                 if (message.reference) {
@@ -42,19 +34,29 @@ module.exports = {
                 } else {
                     question = args.join(" ");
                 }
-                if (!question) return reply("⚠️ Please provide a question for the AI!");
+                if (!question) return reply("⚠️ Please provide a question!");
             } else {
                 question = interaction.options.getString("question");
-                if (!question) return reply("⚠️ Please provide a question for the AI!");
+                if (!question) return reply("⚠️ Please provide a question!");
             }
 
-            // ---------- Call AI API ----------
-            const url = `${AI_API_URL}?message=${encodeURIComponent(question)}&botname=Bot&ownername=Owner`;
-            const res = await fetch(url);
-            const data = await res.json();
-            const aiReply = data.message || "⚠️ AI did not respond.";
+            // Call Libre AI endpoint
+            const res = await fetch("https://libreapi.de/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: question })
+            });
 
-            // ---------- Embed Response ----------
+            // Validate JSON response
+            const contentType = res.headers.get("content-type") || "";
+            if (!contentType.includes("application/json")) {
+                return reply("⚠️ AI API returned invalid response (HTML). Try again later.");
+            }
+
+            const data = await res.json();
+            const aiReply = data.response || "⚠️ AI did not respond.";
+
+            // Embed reply
             const embed = new EmbedBuilder()
                 .setTitle(`${BLUE_HEART} Ask AI ${BLUE_HEART}`)
                 .addFields(
