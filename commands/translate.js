@@ -5,7 +5,6 @@
 // ============================
 
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const fetch = require("node-fetch");
 const OpenAI = require("openai");
 const { Translate } = require("@vitalets/google-translate-api"); // Optional Google fallback
 
