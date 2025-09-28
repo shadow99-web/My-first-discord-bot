@@ -40,18 +40,23 @@ module.exports = {
                 if (!question) return reply("⚠️ Please provide a question!");
             }
 
-            // ---------- Call AffiliatePlus chatbot API ----------
-            const url = `https://api.affiliateplus.xyz/api/chatbot?message=${encodeURIComponent(question)}&botname=Bot&ownername=Owner`;
-
+            // ---------- Call HuggingFace Inference API ----------
             let aiReply = "⚠️ AI did not respond.";
             try {
-                const res = await fetch(url);
+                const res = await fetch("https://hf.space/embed/WarriorTroll/discord-bot-api/+/api/predict/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ data: [question] })
+                });
+
                 const contentType = res.headers.get("content-type") || "";
                 if (!contentType.includes("application/json")) {
                     return reply("⚠️ AI API returned invalid response. Try again later.");
                 }
+
                 const data = await res.json();
-                aiReply = data.message || aiReply;
+                aiReply = data?.data?.[0] || aiReply;
+
             } catch (err) {
                 console.error("❌ AI fetch failed:", err);
                 return reply("⚠️ Cannot reach AI API from this host.");
