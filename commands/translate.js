@@ -1,144 +1,149 @@
-// commands/translate.js
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+// ============================
+// ⚡ Smart Translation Command
+// Prefix + Slash + Auto Source + Auto Target
+// Embedded with Blue Heart Emoji
+// ============================
 
-// Cache supported languages
-let LANG_CACHE = {};
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const fetch = require("node-fetch");
+const OpenAI = require("openai");
+const { Translate } = require("@vitalets/google-translate-api"); // Optional Google fallback
 
-async function fetchLanguages() {
-  try {
-    const res = await fetch("https://libretranslate.de/languages");
-    const langs = await res.json();
-    LANG_CACHE = {};
-    langs.forEach(lang => {
-      LANG_CACHE[lang.code] = lang.name;
-    });
-    return LANG_CACHE;
-  } catch (err) {
-    console.error("❌ Failed to fetch languages:", err);
-    return LANG_CACHE; // fallback
-  }
-}
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+// Your blue heart emoji
+const BLUE_HEART = "<a:blue_heart:1414309560231002194>";
 
 module.exports = {
-  name: "translate",
-  description: "Translate text into another language (default → English).",
-  usage: "!translate <target_lang(optional)> <text or reply to message>",
+    data: new SlashCommandBuilder()
+        .setName("translate")
+        .setDescription("Smart translation with auto-detect languages")
+        .addStringOption(option =>
+            option.setName("text")
+                .setDescription("Text to translate")
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName("lang")
+                .setDescription("Target language (optional, auto-detect if empty)")
+                .setRequired(false)),
 
-  // ✅ Slash command setup
-  data: new SlashCommandBuilder()
-    .setName("translate")
-    .setDescription("Translate text into another language")
-    .addStringOption(option =>
-      option
-        .setName("target")
-        .setDescription("Target language (default: English, e.g., es, fr, hi)")
-        .setRequired(false)
-    )
-    .addStringOption(option =>
-      option
-        .setName("text")
-        .setDescription("Text to translate")
-        .setRequired(false)
-    ),
+    async execute(interaction, client, prefixCommand = false) {
+        let text, targetLang;
 
-  async execute({ client, message, interaction, args, isPrefix }) {
-    // Load languages if cache is empty
-    if (Object.keys(LANG_CACHE).length === 0) {
-      await fetchLanguages();
-    }
+        if (prefixCommand) {
+            // Example: !translate hi Hello world OR !translate Hello world
+            const args = interaction.content.split(" ").slice(1);
+            if (args.length === 0) return interaction.reply(`Usage: !translate <lang?> <text>`);
 
-    let targetLang = "en"; // default
-    let text;
-
-    if (isPrefix) {
-      // --- Prefix command ---
-      if (args.length === 0 && !message.reference) {
-        return message.reply("❌ Please provide text or reply to a message.");
-      }
-
-      // First arg might be a valid language code
-      if (args.length > 0 && LANG_CACHE[args[0]]) {
-        targetLang = args.shift();
-      }
-
-      if (message.reference) {
-        try {
-          const refMsg = await message.channel.messages.fetch(message.reference.messageId);
-          if (!refMsg?.content) {
-            return message.reply("⚠️ The replied message has no text to translate.");
-          }
-          text = refMsg.content;
-        } catch {
-          return message.reply("❌ Could not fetch the replied message.");
+            if (args[0].length === 2) {
+                targetLang = args.shift();
+            } else {
+                targetLang = null; // auto detect
+            }
+            text = args.join(" ");
+        } else {
+            text = interaction.options.getString("text");
+            targetLang = interaction.options.getString("lang");
         }
-      } else {
-        text = args.join(" ");
-      }
-    } else {
-      // --- Slash command ---
-      targetLang = interaction.options.getString("target") || "en";
-      text = interaction.options.getString("text");
 
-      if (!text) {
-        return interaction.reply({ content: "❌ Please provide text to translate.", ephemeral: true });
-      }
+        // ====================
+        // Auto-detect target language using LibreTranslate detection API
+        // ====================
+        if (!targetLang) {
+            try {
+                const detectResponse = await fetch("https://libretranslate.de/detect", {
+                    method: "POST",
+                    body: JSON.stringify({ q: text }),
+                    headers: { "Content-Type": "application/json" }
+                });
+                const detectData = await detectResponse.json();
+                // If source is English, target Hindi; else target English
+                const sourceLang = detectData[0]?.language || "en";
+                targetLang = sourceLang === "en" ? "hi" : "en";
+            } catch (detectError) {
+                console.warn("Language detection failed, defaulting to English");
+                targetLang = "en";
+            }
+        }
+
+        // ====================
+        // 1️⃣ Try LibreTranslate
+        // ====================
+        try {
+            const response = await fetch("https://libretranslate.de/translate", {
+                method: "POST",
+                body: JSON.stringify({
+                    q: text,
+                    source: "auto",
+                    target: targetLang,
+                    format: "text"
+                }),
+                headers: { "Content-Type": "application/json" }
+            });
+
+            const data = await response.json();
+            if (data.translatedText) {
+                const embed = new EmbedBuilder()
+                    .setTitle(`${BLUE_HEART} Translation (LibreTranslate) ${BLUE_HEART}`)
+                    .addFields(
+                        { name: "Original", value: text },
+                        { name: "Translated", value: data.translatedText }
+                    )
+                    .setColor("Blue");
+                return interaction.reply({ embeds: [embed] });
+            }
+        } catch (libreError) {
+            console.warn("LibreTranslate failed:", libreError.message);
+        }
+
+        // ====================
+        // 2️⃣ Try Google Translate
+        // ====================
+        try {
+            const googleData = await Translate(text, { to: targetLang });
+            if (googleData && googleData.text) {
+                const embed = new EmbedBuilder()
+                    .setTitle(`${BLUE_HEART} Translation (Google Translate) ${BLUE_HEART}`)
+                    .addFields(
+                        { name: "Original", value: text },
+                        { name: "Translated", value: googleData.text }
+                    )
+                    .setColor("Orange");
+                return interaction.reply({ embeds: [embed] });
+            }
+        } catch (googleError) {
+            console.warn("Google Translate failed:", googleError.message);
+        }
+
+        // ====================
+        // 3️⃣ Fallback: OpenAI GPT
+        // ====================
+        try {
+            const gptResponse = await openai.chat.completions.create({
+                model: "gpt-5-mini",
+                messages: [
+                    { role: "system", content: "You are a professional translator." },
+                    { role: "user", content: `Translate the following text to ${targetLang} while preserving emojis, formatting, and context:\n\n${text}` }
+                ]
+            });
+
+            const translatedText = gptResponse.choices[0].message.content;
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${BLUE_HEART} Translation (OpenAI Fallback) ${BLUE_HEART}`)
+                .addFields(
+                    { name: "Original", value: text },
+                    { name: "Translated", value: translatedText }
+                )
+                .setColor("Green");
+
+            return interaction.reply({ embeds: [embed] });
+
+        } catch (gptError) {
+            console.error("OpenAI translation failed:", gptError.message);
+            return interaction.reply(`⚠️ Translation failed completely: ${gptError.message}`);
+        }
     }
-
-    try {
-      // Call API
-      const res = await fetch("https://libretranslate.de/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q: text,
-          source: "auto",
-          target: targetLang,
-          format: "text",
-        }),
-      });
-
-      const data = await res.json();
-      if (!data?.translatedText) throw new Error("Translation failed.");
-
-      const blueHeart = "<a:blue_heart:1414309560231002194>";
-
-      // ✅ Handle long texts gracefully
-      const original = text.length > 1000 ? text.slice(0, 1000) + "..." : text;
-      const translated = data.translatedText.length > 1000
-        ? data.translatedText.slice(0, 1000) + "..."
-        : data.translatedText;
-
-      // ✅ Add detected language
-      const detectedLang =
-        data.detectedLanguage?.language &&
-        (LANG_CACHE[data.detectedLanguage.language] || data.detectedLanguage.language);
-
-      const embed = new EmbedBuilder()
-        .setColor("Blue")
-        .setTitle("🌍 Translation Result")
-        .addFields(
-          { name: "Original", value: `\`\`\`${original}\`\`\`` },
-          { name: `Translated (${LANG_CACHE[targetLang] || targetLang})`, value: `\`\`\`${translated}\`\`\`` }
-        )
-        .setFooter({
-          text: `${blueHeart} Translation powered by LibreTranslate${
-            detectedLang ? ` | Detected: ${detectedLang}` : ""
-          }`,
-        });
-
-      if (isPrefix) {
-        await message.reply({ embeds: [embed] });
-      } else {
-        await interaction.reply({ embeds: [embed] });
-      }
-    } catch (err) {
-      console.error("❌ Translate error:", err);
-      const errorMsg = "⚠️ Failed to translate text. Please try again later.";
-      if (isPrefix) {
-        await message.reply(errorMsg);
-      } else {
-        await interaction.reply({ content: errorMsg, ephemeral: true });
-      }
-    }
-  },
 };
