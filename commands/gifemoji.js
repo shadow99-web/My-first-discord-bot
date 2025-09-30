@@ -5,8 +5,9 @@ const {
   ButtonStyle,
   PermissionsBitField,
 } = require("discord.js");
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY"; // safer than hardcoding
+const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
 module.exports = {
   name: "gifemoji",
@@ -25,34 +26,38 @@ module.exports = {
     if (!search)
       return isPrefix
         ? message.reply("❌ Provide a search term!")
-        : interaction.reply("❌ Provide a search term!");
+        : interaction.reply({ content: "❌ Provide a search term!", ephemeral: true });
 
     // 🔍 Fetch GIFs from Tenor
-    const res = await fetch(
-      `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
-        search
-      )}&key=${TENOR_API}&limit=10&media_filter=gif`
-    );
-    const data = await res.json();
-
-    if (!data.results?.length) {
+    let data;
+    try {
+      const res = await fetch(
+        `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
+          search
+        )}&key=${TENOR_API}&limit=10&media_filter=gif`
+      );
+      data = await res.json();
+    } catch (err) {
+      console.error("❌ Tenor fetch failed:", err);
       return isPrefix
-        ? message.reply("❌ No results found!")
-        : interaction.reply("❌ No results found!");
+        ? message.reply("❌ Failed to fetch GIFs.")
+        : interaction.reply({ content: "❌ Failed to fetch GIFs.", ephemeral: true });
     }
+
+    if (!data.results?.length)
+      return isPrefix
+        ? message.reply("❌ No GIFs found!")
+        : interaction.reply({ content: "❌ No GIFs found!", ephemeral: true });
 
     let index = 0;
     const results = data.results;
 
-    // 📌 Embed generator
     const makeEmbed = () =>
       new EmbedBuilder()
         .setColor("Blue")
         .setTitle(`Result ${index + 1}/${results.length}`)
         .setImage(results[index].media_formats.gif.url)
-        .setFooter({
-          text: "◀️ ▶️ to browse | ✅ to add as emoji",
-        });
+        .setFooter({ text: "◀️ Previous | Next ▶️ | ✅ Add as emoji" });
 
     const replyTarget = isPrefix ? message : interaction;
     const msg = await replyTarget.reply({
@@ -66,11 +71,11 @@ module.exports = {
       ],
     });
 
-    // 🎮 Collector
-    const collector = msg.createMessageComponentCollector({ time: 60000 });
+    const collector = msg.createMessageComponentCollector({ time: 180000 });
 
     collector.on("collect", async (btn) => {
-      if (btn.user.id !== (isPrefix ? message.author.id : interaction.user.id)) {
+      const userId = isPrefix ? message.author.id : interaction.user.id;
+      if (btn.user.id !== userId) {
         return btn.reply({ content: "❌ This is not your session!", ephemeral: true });
       }
 
@@ -78,34 +83,40 @@ module.exports = {
         index = (index - 1 + results.length) % results.length;
         return btn.update({ embeds: [makeEmbed()] });
       }
+
       if (btn.customId === "next") {
         index = (index + 1) % results.length;
         return btn.update({ embeds: [makeEmbed()] });
       }
+
       if (btn.customId === "add") {
-        if (
-          !btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)
-        ) {
+        if (!btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
           return btn.reply({
-            content: "❌ I don’t have **Manage Emojis & Stickers** permission.",
+            content: "❌ I need **Manage Emojis & Stickers** permission.",
             ephemeral: true,
           });
         }
 
         const url = results[index].media_formats.gif.url;
-        const name = search.replace(/\s+/g, "_").toLowerCase();
+        const name = search.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
         try {
           const emoji = await btn.guild.emojis.create({ attachment: url, name });
-          await btn.reply(`✅ Emoji added: <:${emoji.name}:${emoji.id}>`);
-        } catch (e) {
-          console.error("❌ Failed to add emoji:", e);
+          await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
+        } catch (err) {
+          console.error("❌ Emoji creation failed:", err);
           await btn.reply({
-            content: "❌ Failed to add emoji (maybe too large or server slots full).",
+            content: "❌ Failed to add emoji (too large or server full).",
             ephemeral: true,
           });
         }
       }
+    });
+
+    collector.on("end", async () => {
+      try {
+        await msg.edit({ components: [] });
+      } catch {}
     });
   },
 };
