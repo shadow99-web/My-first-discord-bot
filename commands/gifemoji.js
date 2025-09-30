@@ -5,8 +5,7 @@ const {
   ButtonStyle,
   PermissionsBitField,
 } = require("discord.js");
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
-
+const { createCanvas, loadImage } = require("canvas"); // npm i canvas
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
 module.exports = {
@@ -15,7 +14,7 @@ module.exports = {
   options: [
     {
       name: "search",
-      type: 3, // STRING
+      type: 3,
       description: "Search term (e.g., cat, dance, lol)",
       required: true,
     },
@@ -28,7 +27,7 @@ module.exports = {
         ? message.reply("❌ Provide a search term!")
         : interaction.reply({ content: "❌ Provide a search term!", ephemeral: true });
 
-    // 🔍 Fetch GIFs from Tenor
+    // Fetch GIFs
     let data;
     try {
       const res = await fetch(
@@ -75,9 +74,8 @@ module.exports = {
 
     collector.on("collect", async (btn) => {
       const userId = isPrefix ? message.author.id : interaction.user.id;
-      if (btn.user.id !== userId) {
+      if (btn.user.id !== userId)
         return btn.reply({ content: "❌ This is not your session!", ephemeral: true });
-      }
 
       if (btn.customId === "prev") {
         index = (index - 1 + results.length) % results.length;
@@ -90,18 +88,24 @@ module.exports = {
       }
 
       if (btn.customId === "add") {
-        if (!btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
+        if (!btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers))
           return btn.reply({
             content: "❌ I need **Manage Emojis & Stickers** permission.",
             ephemeral: true,
           });
-        }
 
         const url = results[index].media_formats.gif.url;
         const name = search.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
         try {
-          const emoji = await btn.guild.emojis.create({ attachment: url, name });
+          // Load GIF into Canvas and convert to WebP
+          const image = await loadImage(url);
+          const canvas = createCanvas(image.width, image.height);
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(image, 0, 0);
+          const buffer = canvas.toBuffer("image/webp");
+
+          const emoji = await btn.guild.emojis.create({ attachment: buffer, name });
           await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
         } catch (err) {
           console.error("❌ Emoji creation failed:", err);
