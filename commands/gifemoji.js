@@ -3,6 +3,17 @@ const { createCanvas, loadImage } = require("canvas");
 
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
+// Safe reply function
+async function safeReply(interaction, options) {
+    try {
+        if (interaction.replied) return interaction.followUp(options).catch(() => {});
+        if (interaction.deferred) return interaction.editReply(options).catch(() => {});
+        return interaction.reply(options).catch(() => {});
+    } catch (e) {
+        console.error("❌ safeReply error:", e);
+    }
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("gifemoji")
@@ -18,25 +29,29 @@ module.exports = {
         if (!search) {
             const msg = "❌ Provide a search term!";
             if (context.isPrefix) return context.message.reply(msg);
-            else return context.interaction.reply({ content: msg, ephemeral: true });
+            else return safeReply(context.interaction, { content: msg, ephemeral: true });
         }
 
-        // Fetch GIFs from Tenor
+        // Prepare search term for Tenor API
+        const searchTerm = encodeURIComponent(search.trim().replace(/\s+/g, "+"));
+        const url = `https://tenor.googleapis.com/v2/search?key=${TENOR_API}&q=${searchTerm}&limit=10&media_filter=gif&contentfilter=high&locale=en_US&client_key=discordbot`;
+
+        // Fetch GIFs
         let data;
         try {
-            const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(search)}&key=${TENOR_API}&limit=10&media_filter=gif`);
+            const res = await fetch(url);
             data = await res.json();
         } catch (err) {
             console.error("❌ Tenor fetch failed:", err);
             const msg = "❌ Failed to fetch GIFs.";
             if (context.isPrefix) return context.message.reply(msg);
-            else return context.interaction.reply({ content: msg, ephemeral: true });
+            else return safeReply(context.interaction, { content: msg, ephemeral: true });
         }
 
         if (!data.results?.length) {
             const msg = "❌ No GIFs found!";
             if (context.isPrefix) return context.message.reply(msg);
-            else return context.interaction.reply({ content: msg, ephemeral: true });
+            else return safeReply(context.interaction, { content: msg, ephemeral: true });
         }
 
         let index = 0;
