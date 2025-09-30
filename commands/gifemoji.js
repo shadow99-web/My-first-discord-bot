@@ -5,12 +5,15 @@ const {
   ButtonStyle,
   PermissionsBitField,
 } = require("discord.js");
-const { createCanvas, loadImage } = require("canvas"); // npm i canvas
+const { createCanvas, loadImage } = require("canvas");
+
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
 module.exports = {
   name: "gifemoji",
   description: "Search Tenor GIFs and add them as emojis!",
+  usage: "!gifemoji <search>",
+  aliases: ["gif", "emoji"],
   options: [
     {
       name: "search",
@@ -98,15 +101,31 @@ module.exports = {
         const name = search.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
         try {
-          // Load GIF into Canvas and convert to WebP
           const image = await loadImage(url);
-          const canvas = createCanvas(image.width, image.height);
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(image, 0, 0);
-          const buffer = canvas.toBuffer("image/webp");
+          let size = 128; // start with 128x128
+          let buffer;
+          let added = false;
 
-          const emoji = await btn.guild.emojis.create({ attachment: buffer, name });
-          await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
+          // Try adding emoji, resizing down if it fails
+          while (size >= 32 && !added) {
+            try {
+              const canvas = createCanvas(size, size);
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(image, 0, 0, size, size);
+              buffer = canvas.toBuffer("image/webp");
+
+              const emoji = await btn.guild.emojis.create({ attachment: buffer, name });
+              await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
+              added = true;
+            } catch (err) {
+              console.warn(`⚠️ Failed at size ${size}px, reducing...`);
+              size = Math.floor(size / 2);
+              if (size < 32) throw err;
+            }
+          }
+
+          if (!added)
+            throw new Error("Failed to add emoji after resizing attempts.");
         } catch (err) {
           console.error("❌ Emoji creation failed:", err);
           await btn.reply({
