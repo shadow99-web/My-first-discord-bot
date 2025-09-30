@@ -9,7 +9,7 @@ const { createCanvas, loadImage } = require("canvas");
 
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
-module.exports = {
+const gifemojiCommand = {
   name: "gifemoji",
   description: "Search Tenor GIFs and add them as emojis!",
   usage: "!gifemoji <search>",
@@ -106,7 +106,7 @@ module.exports = {
           let buffer;
           let added = false;
 
-          // Try adding emoji, resizing down if it fails
+          // Try adding emoji, reducing size until it works
           while (size >= 32 && !added) {
             try {
               const canvas = createCanvas(size, size);
@@ -143,3 +143,7 @@ module.exports = {
     });
   },
 };
+
+// ✅ Ensure loader compatibility
+module.exports = gifemojiCommand;
+module.exports.default = gifemojiCommand;
