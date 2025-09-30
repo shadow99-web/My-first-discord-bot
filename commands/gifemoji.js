@@ -1,15 +1,8 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  PermissionsBitField,
-} = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
 const { createCanvas, loadImage } = require("canvas");
-
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
-const gifemojiCommand = {
+module.exports = {
   name: "gifemoji",
   description: "Search Tenor GIFs and add them as emojis!",
   usage: "!gifemoji <search>",
@@ -23,14 +16,13 @@ const gifemojiCommand = {
     },
   ],
 
-  async execute({ client, interaction, message, args, isPrefix }) {
+  execute: async function({ client, interaction, message, args, isPrefix }) {
     const search = isPrefix ? args.join(" ") : interaction.options.getString("search");
     if (!search)
       return isPrefix
         ? message.reply("❌ Provide a search term!")
         : interaction.reply({ content: "❌ Provide a search term!", ephemeral: true });
 
-    // Fetch GIFs
     let data;
     try {
       const res = await fetch(
@@ -54,12 +46,13 @@ const gifemojiCommand = {
     let index = 0;
     const results = data.results;
 
-    const makeEmbed = () =>
-      new EmbedBuilder()
+    const makeEmbed = function() {
+      return new EmbedBuilder()
         .setColor("Blue")
         .setTitle(`Result ${index + 1}/${results.length}`)
         .setImage(results[index].media_formats.gif.url)
         .setFooter({ text: "◀️ Previous | Next ▶️ | ✅ Add as emoji" });
+    };
 
     const replyTarget = isPrefix ? message : interaction;
     const msg = await replyTarget.reply({
@@ -75,7 +68,7 @@ const gifemojiCommand = {
 
     const collector = msg.createMessageComponentCollector({ time: 180000 });
 
-    collector.on("collect", async (btn) => {
+    collector.on("collect", async function(btn) {
       const userId = isPrefix ? message.author.id : interaction.user.id;
       if (btn.user.id !== userId)
         return btn.reply({ content: "❌ This is not your session!", ephemeral: true });
@@ -92,58 +85,43 @@ const gifemojiCommand = {
 
       if (btn.customId === "add") {
         if (!btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers))
-          return btn.reply({
-            content: "❌ I need **Manage Emojis & Stickers** permission.",
-            ephemeral: true,
-          });
+          return btn.reply({ content: "❌ I need Manage Emojis & Stickers permission.", ephemeral: true });
 
         const url = results[index].media_formats.gif.url;
         const name = search.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
         try {
           const image = await loadImage(url);
-          let size = 128; // start with 128x128
-          let buffer;
+          let size = 128;
           let added = false;
 
-          // Try adding emoji, reducing size until it works
           while (size >= 32 && !added) {
             try {
               const canvas = createCanvas(size, size);
               const ctx = canvas.getContext("2d");
               ctx.drawImage(image, 0, 0, size, size);
-              buffer = canvas.toBuffer("image/webp");
-
+              const buffer = canvas.toBuffer("image/webp");
               const emoji = await btn.guild.emojis.create({ attachment: buffer, name });
               await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
               added = true;
-            } catch (err) {
-              console.warn(`⚠️ Failed at size ${size}px, reducing...`);
+            } catch {
               size = Math.floor(size / 2);
-              if (size < 32) throw err;
             }
           }
 
-          if (!added)
-            throw new Error("Failed to add emoji after resizing attempts.");
+          if (!added) throw new Error("Failed to add emoji.");
         } catch (err) {
-          console.error("❌ Emoji creation failed:", err);
-          await btn.reply({
-            content: "❌ Failed to add emoji (too large or server full).",
-            ephemeral: true,
-          });
+          console.error(err);
+          await btn.reply({ content: "❌ Failed to add emoji (too large or server full).", ephemeral: true });
         }
       }
     });
 
-    collector.on("end", async () => {
-      try {
-        await msg.edit({ components: [] });
-      } catch {}
+    collector.on("end", async function() {
+      try { await msg.edit({ components: [] }); } catch {}
     });
   },
 };
 
-// ✅ Ensure loader compatibility
-module.exports = gifemojiCommand;
-module.exports.default = gifemojiCommand;
+// Make loader compatible with ESModule loaders
+module.exports.default = module.exports;
