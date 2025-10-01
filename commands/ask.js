@@ -1,82 +1,154 @@
-// commands/ask.js
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("ask")
-        .setDescription("Ask something to the AI")
-        .addStringOption(option =>
-            option.setName("question")
-                .setDescription("Your question to AI")
-                .setRequired(true)),
+  name: "ask",
+  description: "Ask AI anything!",
+  options: [
+    {
+      name: "question",
+      type: 3,
+      description: "Your question for AI",
+      required: true,
+    },
+  ],
 
-    async execute({ client, message, interaction, args, isPrefix, safeReply }) {
-        const BLUE_HEART = "<a:blue_heart:1414309560231002194>";
+  // Slash command
+  async execute(interaction) {
+    const question = interaction.options.getString("question");
+    await interaction.deferReply();
 
-        // Unified reply helper
-        const reply = async (content) => {
-            try {
-                if (isPrefix) return await message.reply(content).catch(() => {});
-                if (safeReply) return await safeReply(content);
-                return await interaction.reply(content).catch(() => {});
-            } catch (e) {
-                console.error("❌ Reply failed:", e);
-            }
-        };
+    try {
+      const response = await fetch("https://api-inference.huggingface.co/models/gpt2", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: question }),
+      });
 
-        try {
-            // ---------- Get user input ----------
-            let question;
-            if (isPrefix) {
-                if (message.reference) {
-                    const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
-                    question = repliedMessage.content;
-                } else {
-                    question = args.join(" ");
-                }
-                if (!question) return reply("⚠️ Please provide a question!");
-            } else {
-                question = interaction.options.getString("question");
-                if (!question) return reply("⚠️ Please provide a question!");
-            }
+      const data = await response.json();
+      if (!data || !data[0] || !data[0].generated_text) {
+        return interaction.editReply("⚠️ AI API returned invalid response.");
+      }
 
-            // ---------- Call HuggingFace Inference API ----------
-            let aiReply = "⚠️ AI did not respond.";
-            try {
-                const res = await fetch("https://hf.space/embed/WarriorTroll/discord-bot-api/+/api/predict/", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ data: [question] })
-                });
+      let text = data[0].generated_text;
+      const chunks = text.match(/[\s\S]{1,1900}/g) || ["(empty response)"];
+      let page = 0;
 
-                const contentType = res.headers.get("content-type") || "";
-                if (!contentType.includes("application/json")) {
-                    return reply("⚠️ AI API returned invalid response. Try again later.");
-                }
+      const embed = new EmbedBuilder()
+        .setTitle("🤖 AI Response")
+        .setDescription(chunks[page])
+        .setFooter({ text: `Page ${page + 1} / ${chunks.length}` })
+        .setColor("Random");
 
-                const data = await res.json();
-                aiReply = data?.data?.[0] || aiReply;
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary).setDisabled(true),
+        new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary).setDisabled(chunks.length === 1)
+      );
 
-            } catch (err) {
-                console.error("❌ AI fetch failed:", err);
-                return reply("⚠️ Cannot reach AI API from this host.");
-            }
+      const msg = await interaction.editReply({ embeds: [embed], components: [row] });
 
-            // ---------- Embed reply ----------
-            const embed = new EmbedBuilder()
-                .setTitle(`${BLUE_HEART} Ask AI ${BLUE_HEART}`)
-                .addFields(
-                    { name: "You asked", value: question },
-                    { name: "AI answered", value: aiReply }
-                )
-                .setColor("Purple")
-                .setTimestamp();
+      const collector = msg.createMessageComponentCollector({ time: 60000 });
 
-            return reply({ embeds: [embed] });
-
-        } catch (err) {
-            console.error("❌ Ask AI command error:", err);
-            return reply("❌ Something went wrong while processing your request!");
+      collector.on("collect", async (i) => {
+        if (i.user.id !== interaction.user.id) {
+          return i.reply({ content: "❌ Only the command user can use these buttons!", ephemeral: true });
         }
+
+        if (i.customId === "next" && page < chunks.length - 1) page++;
+        if (i.customId === "prev" && page > 0) page--;
+
+        const newEmbed = EmbedBuilder.from(embed)
+          .setDescription(chunks[page])
+          .setFooter({ text: `Page ${page + 1} / ${chunks.length}` });
+
+        const newRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+          new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary).setDisabled(page === chunks.length - 1)
+        );
+
+        await i.update({ embeds: [newEmbed], components: [newRow] });
+      });
+
+      collector.on("end", async () => {
+        msg.edit({ components: [] });
+      });
+
+    } catch (err) {
+      console.error("AI ERROR:", err);
+      await interaction.editReply("⚠️ Failed to connect to AI API.");
     }
+  },
+
+  // Prefix command
+  async run(message, args) {
+    const question = args.join(" ");
+    if (!question) return message.reply("❌ Please provide a question!");
+
+    const thinkingMsg = await message.reply("🤔 Thinking...");
+
+    try {
+      const response = await fetch("https://api-inference.huggingface.co/models/gpt2", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: question }),
+      });
+
+      const data = await response.json();
+      if (!data || !data[0] || !data[0].generated_text) {
+        return thinkingMsg.edit("⚠️ AI API returned invalid response.");
+      }
+
+      let text = data[0].generated_text;
+      const chunks = text.match(/[\s\S]{1,1900}/g) || ["(empty response)"];
+      let page = 0;
+
+      const embed = new EmbedBuilder()
+        .setTitle("💫 AI Response")
+        .setDescription(chunks[page])
+        .setFooter({ text: `Page ${page + 1} / ${chunks.length}` })
+        .setColor("Random");
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary).setDisabled(true),
+        new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary).setDisabled(chunks.length === 1)
+      );
+
+      const msg = await thinkingMsg.edit({ content: " ", embeds: [embed], components: [row] });
+
+      const collector = msg.createMessageComponentCollector({ time: 60000 });
+
+      collector.on("collect", async (i) => {
+        if (i.user.id !== message.author.id) {
+          return i.reply({ content: "❌ Only the command user can use these buttons!", ephemeral: true });
+        }
+
+        if (i.customId === "next" && page < chunks.length - 1) page++;
+        if (i.customId === "prev" && page > 0) page--;
+
+        const newEmbed = EmbedBuilder.from(embed)
+          .setDescription(chunks[page])
+          .setFooter({ text: `Page ${page + 1} / ${chunks.length}` });
+
+        const newRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+          new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary).setDisabled(page === chunks.length - 1)
+        );
+
+        await i.update({ embeds: [newEmbed], components: [newRow] });
+      });
+
+      collector.on("end", async () => {
+        msg.edit({ components: [] });
+      });
+
+    } catch (err) {
+      console.error("AI ERROR:", err);
+      await thinkingMsg.edit("⚠️ Failed to connect to AI API.");
+    }
+  },
 };
