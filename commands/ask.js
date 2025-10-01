@@ -1,46 +1,64 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 module.exports = {
-  // Slash registration (loader expects command.data.name)
-  data: new SlashCommandBuilder()
-    .setName("ask")
-    .setDescription("Ask AI anything!")
-    .addStringOption(opt => opt.setName("question").setDescription("Your question for AI").setRequired(true)),
-
-  // (optional) prefix name — your loader uses data.name but keep for clarity
   name: "ask",
   description: "Ask AI anything!",
 
-  /**
-   * Unified exec for slash + prefix.
-   * Note: interaction.js must pass `safeReply` into command.execute when running slash commands.
-   */
-  async execute({ client, interaction, message, args, isPrefix, safeReply }) {
+  options: [
+    {
+      name: "question",
+      type: 3, // STRING
+      description: "Your question for AI",
+      required: true,
+    },
+  ],
+
+  async execute({ client, interaction, message, args, isPrefix }) {
     const question = isPrefix ? args.join(" ") : interaction.options.getString("question");
     if (!question) {
-      if (isPrefix) return message.reply("❌ Please provide a question!");
-      return safeReply
-        ? await safeReply({ content: "❌ Please provide a question!", ephemeral: true })
-        : await interaction.reply({ content: "❌ Please provide a question!", ephemeral: true });
+      const failMsg = "❌ Please provide a question!";
+      return isPrefix ? message.reply(failMsg) : interaction.reply({ content: failMsg, ephemeral: true });
     }
 
+    if (interaction) await interaction.deferReply();
+
     try {
-      // Use global fetch (Node 18+). No node-fetch import.
-      const res = await fetch("https://api-inference.huggingface.co/models/gpt2", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.HF_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: question }),
-      });
+      const apiKey = process.env.HF_API_KEY;
+      if (!apiKey) {
+        const failMsg = "⚠️ HuggingFace API key is missing!";
+        return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
+      }
 
-      const data = await res.json();
+      let response, data, retries = 0;
+      while (retries < 3) { // retry max 3 times if model is cold-starting
+        response = await fetch("https://api-inference.huggingface.co/models/distilgpt2", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ inputs: question }),
+        });
 
-      if (!data || !data[0] || !data[0].generated_text) {
-        const failMsg = "⚠️ AI API returned invalid response.";
-        if (isPrefix) return message.reply(failMsg);
-        return safeReply ? await safeReply({ content: failMsg, ephemeral: true }) : await interaction.reply({ content: failMsg, ephemeral: true });
+        if (response.status === 503) {
+          retries++;
+          if (interaction) await interaction.editReply(`⏳ Warming up model... retrying (${retries}/3)`);
+          await new Promise(res => setTimeout(res, 5000)); // wait 5 sec then retry
+          continue;
+        }
+
+        data = await response.json();
+        break;
+      }
+
+      if (response.status === 401) {
+        const failMsg = "❌ Invalid HuggingFace API key. Please check your `.env`.";
+        return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
+      }
+
+      if (!data || !Array.isArray(data) || !data[0]?.generated_text) {
+        const failMsg = `⚠️ AI API returned invalid response.\nStatus: ${response.status}`;
+        return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
       }
 
       let text = data[0].generated_text;
@@ -56,53 +74,36 @@ module.exports = {
 
       const makeRow = () =>
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("ask_prev")
-            .setLabel("⬅️")
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId("ask_next")
-            .setLabel("➡️")
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === chunks.length - 1)
+          new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+          new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary).setDisabled(page === chunks.length - 1)
         );
 
-      // Send the message and fetch the Message object for the collector
-      let sent;
-      if (isPrefix) {
-        sent = await message.reply({ embeds: [makeEmbed()], components: [makeRow()] });
-      } else {
-        // Use safeReply if available (interaction.js provides it). Include fetchReply: true so it returns Message.
-        const replyOptions = { embeds: [makeEmbed()], components: [makeRow()], fetchReply: true };
-        sent = safeReply ? await safeReply(replyOptions) : await interaction.reply({ ...replyOptions });
-      }
+      const sent = isPrefix
+        ? await message.reply({ embeds: [makeEmbed()], components: [makeRow()] })
+        : await interaction.editReply({ embeds: [makeEmbed()], components: [makeRow()] });
 
-      // Collector on the sent message
-      const collector = sent.createMessageComponentCollector({ time: 120_000 });
+      const collector = sent.createMessageComponentCollector({ time: 60000 });
 
       collector.on("collect", async (i) => {
-        // Only allow the original command user to page
         const authorId = isPrefix ? message.author.id : interaction.user.id;
         if (i.user.id !== authorId) {
           return i.reply({ content: "❌ Only the command user can use these buttons!", ephemeral: true });
         }
 
-        if (i.customId === "ask_next" && page < chunks.length - 1) page++;
-        if (i.customId === "ask_prev" && page > 0) page--;
+        if (i.customId === "next" && page < chunks.length - 1) page++;
+        if (i.customId === "prev" && page > 0) page--;
 
-        // update the message with new page & buttons
-        await i.update({ embeds: [makeEmbed()], components: [makeRow()] }).catch(() => {});
+        await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
       });
 
       collector.on("end", async () => {
-        try { await sent.edit({ components: [] }); } catch (e) { /* ignore */ }
+        sent.edit({ components: [] }).catch(() => {});
       });
+
     } catch (err) {
       console.error("AI ERROR:", err);
       const failMsg = "⚠️ Failed to connect to AI API.";
-      if (isPrefix) return message.reply(failMsg);
-      return safeReply ? await safeReply({ content: failMsg, ephemeral: true }) : await interaction.reply({ content: failMsg, ephemeral: true });
+      return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
     }
   },
 };
