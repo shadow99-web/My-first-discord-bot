@@ -1,34 +1,42 @@
-// You will need ModalBuilder and TextInputBuilder for the naming prompt
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
+// gifemoji.js
+const {
+    SlashCommandBuilder,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    PermissionsBitField,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
+} = require("discord.js");
 const fetch = require("node-fetch");
 
-const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
-const CLIENT_KEY = "105679396933970288637";
+// Load Giphy API key from environment
+const GIPHY_API = process.env.GIPHY_API_KEY || "YOUR_GIPHY_KEY";
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("gifemoji")
-        .setDescription("Search Tenor GIFs and add them as emojis!")
+        .setDescription("Search Giphy GIFs and add them as emojis!")
         .addStringOption(option =>
             option.setName("search")
                 .setDescription("Search term (e.g., cat, dance, lol)")
-                .setRequired(false)
+                .setRequired(true)
         ),
 
     async execute(interaction) {
-        const searchTerm = interaction.options.getString("search") || null;
-
+        const searchTerm = interaction.options.getString("search");
         const gifs = await fetchGifs(searchTerm);
 
         if (!gifs.length) {
-            return interaction.reply({ content: `❌ No GIFs found for "${searchTerm}"!`, ephemeral: true });
+            return interaction.reply({ content: `❌ No GIFs found for "${searchTerm}"!`, flags: 64 });
         }
 
         let index = 0;
 
         const makeEmbed = (gif) => {
-            // <-- Prioritize smaller GIF formats to stay under Discord's 256KB limit
-            const gifUrl = gif?.media_formats?.nanogif?.url || gif?.media_formats?.tinygif?.url || gif?.media_formats?.gif?.url;
+            const gifUrl = gif?.images?.downsized?.url || gif?.images?.fixed_height_small?.url;
             return new EmbedBuilder()
                 .setTitle(`GIF for "${searchTerm}" (${index + 1}/${gifs.length})`)
                 .setImage(gifUrl)
@@ -36,11 +44,11 @@ module.exports = {
                 .setFooter({ text: "Use the buttons to browse and add an emoji." });
         };
 
-        const makeButtons = (is_disabled = false) => { // <-- Helper to easily disable buttons
+        const makeButtons = (disabled = false) => {
             return new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId("prev").setLabel("◀️ Prev").setStyle(ButtonStyle.Primary).setDisabled(is_disabled),
-                new ButtonBuilder().setCustomId("next").setLabel("Next ▶️").setStyle(ButtonStyle.Primary).setDisabled(is_disabled),
-                new ButtonBuilder().setCustomId("add").setLabel("✅ Add Emoji").setStyle(ButtonStyle.Success).setDisabled(is_disabled)
+                new ButtonBuilder().setCustomId("prev").setLabel("◀️ Prev").setStyle(ButtonStyle.Primary).setDisabled(disabled),
+                new ButtonBuilder().setCustomId("next").setLabel("Next ▶️").setStyle(ButtonStyle.Primary).setDisabled(disabled),
+                new ButtonBuilder().setCustomId("add").setLabel("✅ Add Emoji").setStyle(ButtonStyle.Success).setDisabled(disabled)
             );
         };
 
@@ -51,40 +59,35 @@ module.exports = {
         });
 
         const collector = reply.createMessageComponentCollector({
-            filter: i => i.user.id === interaction.user.id, // <-- Filter here is slightly cleaner
-            time: 180000 // 3 minutes
+            filter: i => i.user.id === interaction.user.id,
+            time: 180000
         });
 
         collector.on("collect", async btn => {
-            // No need for user check here due to the filter above
-
             if (btn.customId === "prev" || btn.customId === "next") {
                 index = (btn.customId === "next")
                     ? (index + 1) % gifs.length
                     : (index - 1 + gifs.length) % gifs.length;
-                await btn.update({ embeds: [makeEmbed(gifs[index])] });
-                return;
+                return btn.update({ embeds: [makeEmbed(gifs[index])] });
             }
 
             if (btn.customId === "add") {
-                // <-- PERMISSION CHECKS -->
                 if (!btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
-                    await btn.reply({ content: "❌ I don't have the `Manage Emojis & Stickers` permission!", ephemeral: true });
+                    await btn.reply({ content: "❌ I don't have the `Manage Emojis & Stickers` permission!", flags: 64 });
                     return collector.stop();
                 }
                 if (!btn.member.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
-                    return btn.reply({ content: "❌ You don't have permission to add emojis.", ephemeral: true });
+                    return btn.reply({ content: "❌ You don't have permission to add emojis.", flags: 64 });
                 }
 
-                // <-- MODAL FOR EMOJI NAME -->
                 const modal = new ModalBuilder()
-                    .setCustomId(`gifemoji-modal-${btn.id}`) // Unique ID per interaction
+                    .setCustomId(`gifemoji-modal-${btn.id}`)
                     .setTitle("Name Your Emoji");
 
                 const nameInput = new TextInputBuilder()
                     .setCustomId('emojiName')
                     .setLabel("What should the emoji be called?")
-                    .setPlaceholder("Enter a name (letters, numbers, underscores)")
+                    .setPlaceholder("letters, numbers, underscores only")
                     .setStyle(TextInputStyle.Short)
                     .setMinLength(2)
                     .setMaxLength(32)
@@ -93,19 +96,17 @@ module.exports = {
                 modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
                 await btn.showModal(modal);
 
-                // --- Wait for the modal submission ---
                 try {
                     const modalSubmit = await btn.awaitModalSubmit({
                         filter: i => i.customId === `gifemoji-modal-${btn.id}` && i.user.id === interaction.user.id,
-                        time: 60000 // 1 minute to respond
+                        time: 60000
                     });
 
                     const emojiName = modalSubmit.fields.getTextInputValue('emojiName').replace(/[^a-zA-Z0-9_]/g, '');
-                    const gifUrl = gifs[index]?.media_formats?.nanogif?.url || gifs[index]?.media_formats?.tinygif?.url || gifs[index]?.media_formats?.gif?.url;
+                    const gifUrl = gifs[index]?.images?.downsized?.url || gifs[index]?.images?.fixed_height_small?.url;
 
                     const emoji = await btn.guild.emojis.create({ attachment: gifUrl, name: emojiName });
 
-                    // <-- Better feedback: update the original message -->
                     const successEmbed = new EmbedBuilder()
                         .setTitle("✅ Emoji Added!")
                         .setColor("Green")
@@ -113,38 +114,33 @@ module.exports = {
                         .setThumbnail(gifUrl);
 
                     await modalSubmit.update({ embeds: [successEmbed], components: [] });
-                    collector.stop(); // End the collector since we're done
+                    collector.stop();
                 } catch (err) {
-                    // This catches modal timeout or other errors
                     console.error(err);
                     const failEmbed = new EmbedBuilder()
                         .setTitle("❌ Failed to Add Emoji")
                         .setColor("Red")
-                        .setDescription("Could not add the emoji. This is likely because:\n- The GIF is over 256KB.\n- The server is full of emojis.\n- The name is already taken.\n- You took too long to enter a name.");
-                    // We use interaction.editReply here because the modal interaction might have timed out
+                        .setDescription("Could not add the emoji. Likely because:\n- The GIF is over 256KB\n- The server is full\n- The name is taken\n- Timeout waiting for name input");
                     await interaction.editReply({ embeds: [failEmbed], components: [makeButtons(true)] });
                 }
             }
         });
 
-        collector.on("end", (collected, reason) => {
-            // Only edit if the interaction wasn't already updated by a success/fail message
-            if (reason === "time") {
-                interaction.editReply({ components: [makeButtons(true)] }).catch(() => {});
-            }
+        collector.on("end", () => {
+            interaction.editReply({ components: [makeButtons(true)] }).catch(() => {});
         });
     }
 };
 
-// --- Helper: fetch GIFs (separated for clarity) ---
+// --- Helper: fetch GIFs from Giphy ---
 async function fetchGifs(term, limit = 20) {
-    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(term)}&key=${TENOR_API}&client_key=${CLIENT_KEY}&limit=${limit}&media_filter=nanogif,tinygif,gif`;
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API}&q=${encodeURIComponent(term)}&limit=${limit}&rating=pg-13`;
     try {
         const res = await fetch(url);
         const data = await res.json();
-        return data.results || [];
+        return data.data || [];
     } catch (err) {
-        console.error("❌ Tenor fetch failed:", err);
+        console.error("❌ Giphy fetch failed:", err);
         return [];
     }
 }
