@@ -1,8 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
-
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
-// Safe reply to prevent 40060 errors
+// Safe reply to prevent errors
 async function safeReply(interaction, options) {
     try {
         if (interaction.replied) return interaction.followUp(options).catch(() => {});
@@ -31,9 +30,8 @@ module.exports = {
             else return safeReply(context.interaction, { content: msg, ephemeral: true });
         }
 
-        // Encode search term for Tenor API
         const searchTerm = encodeURIComponent(search.trim().replace(/\s+/g, "+"));
-        const url = `https://tenor.googleapis.com/v2/search?key=${TENOR_API}&q=${searchTerm}&limit=10&media_filter=gif&contentfilter=high&locale=en_US&client_key=discordbot`;
+        const url = `https://tenor.googleapis.com/v2/search?key=${TENOR_API}&q=${searchTerm}&limit=10&media_filter=minimal&contentfilter=high&locale=en_US&client_key=discordbot`;
 
         let data;
         try {
@@ -55,11 +53,17 @@ module.exports = {
         let index = 0;
         const results = data.results;
 
-        const makeEmbed = () => new EmbedBuilder()
-            .setColor("Blue")
-            .setTitle(`Result ${index + 1}/${results.length}`)
-            .setImage(results[index].media_formats.gif.url)
-            .setFooter({ text: "◀️ Previous | Next ▶️ | ✅ Add as emoji" });
+        const makeEmbed = () => {
+            const gifUrl = results[index].media_formats.gif?.url
+                         || results[index].media_formats.mediumgif?.url
+                         || results[index].media_formats.tinygif?.url;
+
+            return new EmbedBuilder()
+                .setColor("Blue")
+                .setTitle(`Result ${index + 1}/${results.length}`)
+                .setImage(gifUrl)
+                .setFooter({ text: "◀️ Previous | Next ▶️ | ✅ Add as emoji" });
+        };
 
         const replyTarget = context.isPrefix ? context.message : context.interaction;
         const msg = await replyTarget.reply({
@@ -93,11 +97,14 @@ module.exports = {
                 if (!btn.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers))
                     return btn.reply({ content: "❌ I need Manage Emojis & Stickers permission.", ephemeral: true });
 
-                const url = results[index].media_formats.gif.url;
+                const gifUrl = results[index].media_formats.gif?.url
+                             || results[index].media_formats.mediumgif?.url
+                             || results[index].media_formats.tinygif?.url;
+
                 const name = search.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
                 try {
-                    const emoji = await btn.guild.emojis.create({ attachment: url, name });
+                    const emoji = await btn.guild.emojis.create({ attachment: gifUrl, name });
                     await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
                 } catch (err) {
                     console.error(err);
