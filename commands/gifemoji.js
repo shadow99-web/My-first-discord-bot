@@ -1,9 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
-const { createCanvas, loadImage } = require("canvas");
 
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
 
-// Safe reply function
+// Safe reply to prevent 40060 errors
 async function safeReply(interaction, options) {
     try {
         if (interaction.replied) return interaction.followUp(options).catch(() => {});
@@ -32,11 +31,10 @@ module.exports = {
             else return safeReply(context.interaction, { content: msg, ephemeral: true });
         }
 
-        // Prepare search term for Tenor API
+        // Encode search term for Tenor API
         const searchTerm = encodeURIComponent(search.trim().replace(/\s+/g, "+"));
         const url = `https://tenor.googleapis.com/v2/search?key=${TENOR_API}&q=${searchTerm}&limit=10&media_filter=gif&contentfilter=high&locale=en_US&client_key=discordbot`;
 
-        // Fetch GIFs
         let data;
         try {
             const res = await fetch(url);
@@ -99,29 +97,11 @@ module.exports = {
                 const name = search.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
                 try {
-                    const image = await loadImage(url);
-                    let size = 128;
-                    let added = false;
-
-                    while (size >= 32 && !added) {
-                        try {
-                            const canvas = createCanvas(size, size);
-                            const ctx = canvas.getContext("2d");
-                            ctx.drawImage(image, 0, 0, size, size);
-                            const buffer = canvas.toBuffer("image/webp");
-
-                            const emoji = await btn.guild.emojis.create({ attachment: buffer, name });
-                            await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
-                            added = true;
-                        } catch {
-                            size = Math.floor(size / 2);
-                        }
-                    }
-
-                    if (!added) throw new Error("Failed to add emoji.");
+                    const emoji = await btn.guild.emojis.create({ attachment: url, name });
+                    await btn.reply({ content: `✅ Emoji added: <:${emoji.name}:${emoji.id}>` });
                 } catch (err) {
                     console.error(err);
-                    await btn.reply({ content: "❌ Failed to add emoji (too large or server full).", ephemeral: true });
+                    await btn.reply({ content: "❌ Failed to add emoji (maybe too large or server full).", ephemeral: true });
                 }
             }
         });
