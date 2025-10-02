@@ -3,7 +3,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const fetch = require("node-fetch");
 
 const TENOR_API = process.env.TENOR_API_KEY || "YOUR_TENOR_KEY";
-const CLIENT_KEY = "my_gifemoji_bot";
+const CLIENT_KEY = "105679396933970288637";
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,12 +11,12 @@ module.exports = {
         .setDescription("Search Tenor GIFs and add them as emojis!")
         .addStringOption(option =>
             option.setName("search")
-                .setDescription("The search term for the GIF (e.g., cat, dance, lol)")
+                .setDescription("Search term (e.g., cat, dance, lol)")
                 .setRequired(false)
         ),
 
     async execute(interaction) {
-        const searchTerm = interaction.options.getString("search") || "trending";
+        const searchTerm = interaction.options.getString("search") || null;
 
         const gifs = await fetchGifs(searchTerm);
 
