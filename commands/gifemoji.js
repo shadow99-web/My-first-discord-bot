@@ -10,7 +10,7 @@ const {
     TextInputBuilder,
     TextInputStyle
 } = require("discord.js");
-const fetch = require("node-fetch");
+
 
 // Load Giphy API key from environment
 const GIPHY_API = process.env.GIPHY_API_KEY || "YOUR_GIPHY_KEY";
