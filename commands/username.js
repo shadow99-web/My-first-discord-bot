@@ -1,55 +1,40 @@
-const { EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
-  name: "username",
-  description: "Get a user's display name in copyable format.",
+    data: new SlashCommandBuilder()
+        .setName("username")
+        .setDescription("Get a user's display name in copyable format")
+        .addUserOption(opt =>
+            opt.setName("target")
+                .setDescription("Select a user")
+        ),
 
-  options: [
-    {
-      name: "user",
-      type: 6, // USER
-      description: "The user to fetch (optional, defaults to you)",
-      required: false,
-    },
-  ],
+    name: "username", // prefix support
+    aliases: ["uname", "dname", "nick"],
 
-  async execute({ client, interaction, message, args, isPrefix }) {
-    let targetUser;
+    async execute({ interaction, message, client }) {
+        const target = interaction
+            ? interaction.options.getUser("target") || interaction.user
+            : message.mentions.users.first() || message.author;
 
-    if (isPrefix) {
-      // Prefix: !username @user OR !username <id>
-      targetUser = message.mentions.users.first();
+        const guild = interaction ? interaction.guild : message.guild;
+        const member = guild.members.cache.get(target.id);
 
-      if (!targetUser && args[0]) {
-        try {
-          targetUser = await client.users.fetch(args[0]);
-        } catch {}
-      }
+        const displayName = member?.nickname || target.username;
 
-      if (!targetUser) {
-        targetUser = message.author; // fallback: yourself
-      }
-    } else {
-      // Slash: /username user:@someone
-      targetUser = interaction.options.getUser("user") || interaction.user;
+        const embed = new EmbedBuilder()
+            .setColor("Blue")
+            .setTitle("📛 Display Name")
+            .setDescription(`\`\`\`${displayName}\`\`\``) // copyable format
+            .setFooter({
+                text: `Requested by ${interaction?.user.tag || message.author.tag}`,
+                iconURL: (interaction?.user.displayAvatarURL() || message.author.displayAvatarURL())
+            });
+
+        if (interaction) {
+            await interaction.reply({ embeds: [embed] });
+        } else {
+            await message.reply({ embeds: [embed] });
+        }
     }
-
-    const guild = interaction ? interaction.guild : message.guild;
-    const member = guild.members.cache.get(targetUser.id);
-    const displayName = member?.nickname || targetUser.username;
-
-    const embed = new EmbedBuilder()
-      .setTitle("📛 Display Name")
-      .setDescription(`\`\`\`${displayName}\`\`\``) // copyable
-      .setColor("Blue")
-      .setFooter({
-        text: `Requested by ${isPrefix ? message.author.tag : interaction.user.tag}`,
-      });
-
-    if (isPrefix) {
-      await message.reply({ embeds: [embed] }).catch(() => {});
-    } else {
-      await interaction.reply({ embeds: [embed] }).catch(() => {});
-    }
-  },
 };
