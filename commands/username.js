@@ -7,9 +7,9 @@ module.exports = {
   options: [
     {
       name: "user",
-      type: 6, // USER type
-      description: "The user to get the display name of",
-      required: true,
+      type: 6, // USER
+      description: "The user to fetch (optional, defaults to you)",
+      required: false,
     },
   ],
 
@@ -17,35 +17,39 @@ module.exports = {
     let targetUser;
 
     if (isPrefix) {
-      // Prefix command usage: !username @user
+      // Prefix: !username @user OR !username <id>
       targetUser = message.mentions.users.first();
+
       if (!targetUser && args[0]) {
         try {
           targetUser = await client.users.fetch(args[0]);
         } catch {}
       }
-      if (!targetUser) return message.reply("❌ Please mention a valid user!");
+
+      if (!targetUser) {
+        targetUser = message.author; // fallback: yourself
+      }
     } else {
-      // Slash command usage: /username user:@user
-      targetUser = interaction.options.getUser("user");
+      // Slash: /username user:@someone
+      targetUser = interaction.options.getUser("user") || interaction.user;
     }
 
-    const member = interaction
-      ? interaction.guild.members.cache.get(targetUser.id)
-      : message.guild.members.cache.get(targetUser.id);
-
+    const guild = interaction ? interaction.guild : message.guild;
+    const member = guild.members.cache.get(targetUser.id);
     const displayName = member?.nickname || targetUser.username;
 
     const embed = new EmbedBuilder()
       .setTitle("📛 Display Name")
-      .setDescription(`\`\`\`${displayName}\`\`\``) // copyable format
+      .setDescription(`\`\`\`${displayName}\`\`\``) // copyable
       .setColor("Blue")
-      .setFooter({ text: `Requested by ${isPrefix ? message.author.tag : interaction.user.tag}` });
+      .setFooter({
+        text: `Requested by ${isPrefix ? message.author.tag : interaction.user.tag}`,
+      });
 
     if (isPrefix) {
-      await message.reply({ embeds: [embed] });
+      await message.reply({ embeds: [embed] }).catch(() => {});
     } else {
-      await interaction.reply({ embeds: [embed], ephemeral: false });
+      await interaction.reply({ embeds: [embed] }).catch(() => {});
     }
   },
 };
