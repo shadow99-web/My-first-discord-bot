@@ -19,6 +19,12 @@ module.exports = {
         const serverCount = context.client.guilds.cache.size;
         const userCount = context.client.users.cache.size;
 
+        // ✅ Fetch all server names
+        const serverNames = context.client.guilds.cache
+            .map(g => g.name)
+            .slice(0, 20) // limit to 20 to avoid hitting embed limits
+            .join("\n");
+
         const embed = new EmbedBuilder()
             .setAuthor({ 
                 name: `👑 JEETENDRA ❤ - Legendary Developer`, 
@@ -37,7 +43,8 @@ module.exports = {
                 { name: "❤‍🩹 Status", value: "Active and Legendary", inline: true },
                 { name: "✨ Uptime", value: uptime, inline: true },
                 { name: "🥂 Servers", value: `${serverCount}`, inline: true },
-                { name: "🤝 Users", value: `${userCount}`, inline: true }
+                { name: "🤝 Users", value: `${userCount}`, inline: true },
+                { name: "🌍 Server List", value: serverNames || "No servers found" }
             )
             .setColor("Blue")
             .setFooter({ 
@@ -60,4 +67,4 @@ function formatUptime(ms) {
     const hours = Math.floor(ms / (1000 * 60 * 60)) % 24;
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
     return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-                                     }
+}
