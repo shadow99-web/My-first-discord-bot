@@ -32,7 +32,7 @@
     "@distube/spotify": "^2.0.0",
     "openai": "^4.9.0",
     "@vitalets/google-translate-api": "^8.0.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
     "gif-encoder-2": "^2.0.0"
   },
   "devDependencies": {
