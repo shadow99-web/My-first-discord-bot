@@ -1,148 +1,86 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const axios = require("axios");
-const sharp = require("sharp");
-const fs = require("fs");
-const path = require("path");
+const { SlashCommandBuilder, AttachmentBuilder, PermissionsBitField, EmbedBuilder } = require("discord.js");
+const Canvas = require("@napi-rs/canvas");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("stealsticker")
-        .setDescription("Steal and add a sticker from any image, GIF, or URL to a specific server")
-        .addStringOption(opt =>
-            opt.setName("url")
-                .setDescription("Sticker / image / gif URL (optional if replying)")
-                .setRequired(false)
-        )
-        .addStringOption(opt =>
-            opt.setName("name")
-                .setDescription("Sticker name (optional)")
-                .setRequired(false)
-        )
-        .addStringOption(opt =>
-            opt.setName("serverid")
-                .setDescription("Target server ID where to add the sticker")
+        .setDescription("Steal a sticker or image and add it as a sticker to a server!")
+        .addStringOption(option =>
+            option
+                .setName("serverid")
+                .setDescription("The server ID where the sticker will be added")
                 .setRequired(false)
         ),
-
-    name: "stealsticker",
-    aliases: ["sticksteal", "addsticker"],
 
     async execute(context) {
         const interaction = context.interaction;
         const message = context.message;
-        const client = context.client;
-        const user = context.isPrefix ? message.author : interaction.user;
+        const isPrefix = context.isPrefix;
 
-        const inputUrl = context.isPrefix
+        const user = isPrefix ? message.author : interaction.user;
+        const repliedMsg = isPrefix ? message.reference && await message.fetchReference().catch(() => null)
+            : interaction.options.getMessage("message") || null;
+
+        const serverId = isPrefix
             ? message.content.split(" ")[1]
-            : interaction.options.getString("url");
-        const inputName = context.isPrefix
-            ? message.content.split(" ")[2]
-            : interaction.options.getString("name");
-        const inputServerId = context.isPrefix
-            ? message.content.split(" ")[3]
             : interaction.options.getString("serverid");
 
-        // 🧠 Determine target guild
-        const targetGuild = inputServerId
-            ? client.guilds.cache.get(inputServerId)
-            : (context.isPrefix ? message.guild : interaction.guild);
+        const guild = serverId
+            ? context.client.guilds.cache.get(serverId)
+            : (isPrefix ? message.guild : interaction.guild);
 
-        if (!targetGuild) {
-            const msg = "❌ Invalid or missing server ID. I must be in that server to add the sticker.";
-            return context.isPrefix
-                ? message.reply(msg)
-                : interaction.reply(msg);
+        // 🔍 Check server permissions
+        if (!guild) {
+            return context.reply("⚠️ I couldn’t find that server. Make sure the bot is in it!");
+        }
+        if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
+            return context.reply("❌ I don’t have permission to manage stickers in that server!");
         }
 
-        if (!targetGuild.members.me.permissions.has("MANAGE_EMOJIS_AND_STICKERS")) {
-            const msg = `❌ I need \`Manage Emojis and Stickers\` permission in **${targetGuild.name}**.`;
-            return context.isPrefix
-                ? message.reply(msg)
-                : interaction.reply(msg);
+        // 🔍 Get image or sticker from reply
+        const targetMsg = repliedMsg || message.reference && await message.fetchReference().catch(() => null);
+        if (!targetMsg) return context.reply("⚠️ Please reply to a message containing an image or sticker!");
+
+        let imageUrl = null;
+        if (targetMsg.stickers.size > 0) {
+            imageUrl = targetMsg.stickers.first().url;
+        } else if (targetMsg.attachments.size > 0) {
+            imageUrl = targetMsg.attachments.first().url;
         }
 
-        // 🖼️ Get URL or replied attachment
-        let url = inputUrl;
-        if (!url && context.isPrefix && message.reference) {
-            const refMsg = await message.fetchReference();
-            url = refMsg.attachments.first()?.url;
-        }
-        if (!url && interaction?.options && !inputUrl && message?.attachments?.first()) {
-            url = message.attachments.first().url;
-        }
+        if (!imageUrl) return context.reply("⚠️ No image or sticker found in the replied message!");
 
-        if (!url) {
-            const msg = "⚠️ Please provide a URL or reply to a message with an image, GIF, or sticker.";
-            return context.isPrefix
-                ? message.reply(msg)
-                : interaction.reply(msg);
-        }
+        // 🖼️ Load image
+        const res = await fetch(imageUrl);
+        const buffer = await res.arrayBuffer();
+        const img = await Canvas.loadImage(Buffer.from(buffer));
 
-        const fileExt = path.extname(url).toLowerCase();
-        const validFormats = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
-        if (!validFormats.includes(fileExt)) {
-            const msg = "❌ Invalid file type. Supported: PNG, JPG, WEBP, or GIF.";
-            return context.isPrefix
-                ? message.reply(msg)
-                : interaction.reply(msg);
-        }
+        // 🖌️ Prepare sticker image
+        const canvas = Canvas.createCanvas(img.width, img.height);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, img.width, img.height);
 
-        // 🧠 Auto-generate name
-        let name = inputName;
-        if (!name) {
-            name =
-                path.basename(url, fileExt)
-                    .replace(/[^a-zA-Z0-9_]/g, "")
-                    .substring(0, 30) ||
-                `sticker_${Date.now()}`;
-        }
+        const finalBuffer = canvas.toBuffer("image/png");
+        const attachment = new AttachmentBuilder(finalBuffer, { name: "sticker.png" });
 
-        const tempFile = `./temp_${Date.now()}${fileExt}`;
-        const finalFile = `./final_${Date.now()}.webp`;
-
+        // 🪄 Add sticker
         try {
-            // 📥 Download file
-            const response = await axios.get(url, { responseType: "arraybuffer" });
-            fs.writeFileSync(tempFile, response.data);
-
-            // 🧩 Resize + convert using sharp
-            await sharp(tempFile)
-                .resize(320, 320, { fit: "inside" })
-                .toFormat("webp")
-                .toFile(finalFile);
-
-            // 🚀 Upload sticker to target server
-            const sticker = await targetGuild.stickers.create({
-                file: finalFile,
-                name: name,
-                tags: "stolen sticker",
-                description: `Stolen by ${user.username}`
+            const sticker = await guild.stickers.create({
+                file: attachment.attachment,
+                name: `sticker_${Date.now()}`,
+                tags: "fun, cool, custom"
             });
 
-            fs.unlinkSync(tempFile);
-            fs.unlinkSync(finalFile);
-
             const embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setTitle("🌀 Sticker Stolen Successfully!")
-                .setDescription(
-                    `**Name:** ${sticker.name}\n**Server:** ${targetGuild.name}\n**Added by:** ${user}`
-                )
-                .setImage(url)
-                .setFooter({ text: "Sticker successfully uploaded!" })
-                .setTimestamp();
+                .setTitle("✅ Sticker Added Successfully!")
+                .setDescription(`Added to **${guild.name}** by ${user}`)
+                .setImage(sticker.url)
+                .setColor("Green");
 
-            return context.isPrefix
-                ? message.reply({ embeds: [embed] })
-                : interaction.reply({ embeds: [embed] });
-
+            return context.reply({ embeds: [embed] });
         } catch (err) {
-            console.error("Sticker Steal Error:", err);
-            const msg = "❌ Failed to steal or add sticker. File might be too large or server has sticker slot limits.";
-            return context.isPrefix
-                ? message.reply(msg)
-                : interaction.reply(msg);
+            console.error(err);
+            return context.reply("❌ Failed to add sticker. Discord might have rejected the file format or size.");
         }
     }
 };
