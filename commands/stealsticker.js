@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, AttachmentBuilder, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
 const Canvas = require("@napi-rs/canvas");
 const fetch = require("node-fetch");
-const GIFEncoder = require("gif-encoder-2"); // For animated GIF detection & frame handling
+const GIFEncoder = require("gifencoder");// For animated GIF detection & frame handling
 const fs = require("fs");
 const { execSync } = require("child_process"); // We can use ffmpeg for GIF → APNG if needed
 
