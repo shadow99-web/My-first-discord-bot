@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, AttachmentBuilder, PermissionsBitField, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
 const Canvas = require("@napi-rs/canvas");
-const fetch = require("node-fetch");
 
 module.exports = {
     data: new SlashCommandBuilder()
