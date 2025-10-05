@@ -12,7 +12,7 @@ module.exports = {
         const user = isSlash ? context.interaction.user : context.message.author;
 
         // Check NSFW channel
-        if (context.config.nsfwChannel && !channel.nsfw) {
+        if (!channel.nsfw) {
             const embed = new EmbedBuilder()
                 .setTitle('❌ Not NSFW channel')
                 .setDescription('> *This command can only be used in NSFW channels.*')
@@ -31,7 +31,7 @@ module.exports = {
                 .setTitle('🔞 NSFW Ass Image')
                 .setImage(response.data.message)
                 .setFooter({ text: channel.guild ? channel.guild.name : "DM", iconURL: channel.guild?.iconURL({ dynamic: true }) })
-                .setColor(context.config.color || 'Random')
+                .setColor(Math.floor(Math.random() * 16777215).toString(16))
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
