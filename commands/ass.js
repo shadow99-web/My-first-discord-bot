@@ -1,51 +1,60 @@
-const Discord = require('discord.js');
-const axios = require('axios');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const axios = require("axios");
 
-exports.help = {
-  name: 'ass',
-  aliases: [],
-  description: 'Displays a NSFW ass image.',
-  use: 'ass',
-}
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName("ass")
+        .setDescription("Displays a NSFW ass image (NSFW channel required)"),
 
-exports.run = async (bot, message, args, config) => {
-  if (config.nsfwChannel && !message.channel.nsfw) {
-    const embed = new Discord.EmbedBuilder()
-    .setTitle('`❌` ▸ Not NSFW channel')
-    .setDescription(`> *This command can only be used in NSFW channels.*`)
-    .setFooter({ text: message.author.username, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-    .setColor('Red')
-    .setTimestamp();
-    return message.reply({ embeds: [embed] });
-  }
+    async execute(context) {
+        const isSlash = !context.isPrefix;
+        const channel = isSlash ? context.interaction.channel : context.message.channel;
+        const user = isSlash ? context.interaction.user : context.message.author;
 
-  try {
-    const response = await axios.get('https://nekobot.xyz/api/image?type=ass');
+        // Check NSFW channel
+        if (context.config.nsfwChannel && !channel.nsfw) {
+            const embed = new EmbedBuilder()
+                .setTitle('❌ Not NSFW channel')
+                .setDescription('> *This command can only be used in NSFW channels.*')
+                .setFooter({ text: user.username, iconURL: user.displayAvatarURL({ dynamic: true }) })
+                .setColor('Red')
+                .setTimestamp();
 
-    const embed = new Discord.EmbedBuilder()
-      .setTitle('`🔞` ▸ NSFW Ass Image')
-      .setImage(response.data.message)
-      .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL({ dynamic: true }) })
-      .setColor(config.color)
-      .setTimestamp();
+            if (isSlash) return context.interaction.reply({ embeds: [embed], ephemeral: true });
+            return context.message.reply({ embeds: [embed] });
+        }
 
-    const row = new Discord.ActionRowBuilder()
-      .addComponents(
-        new Discord.ButtonBuilder()
-          .setEmoji('📎')
-          .setLabel(' ▸ Link')
-          .setStyle(Discord.ButtonStyle.Link)
-          .setURL(response.data.message)
-      );
+        try {
+            const response = await axios.get('https://nekobot.xyz/api/image?type=ass');
 
-    return message.reply({ embeds: [embed], components: [row] });
-  } catch {
-    const embed = new Discord.EmbedBuilder()
-    .setTitle('`❌` ▸ Error occurred')
-    .setDescription(`> *An error occurred while fetching the image. Please try again later.*`)
-    .setFooter({ text: message.author.username, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-    .setColor('Red')
-    .setTimestamp();
-    return message.reply({ embeds: [embed] });
-  }
+            const embed = new EmbedBuilder()
+                .setTitle('🔞 NSFW Ass Image')
+                .setImage(response.data.message)
+                .setFooter({ text: channel.guild ? channel.guild.name : "DM", iconURL: channel.guild?.iconURL({ dynamic: true }) })
+                .setColor(context.config.color || 'Random')
+                .setTimestamp();
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setEmoji('📎')
+                    .setLabel('Link')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(response.data.message)
+            );
+
+            if (isSlash) await context.interaction.reply({ embeds: [embed], components: [row] });
+            else await context.message.reply({ embeds: [embed], components: [row] });
+
+        } catch {
+            const embed = new EmbedBuilder()
+                .setTitle('❌ Error occurred')
+                .setDescription('> *An error occurred while fetching the image. Please try again later.*')
+                .setFooter({ text: user.username, iconURL: user.displayAvatarURL({ dynamic: true }) })
+                .setColor('Red')
+                .setTimestamp();
+
+            if (isSlash) await context.interaction.reply({ embeds: [embed], ephemeral: true });
+            else await context.message.reply({ embeds: [embed] });
+        }
+    }
 };
