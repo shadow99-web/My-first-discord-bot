@@ -1,41 +1,58 @@
 // stealsticker.js
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require("discord.js");
+const fetch = require("node-fetch");
 const sharp = require("sharp");
 const gifFrames = require("gif-frames");
 const fs = require("fs");
 const path = require("path");
 
-const TMP_DIR = "/tmp"; // change if your host needs different tmp path
+const TMP_DIR = "/tmp";
 const MAX_DIM = 320;
-const MAX_SIZE = 512 * 1024; // 512 KB
+const MAX_SIZE = 512 * 1024;
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("stealsticker")
-    .setDescription("Steal an image/sticker/GIF (supports other-server stickers via ID/URL) and add it as a server sticker")
-    .addStringOption(opt => opt.setName("serverid").setDescription("Server ID where sticker will be added").setRequired(false))
-    .addStringOption(opt => opt.setName("source").setDescription("Reply, or provide a sticker ID or direct URL to fetch").setRequired(false)),
+    .setDescription("Steal an image or sticker and add it to a server!")
+    .addStringOption(opt =>
+      opt.setName("serverid").setDescription("The server ID where the sticker will be added").setRequired(false))
+    .addStringOption(opt =>
+      opt.setName("source").setDescription("Sticker ID, URL, or message link").setRequired(false)),
 
-  // For prefix support your context needs: .isPrefix, .message, .interaction, .client
   async execute(context) {
     const { interaction, message, isPrefix, client } = context;
-    const user = isPrefix ? message.author : interaction.user;
 
-    // universal reply wrapper
+    // 🧠 Universal reply wrapper
     const reply = async (payload) => {
-      if (isPrefix) return await message.reply(payload);
-      else return await interaction.reply({ ...payload, ephemeral: true }).catch(() => {});
+      try {
+        if (isPrefix && message?.reply) return await message.reply(payload);
+        if (interaction?.replied || interaction?.deferred)
+          return await interaction.followUp(payload);
+        else if (interaction?.reply)
+          return await interaction.reply(payload);
+      } catch (e) {
+        console.error("Reply error:", e.message);
+      }
     };
 
-    // get target guild (where sticker will be added)
-    const serverId = isPrefix
-      ? (message.content.split(" ")[1] || null) // optional first arg for prefix (serverId)
-      : interaction.options.getString("serverid");
-    const guild = serverId ? client.guilds.cache.get(serverId) : (isPrefix ? message.guild : interaction.guild);
-    if (!guild) return reply({ content: "⚠️ Couldn’t find that server. Make sure the bot is in it." });
+    const user = isPrefix ? message.author : interaction.user;
 
-    if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
-      return reply({ content: "❌ I need Manage Emojis & Stickers permission in the target server." });
+    // 🏠 Get target server
+    const serverId = isPrefix
+      ? message.content.split(" ")[1]
+      : interaction.options.getString("serverid");
+
+    const guild = serverId
+      ? client.guilds.cache.get(serverId)
+      : (isPrefix ? message.guild : interaction.guild);
+
+    if (!guild)
+      return reply({ content: "⚠️ I couldn’t find that server. Make sure the bot is in it!" });
+
+    if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers))
+      return reply({ content: "❌ I don’t have permission to manage stickers in that server!" });
+
+    // ... (rest of your code stays the same below this line)
     }
 
     // Determine source: priority order
