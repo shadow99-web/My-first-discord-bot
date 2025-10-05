@@ -25,7 +25,6 @@
   "dependencies": {
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
-    "@napi-rs/canvas": "^0.1.66",
     "axios": "^1.6.0",
     "mongoose": "^7.5.0",
     "distube": "^5.0.7",
@@ -33,6 +32,9 @@
     "openai": "^4.9.0",
     "@vitalets/google-translate-api": "^8.0.0",
     "node-fetch": "^3.3.2",
+    "@napi-rs/canvas": "^0.1.66",
+    "sharp": "^0.33.2",
+    "gif-frames": "^1.0.1",
     "gifencoder": "^2.0.1"
   },
   "devDependencies": {
