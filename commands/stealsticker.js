@@ -1,211 +1,178 @@
-// stealsticker.js
-const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require("discord.js");
-const fetch = require("node-fetch");
+const {
+  SlashCommandBuilder,
+  PermissionsBitField,
+} = require("discord.js");
 const sharp = require("sharp");
-const gifFrames = require("gif-frames");
 const fs = require("fs");
 const path = require("path");
+const { exec } = require("child_process");
+const https = require("https");
 
 const TMP_DIR = "/tmp";
+const FFMPEG_PATH = path.join(TMP_DIR, "ffmpeg");
 const MAX_DIM = 320;
 const MAX_SIZE = 512 * 1024;
+
+// ✅ Ensure ffmpeg exists
+async function ensureFFmpeg() {
+  if (fs.existsSync(FFMPEG_PATH)) return FFMPEG_PATH;
+  console.log("🔽 Downloading ffmpeg binary...");
+
+  const url =
+    "https://github.com/eugeneware/ffmpeg-static/releases/download/b4.4.0/ffmpeg-linux-x64";
+
+  await new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(FFMPEG_PATH);
+    https
+      .get(url, (response) => {
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close();
+          fs.chmodSync(FFMPEG_PATH, "755");
+          console.log("✅ ffmpeg installed!");
+          resolve();
+        });
+      })
+      .on("error", (err) => reject(err));
+  });
+
+  return FFMPEG_PATH;
+}
+
+// ✅ Compress to meet Discord sticker size limit
+async function compressToLimit(inputBuffer, outputPath) {
+  let quality = 90;
+  let buffer = inputBuffer;
+
+  while (true) {
+    const resized = await sharp(buffer)
+      .resize(MAX_DIM, MAX_DIM, { fit: "inside" })
+      .webp({ quality })
+      .toBuffer();
+
+    if (resized.length <= MAX_SIZE || quality <= 30) {
+      fs.writeFileSync(outputPath, resized);
+      return resized;
+    }
+    quality -= 10;
+  }
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("stealsticker")
-    .setDescription("Steal an image or sticker and add it to a server!")
-    .addStringOption(opt =>
-      opt.setName("serverid").setDescription("The server ID where the sticker will be added").setRequired(false))
-    .addStringOption(opt =>
-      opt.setName("source").setDescription("Sticker ID, URL, or message link").setRequired(false)),
+    .setDescription("Steal an image, sticker, or GIF and add it to your server.")
+    .addStringOption((opt) =>
+      opt.setName("serverid").setDescription("Server ID to upload to").setRequired(false)
+    )
+    .addStringOption((opt) =>
+      opt.setName("source").setDescription("Sticker ID or image URL").setRequired(false)
+    ),
 
   async execute(context) {
     const { interaction, message, isPrefix, client } = context;
 
-    // 🧠 Universal reply wrapper
-    const reply = async (payload) => {
+    // 🔁 Safe reply method
+    const reply = async (content) => {
       try {
-        if (isPrefix && message?.reply) return await message.reply(payload);
+        if (isPrefix && message?.reply) return await message.reply(content);
         if (interaction?.replied || interaction?.deferred)
-          return await interaction.followUp(payload);
-        else if (interaction?.reply)
-          return await interaction.reply(payload);
-      } catch (e) {
-        console.error("Reply error:", e.message);
+          return await interaction.followUp(content);
+        if (interaction?.reply) return await interaction.reply(content);
+      } catch (err) {
+        console.error("Reply error:", err);
       }
     };
 
-    const user = isPrefix ? message.author : interaction.user;
-
-    // 🏠 Get target server
-    const serverId = isPrefix
-      ? message.content.split(" ")[1]
-      : interaction.options.getString("serverid");
+    const args = isPrefix ? message.content.split(" ").slice(1) : [];
+    const serverId = isPrefix ? args[0] : interaction.options.getString("serverid");
+    const source = isPrefix ? args[1] : interaction.options.getString("source");
 
     const guild = serverId
       ? client.guilds.cache.get(serverId)
-      : (isPrefix ? message.guild : interaction.guild);
+      : isPrefix
+      ? message.guild
+      : interaction.guild;
 
     if (!guild)
-      return reply({ content: "⚠️ I couldn’t find that server. Make sure the bot is in it!" });
+      return reply({ content: "⚠️ Couldn’t find that server. Is the bot in it?" });
+    if (
+      !guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)
+    )
+      return reply({ content: "❌ I need **Manage Stickers** permission in that server!" });
 
-    if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers))
-      return reply({ content: "❌ I don’t have permission to manage stickers in that server!" });
+    if (!source)
+      return reply({ content: "⚠️ Please provide a valid sticker ID or image URL!" });
 
-    // ... (rest of your code stays the same below this line)
-    }
+    let progressMsg = await reply({ content: "🔸🔹▪️ **Downloading image/sticker...**" });
 
-    // Determine source: priority order
-    // 1) Provided 'source' option/arg (sticker ID or URL)
-    // 2) If prefix: maybe message was a reply, fetch referenced message
-    // 3) If slash and no source: ask user via modal (not included here) or fail
-    let sourceInput = isPrefix ? (message.content.split(" ").slice(2).join(" ") || null) : interaction.options.getString("source");
-    sourceInput = sourceInput ? sourceInput.trim() : null;
-
-    // function to fetch buffer from a URL
-    const fetchBufferFromUrl = async (url) => {
-      const res = await fetch(url, { timeout: 15000 });
-      if (!res.ok) throw new Error(`Failed to fetch ${url} (${res.status})`);
-      const arr = await res.arrayBuffer();
-      return Buffer.from(arr);
-    };
-
-    // try build possible CDN URLs from a sticker ID
-    const tryStickerIdUrls = async (id) => {
-      // Discord CDN common patterns
-      const tries = [
-        `https://cdn.discordapp.com/stickers/${id}.png`,
-        `https://cdn.discordapp.com/stickers/${id}.webp`,
-        `https://cdn.discordapp.com/stickers/${id}` // sometimes works and returns right content-type
-      ];
-
-      for (const u of tries) {
-        try {
-          const b = await fetchBufferFromUrl(u);
-          return b;
-        } catch (e) {
-          // continue trying
-        }
-      }
-      throw new Error("No CDN result for sticker ID");
-    };
-
-    // if sourceInput is null, try to use replied message (prefix) or fail for slash
-    let initialBuffer = null;
     try {
-      if (sourceInput) {
-        // If it's a URL -> fetch directly
-        if (/^https?:\/\//i.test(sourceInput)) {
-          initialBuffer = await fetchBufferFromUrl(sourceInput);
-        } else if (/^\d{16,}$/g.test(sourceInput)) {
-          // looks like an ID (Discord IDs are 17-19 digits commonly)
-          initialBuffer = await tryStickerIdUrls(sourceInput);
-        } else {
-          // not URL or ID — maybe user passed a message URL like https://discord.com/channels/guildId/channelId/messageId
-          const discordMsgUrlMatch = sourceInput.match(/discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/i);
-          if (discordMsgUrlMatch) {
-            const [, gId, cId, mId] = discordMsgUrlMatch;
-            try {
-              const ch = await client.channels.fetch(cId).catch(() => null);
-              if (ch && ch.isText()) {
-                const msg = await ch.messages.fetch(mId).catch(() => null);
-                if (msg) {
-                  if (msg.stickers?.size) initialBuffer = await fetchBufferFromUrl(msg.stickers.first().url);
-                  else if (msg.attachments?.size) initialBuffer = await fetchBufferFromUrl(msg.attachments.first().url);
-                }
-              }
-            } catch (e) { /* ignore */ }
-          }
-          // if still null, attempt to treat input as sticker ID fallback
-          if (!initialBuffer && /^\d{16,}$/.test(sourceInput)) {
-            initialBuffer = await tryStickerIdUrls(sourceInput);
-          }
-        }
+      await ensureFFmpeg();
+
+      let imageBuffer;
+      let isGif = false;
+      let stickerName = `sticker_${Date.now()}`;
+
+      if (/^https?:\/\//.test(source)) {
+        const res = await fetch(source);
+        const type = res.headers.get("content-type") || "";
+        if (type.includes("gif")) isGif = true;
+        imageBuffer = Buffer.from(await res.arrayBuffer());
+      } else {
+        const sticker = client.stickers.cache.get(source);
+        if (!sticker)
+          return reply({ content: "⚠️ Invalid sticker ID or URL!" });
+
+        const res = await fetch(sticker.url);
+        imageBuffer = Buffer.from(await res.arrayBuffer());
+        stickerName = sticker.name;
+        if (sticker.format === 2) isGif = true;
       }
 
-      // If no sourceInput or fetch failed, try to use replied message (prefix)
-      if (!initialBuffer) {
-        if (isPrefix && message.reference) {
-          const ref = await message.fetchReference().catch(() => null);
-          if (ref) {
-            if (ref.stickers?.size) initialBuffer = await fetchBufferFromUrl(ref.stickers.first().url);
-            else if (ref.attachments?.size) initialBuffer = await fetchBufferFromUrl(ref.attachments.first().url);
-          }
-        } else if (!isPrefix) {
-          // For slash, if no source provided we can fail politely
-          return reply({ content: "❌ Provide a `source` (sticker ID, message URL, or direct image URL) or use the prefix reply method." });
-        }
-      }
+      const inputPath = path.join(TMP_DIR, `${stickerName}${isGif ? ".gif" : ".png"}`);
+      const outputPath = path.join(TMP_DIR, `${stickerName}.webp`);
+      fs.writeFileSync(inputPath, imageBuffer);
 
-      if (!initialBuffer) return reply({ content: "⚠️ Couldn't find or fetch any image/sticker from the provided source." });
-    } catch (err) {
-      console.error("Source fetch error:", err);
-      return reply({ content: `❌ Failed to fetch source: ${err.message}` });
-    }
+      // 🔄 Update progress
+      if (progressMsg?.edit)
+        await progressMsg.edit({ content: "⚙️ **Processing and resizing image...**" });
 
-    // At this point initialBuffer is a Buffer of some image (png/webp/gif/..)
-    // Convert pipeline: GIF -> first frame, WebP -> PNG, resize, compress to <512KB
-    let workingBuffer = initialBuffer;
-
-    // Detect GIF by magic bytes
-    const isGif = workingBuffer && workingBuffer.slice(0, 3).toString("ascii") === "GIF";
-    if (isGif) {
-      try {
-        // write temp gif -> extract 1st frame
-        const gifTmp = path.join(TMP_DIR, `tmp_${Date.now()}.gif`);
-        fs.writeFileSync(gifTmp, workingBuffer);
-        const frames = await gifFrames({ url: gifTmp, frames: 0, outputType: "png", cumulative: false });
-        const framePath = path.join(TMP_DIR, `frame_${Date.now()}.png`);
+      if (isGif) {
         await new Promise((resolve, reject) => {
-          const s = frames[0].getImage().pipe(fs.createWriteStream(framePath));
-          s.on("finish", resolve);
-          s.on("error", reject);
+          exec(
+            `"${FFMPEG_PATH}" -i "${inputPath}" -vf "scale=${MAX_DIM}:${MAX_DIM}:force_original_aspect_ratio=decrease" -loop 0 -an -vsync 0 "${outputPath}"`,
+            (error) => (error ? reject(error) : resolve())
+          );
         });
-        workingBuffer = fs.readFileSync(framePath);
-        // cleanup
-        try { fs.unlinkSync(gifTmp); } catch {}
-        try { fs.unlinkSync(framePath); } catch {}
-      } catch (e) {
-        console.warn("GIF->frame extraction failed, will attempt to use original buffer", e.message);
-      }
-    }
-
-    // use sharp to convert to PNG and resize
-    try {
-      let resized = await sharp(workingBuffer)
-        .resize({ width: MAX_DIM, height: MAX_DIM, fit: "inside" })
-        .png({ quality: 90, compressionLevel: 9 })
-        .toBuffer();
-
-      // if still too big, try downscale to 256 then 128
-      if (resized.length > MAX_SIZE) {
-        resized = await sharp(resized).resize({ width: 256, height: 256, fit: "inside" }).png({ quality: 85 }).toBuffer();
-      }
-      if (resized.length > MAX_SIZE) {
-        resized = await sharp(resized).resize({ width: 128, height: 128, fit: "inside" }).png({ quality: 80 }).toBuffer();
+      } else {
+        await compressToLimit(imageBuffer, outputPath);
       }
 
-      if (resized.length > MAX_SIZE) {
-        return reply({ content: "❌ Couldn't compress image below Discord's 512KB limit. Try a smaller image or different source." });
-      }
+      const stats = fs.statSync(outputPath);
+      if (stats.size > MAX_SIZE)
+        return progressMsg.edit({
+          content: "❌ Couldn’t compress file under Discord’s 512KB limit!",
+        });
 
-      // final upload as sticker
+      // 🔼 Uploading
+      if (progressMsg?.edit)
+        await progressMsg.edit({ content: "🚀 **Uploading sticker to Discord...**" });
+
       const sticker = await guild.stickers.create({
-        file: resized,
-        name: `sticker_${Date.now()}`,
-        tags: "stolen,custom"
+        file: outputPath,
+        name: stickerName,
+        tags: "fun, custom, sticker",
       });
 
-      const embed = new EmbedBuilder()
-        .setTitle("✅ Sticker Added Successfully")
-        .setDescription(`Added to **${guild.name}** by ${user.tag}`)
-        .setImage(sticker.url)
-        .setColor("Green");
+      await progressMsg.edit({
+        content: `✅ **Sticker added successfully!**\n📍 Name: **${sticker.name}**\n🏠 Server: **${guild.name}**\n🔗 ${sticker.url}`,
+      });
 
-      return reply({ embeds: [embed] });
+      fs.unlinkSync(inputPath);
+      fs.unlinkSync(outputPath);
     } catch (err) {
-      console.error("Sticker creation pipeline error:", err);
-      return reply({ content: "❌ Failed to convert/upload the sticker. See console for details." });
+      console.error("Sticker creation error:", err);
+      progressMsg.edit({ content: `❌ Error: ${err.message}` }).catch(() => {});
     }
-  }
+  },
 };
