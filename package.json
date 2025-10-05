@@ -34,7 +34,6 @@
     "node-fetch": "^3.3.2",
     "@napi-rs/canvas": "^0.1.66",
     "sharp": "^0.33.2",
-"child_process": "builtin", 
     "gif-frames": "^1.0.1",
     "gifencoder": "^2.0.1"
   },
