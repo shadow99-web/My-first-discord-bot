@@ -1,18 +1,15 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 module.exports = {
-  data: {
-    name: "ask",
-    description: "Ask AI anything!",
-    options: [
-      {
-        name: "question",
-        type: 3, // STRING
-        description: "Your question for AI",
-        required: true,
-      },
-    ],
-  },
+  data: new SlashCommandBuilder()
+    .setName("ask")
+    .setDescription("Ask AI anything!")
+    .addStringOption(option =>
+      option
+        .setName("question")
+        .setDescription("Your question for AI")
+        .setRequired(true)
+    ),
 
   async execute(context) {
     const { interaction, message, args, isPrefix } = context;
@@ -46,7 +43,7 @@ module.exports = {
           .setTitle("🤖 AI Response")
           .setDescription(chunks[page])
           .setFooter({ text: `Page ${page + 1} / ${chunks.length}` })
-          .setColor("Blue"); // Fixed color
+          .setColor("Random"); // Can also use helper for true random color
 
       const makeRow = () =>
         new ActionRowBuilder().addComponents(
@@ -65,10 +62,12 @@ module.exports = {
       // Send initial embed
       const sent = isPrefix
         ? await message.reply({ embeds: [makeEmbed()], components: [makeRow()] })
-        : await interaction.reply({ embeds: [makeEmbed()], components: [makeRow()] });
+        : await interaction.reply({ embeds: [makeEmbed()], components: [makeRow()], fetchReply: true });
 
-      // Collector for pagination
-      const collector = (isPrefix ? sent : await interaction.fetchReply()).createMessageComponentCollector({ time: 60000 });
+      const replyMsg = isPrefix ? sent : await interaction.fetchReply();
+
+      // Collector for pagination buttons
+      const collector = replyMsg.createMessageComponentCollector({ time: 60000 });
 
       collector.on("collect", async (i) => {
         const authorId = isPrefix ? message.author.id : interaction.user.id;
@@ -82,8 +81,9 @@ module.exports = {
       });
 
       collector.on("end", () => {
-        sent.edit({ components: [] }).catch(() => {});
+        replyMsg.edit({ components: [] }).catch(() => {});
       });
+
     } catch (err) {
       console.error("AI ERROR:", err);
       const failMsg = "⚠️ Failed to connect to AI API.";
