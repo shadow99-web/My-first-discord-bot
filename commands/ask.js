@@ -2,91 +2,94 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("
 
 module.exports = {
   name: "ask",
-  description: "Ask AI anything!",
+  description: "Ask AI anything (uses public APIs fallback system).",
   options: [
     {
       name: "question",
-      type: 3,
-      description: "Your question for AI",
+      type: 3, // STRING
+      description: "Ask your question to the AI",
       required: true,
     },
   ],
 
   async execute({ client, interaction, message, args, isPrefix }) {
     const question = isPrefix ? args.join(" ") : interaction.options.getString("question");
-    if (!question) {
-      const msg = "❌ Please provide a question!";
-      return isPrefix ? message.reply(msg) : interaction.reply({ content: msg, ephemeral: true });
-    }
+    if (!question)
+      return isPrefix
+        ? message.reply("❌ Please ask something!")
+        : interaction.reply({ content: "❌ Please ask something!", ephemeral: true });
 
     if (interaction) await interaction.deferReply();
 
+    // 🧠 Public AI APIs with fallback
     const apis = [
-      async () => {
-        const res = await fetch("https://torgpt.space/api/v1/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: question }] })
-        });
-        const data = await res.json();
-        return data.response || data.choices?.[0]?.message?.content;
+      // 🔹 OpenGPTX (public AI mirror)
+      {
+        name: "OpenGPTX",
+        url: "https://api.pearktrue.xyz/api/chatgpt",
+        method: "POST",
+        body: { prompt: question },
       },
-      async () => {
-        const res = await fetch("https://api.freegpt4.ddns.net/api/v1/text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: question })
-        });
-        const data = await res.json();
-        return data.output || data.text;
+      // 🔹 DuckDuckGo Instant Answer
+      {
+        name: "DuckDuckGo",
+        url: `https://api.duckduckgo.com/?q=${encodeURIComponent(question)}&format=json`,
+        method: "GET",
       },
-      async () => {
-        const res = await fetch("https://gptgo.ai/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ q: question })
-        });
-        const data = await res.json();
-        return data.answer || data.result;
+      // 🔹 MikuAI mirror
+      {
+        name: "MikuAI",
+        url: `https://api.mikuapi.xyz/v1/ai?ask=${encodeURIComponent(question)}`,
+        method: "GET",
       },
-      async () => {
-        const res = await fetch("https://chatforfree.org/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: question })
-        });
-        const data = await res.json();
-        return data.response || data.reply;
+      // 🔹 SimSimi public API
+      {
+        name: "SimSimi",
+        url: `https://api.simsimi.net/v2/?text=${encodeURIComponent(question)}&lc=en`,
+        method: "GET",
       },
-      async () => {
-        if (!process.env.DEEPAI_KEY) throw new Error("No DEEPAI_KEY");
-        const res = await fetch("https://api.deepai.org/api/text-generator", {
-          method: "POST",
-          headers: { "Api-Key": process.env.DEEPAI_KEY },
-          body: new URLSearchParams({ text: question })
-        });
-        const data = await res.json();
-        return data.output;
-      }
+      // 🔹 Some-random public chatbot
+      {
+        name: "SomeRandom",
+        url: `https://some-random-api.com/chatbot?message=${encodeURIComponent(question)}`,
+        method: "GET",
+      },
     ];
 
     let answer = null;
     for (const api of apis) {
       try {
-        answer = await Promise.race([
-          api(),
-          new Promise((_, r) => setTimeout(() => r(new Error("timeout")), 7000))
-        ]);
-        if (answer) break;
-      } catch (err) {
-        console.log("⚠️ API failed:", err.message);
+        const res = await fetch(api.url, {
+          method: api.method,
+          headers: { "Content-Type": "application/json" },
+          body: api.body ? JSON.stringify(api.body) : undefined,
+        });
+        const data = await res.json();
+
+        // Try to extract a text-like response
+        answer =
+          data.answer ||
+          data.response ||
+          data.result ||
+          data.message ||
+          data.content ||
+          data.Assistant ||
+          data.abstract ||
+          data.AbstractText ||
+          (Array.isArray(data.results) && data.results[0]?.text) ||
+          null;
+
+        if (answer) {
+          console.log(`✅ Response from: ${api.name}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`⚠️ ${api.name} failed`);
       }
     }
 
-    if (!answer) {
-      const failMsg = "⚠️ All public AI APIs failed. Please try again later!";
-      return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
-    }
+    if (!answer)
+      answer = "⚠️ All public AI APIs failed to respond. Try again later.";
 
     const chunks = answer.match(/[\s\S]{1,1900}/g) || ["(empty response)"];
     let page = 0;
@@ -95,19 +98,45 @@ module.exports = {
       new EmbedBuilder()
         .setTitle("🤖 AI Response")
         .setDescription(chunks[page])
-        .setFooter({ text: `Page ${page + 1} / ${chunks.length}` })
-        .setColor("Random");
+        .setColor("Random")
+        .setFooter({ text: `Page ${page + 1} / ${chunks.length}` });
 
     const makeRow = () =>
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Primary).setDisabled(page === 0),
-        new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Primary).setDisabled(page === chunks.length - 1)
+        new ButtonBuilder()
+          .setCustomId("prev")
+          .setLabel("⬅️")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(page === 0),
+        new ButtonBuilder()
+          .setCustomId("next")
+          .setLabel("➡️")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(page === chunks.length - 1)
       );
 
     const sent = isPrefix
       ? await message.reply({ embeds: [makeEmbed()], components: [makeRow()] })
       : await interaction.editReply({ embeds: [makeEmbed()], components: [makeRow()] });
 
+    const collector = sent.createMessageComponentCollector({ time: 60000 });
+
+    collector.on("collect", async (i) => {
+      const authorId = isPrefix ? message.author.id : interaction.user.id;
+      if (i.user.id !== authorId)
+        return i.reply({ content: "❌ You can’t control this message.", ephemeral: true });
+
+      if (i.customId === "next" && page < chunks.length - 1) page++;
+      if (i.customId === "prev" && page > 0) page--;
+
+      await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
+    });
+
+    collector.on("end", async () => {
+      sent.edit({ components: [] }).catch(() => {});
+    });
+  },
+};
     const collector = sent.createMessageComponentCollector({ time: 60000 });
 
     collector.on("collect", async (i) => {
