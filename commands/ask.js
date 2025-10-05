@@ -1,34 +1,40 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 module.exports = {
-  name: "ask",
-  description: "Ask AI anything!",
-  options: [
-    {
-      name: "question",
-      type: 3,
-      description: "Your question for AI",
-      required: true,
-    },
-  ],
+  data: {
+    name: "ask",
+    description: "Ask AI anything!",
+    options: [
+      {
+        name: "question",
+        type: 3, // STRING
+        description: "Your question for AI",
+        required: true,
+      },
+    ],
+  },
 
-  async execute({ client, interaction, message, args, isPrefix }) {
+  async execute(context) {
+    const { interaction, message, args, isPrefix } = context;
     const question = isPrefix ? args.join(" ") : interaction.options.getString("question");
+
     if (!question) {
       const msg = "❌ Please provide a question!";
-      return isPrefix ? message.reply(msg) : interaction.reply({ content: msg, ephemeral: true });
+      return isPrefix
+        ? await message.reply(msg)
+        : await interaction.reply({ content: msg, ephemeral: true });
     }
 
-    if (interaction) await interaction.deferReply();
-
     try {
-      // ✅ Free, Render-friendly API (no key needed)
+      // Fetch AI response
       const res = await fetch(`https://api.popcat.xyz/chatbot?msg=${encodeURIComponent(question)}`);
       const data = await res.json();
 
       if (!data || !data.reply) {
         const failMsg = "⚠️ AI didn't return a valid response.";
-        return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
+        return isPrefix
+          ? await message.reply(failMsg)
+          : await interaction.reply({ content: failMsg, ephemeral: true });
       }
 
       const text = data.reply;
@@ -40,7 +46,7 @@ module.exports = {
           .setTitle("🤖 AI Response")
           .setDescription(chunks[page])
           .setFooter({ text: `Page ${page + 1} / ${chunks.length}` })
-          .setColor("Random");
+          .setColor("Blue"); // Fixed color
 
       const makeRow = () =>
         new ActionRowBuilder().addComponents(
@@ -56,11 +62,13 @@ module.exports = {
             .setDisabled(page === chunks.length - 1)
         );
 
+      // Send initial embed
       const sent = isPrefix
         ? await message.reply({ embeds: [makeEmbed()], components: [makeRow()] })
-        : await interaction.editReply({ embeds: [makeEmbed()], components: [makeRow()] });
+        : await interaction.reply({ embeds: [makeEmbed()], components: [makeRow()] });
 
-      const collector = sent.createMessageComponentCollector({ time: 60000 });
+      // Collector for pagination
+      const collector = (isPrefix ? sent : await interaction.fetchReply()).createMessageComponentCollector({ time: 60000 });
 
       collector.on("collect", async (i) => {
         const authorId = isPrefix ? message.author.id : interaction.user.id;
@@ -79,7 +87,9 @@ module.exports = {
     } catch (err) {
       console.error("AI ERROR:", err);
       const failMsg = "⚠️ Failed to connect to AI API.";
-      return isPrefix ? message.reply(failMsg) : interaction.editReply(failMsg);
+      return isPrefix
+        ? await message.reply(failMsg)
+        : await interaction.reply({ content: failMsg, ephemeral: true });
     }
   },
 };
