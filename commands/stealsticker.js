@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require("discord.js");
 const Canvas = require("@napi-rs/canvas");
-const fetch = require("node-fetch");
 const sharp = require("sharp");
 const gifFrames = require("gif-frames");
 const fs = require("fs");
