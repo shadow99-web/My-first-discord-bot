@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const axios = require("axios");
 
-// Supported NSFW categories & APIs
 const categories = {
     ass: [
         { name: "Nekobot", url: "https://nekobot.xyz/api/image?type=ass", path: "message" },
@@ -55,7 +54,7 @@ module.exports = {
             return context.message.reply({ embeds: [embed] });
         }
 
-        // Determine category
+        // Get category
         const type = isSlash ? context.interaction.options.getString("type") : context.args[0]?.toLowerCase();
         if (!type || !categories[type]) {
             const embed = new EmbedBuilder()
@@ -69,7 +68,10 @@ module.exports = {
             return context.message.reply({ embeds: [embed] });
         }
 
-        // Fetch image from random API for the selected category
+        // Defer reply for slash commands (prevents Unknown Interaction)
+        if (isSlash) await context.interaction.deferReply();
+
+        // Fetch image from random API
         let imageUrl = null;
         const shuffled = categories[type].sort(() => Math.random() - 0.5);
 
@@ -89,11 +91,11 @@ module.exports = {
                 .setColor('Red')
                 .setTimestamp();
 
-            if (isSlash) return context.interaction.reply({ embeds: [embed], ephemeral: true });
+            if (isSlash) return context.interaction.editReply({ embeds: [embed], ephemeral: true });
             return context.message.reply({ embeds: [embed] });
         }
 
-        // Create embed with image + link button
+        // Embed with image + link button
         const embed = new EmbedBuilder()
             .setTitle(`🔞 NSFW ${type.charAt(0).toUpperCase() + type.slice(1)} Image`)
             .setImage(imageUrl)
@@ -109,7 +111,7 @@ module.exports = {
                 .setURL(imageUrl)
         );
 
-        if (isSlash) await context.interaction.reply({ embeds: [embed], components: [row] });
+        if (isSlash) await context.interaction.editReply({ embeds: [embed], components: [row] });
         else await context.message.reply({ embeds: [embed], components: [row] });
     }
 };
