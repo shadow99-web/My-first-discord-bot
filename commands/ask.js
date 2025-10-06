@@ -27,8 +27,8 @@ module.exports = {
 
     // ✅ Public, keyless APIs (Render safe)
     const apis = [
-      { name: "AffiliatePlus", url: `https://api.affiliateplus.xyz/api/chatbot?message=${encodeURIComponent(question)}&botname=Shadow&ownername=Jeetendra`, extract: d => d.message },
-      { name: "DuckDuckGo", url: `https://api.duckduckgo.com/?q=${encodeURIComponent(question)}&format=json`, extract: d => d.AbstractText || d.Answer || d.Heading || d.Abstract || null },
+    
+     { name: "DuckDuckGo", url: `https://api.duckduckgo.com/?q=${encodeURIComponent(question)}&format=json`, extract: d => d.AbstractText || d.Answer || d.Heading || d.Abstract || null },
       { name: "Wikipedia", url: `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}`, extract: d => d.extract },
       { name: "Brainshop", url: `http://api.brainshop.ai/get?bid=177601&key=FrUqYZpHZ7wP0vMP&uid=1&msg=${encodeURIComponent(question)}`, extract: d => d.cnt },
       { name: "SomeRandomAPI", url: `https://some-random-api.com/chatbot?message=${encodeURIComponent(question)}`, extract: d => d.response },
