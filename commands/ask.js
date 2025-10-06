@@ -55,7 +55,7 @@ module.exports = {
         const makeEmbed = () => new EmbedBuilder()
             .setTitle("🤖 AI Response")
             .setDescription(chunks[page])
-            .setColor(Math.floor(Math.random() * 16777215).toString(16))
+            .setColor(0x5865F2) // Discord blurple color, safe and standard
             .setFooter({ text: `Page ${page + 1} / ${chunks.length}` });
 
         const makeRow = () => new ActionRowBuilder().addComponents(
