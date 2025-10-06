@@ -28,14 +28,13 @@ module.exports = {
         return context.message.reply(msg);
       }
 
-      // Embed with bio
       const embed = new EmbedBuilder()
         .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) })
         .setDescription(`**🪶 Bio:**\n${bio}`)
         .setColor(0x5865F2)
         .setFooter({ text: `User ID: ${user.id}` });
 
-      // Button that sends the bio in a copyable code block
+      // Optional copy button
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("copy_bio")
@@ -47,7 +46,7 @@ module.exports = {
         ? await context.interaction.editReply({ embeds: [embed], components: [row] })
         : await context.message.reply({ embeds: [embed], components: [row] });
 
-      // Collector to handle button click
+      // Collector for the button
       const collector = sent.createMessageComponentCollector({ time: 60000 });
       collector.on("collect", async i => {
         const authorId = isSlash ? context.interaction.user.id : context.message.author.id;
