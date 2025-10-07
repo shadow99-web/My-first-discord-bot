@@ -5,12 +5,11 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("rps")
-    .setDescription("Play Rock Paper Scissors with AI!")
+    .setDescription("🎮 Play Rock Paper Scissors against AI!")
     .addStringOption(option =>
       option
         .setName("choice")
@@ -29,173 +28,117 @@ module.exports = {
       ? context.interaction.options.getString("choice")
       : context.args?.[0]?.toLowerCase();
 
-    const valid = ["rock", "paper", "scissors"];
-    if (!userChoice || !valid.includes(userChoice)) {
-      const msg = "❌ Please choose one of: **rock**, **paper**, or **scissors**.";
+    const validChoices = ["rock", "paper", "scissors"];
+    if (!validChoices.includes(userChoice)) {
+      const msg = "❌ Please choose either **rock**, **paper**, or **scissors**.";
       if (isSlash) return context.interaction.reply({ content: msg });
       return context.message.reply(msg);
     }
 
     if (isSlash) await context.interaction.deferReply();
 
-    // Convert userChoice to the API’s expected format
-    const apiChoiceMap = {
-      rock: "rockr",
-      paper: "paperp",
-      scissors: "scissorss",
+    const emojis = {
+      rock: "🪨",
+      paper: "📄",
+      scissors: "✂️",
     };
-    const userApiChoice = apiChoiceMap[userChoice];
 
-    let replyEmbed, replyRow;
+    // Function to determine winner
+    const getResult = (user, ai) => {
+      if (user === ai) return "draw";
+      if (
+        (user === "rock" && ai === "scissors") ||
+        (user === "paper" && ai === "rock") ||
+        (user === "scissors" && ai === "paper")
+      )
+        return "win";
+      return "lose";
+    };
 
-    try {
-      const res = await fetch(`https://rps.gamertike.com/api/${userApiChoice}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+    const getAIChoice = () =>
+      validChoices[Math.floor(Math.random() * validChoices.length)];
 
-      const aiChoice = data.computer; // likely values in same style or similar
-      const resultWinner = data.winner; // true (you won), false (you lost), or null/draw
+    const aiChoice = getAIChoice();
+    const result = getResult(userChoice, aiChoice);
 
-      const emojis = {
-        rock: "🪨",
-        paper: "📄",
-        scissors: "✂️",
-      };
+    const resultText =
+      result === "win"
+        ? "🎉 You Win!"
+        : result === "lose"
+        ? "😢 You Lose!"
+        : "🤝 It's a Draw!";
 
-      const userEm = emojis[userChoice];
-      const aiEm = emojis[aiChoice] || aiChoice; // fallback just in case
+    const embed = new EmbedBuilder()
+      .setTitle("🎮 Rock Paper Scissors")
+      .setDescription(
+        `**You:** ${emojis[userChoice]} (${userChoice})\n` +
+        `**AI:** ${emojis[aiChoice]} (${aiChoice})\n\n` +
+        `🧩 **Result:** ${resultText}`
+      )
+      .setColor(result === "win" ? 0x57F287 : result === "lose" ? 0xED4245 : 0xFEE75C)
+      .setTimestamp();
 
-      let resultText;
-      if (resultWinner === true) resultText = "🎉 You Win!";
-      else if (resultWinner === false) resultText = "😢 You Lose!";
-      else resultText = "🤝 It's a Draw!";
-
-      replyEmbed = new EmbedBuilder()
-        .setTitle("🎮 Rock Paper Scissors")
-        .setDescription(
-          `**You:** ${userEm} (${userChoice})\n` +
-          `**AI:** ${aiEm} (${aiChoice})\n\n` +
-          `🧩 **Result:** ${resultText}`
-        )
-        .setColor("Random")
-        .setTimestamp();
-
-      // Buttons for play again
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("rps_rock")
-          .setLabel("🪨 Rock")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("rps_paper")
-          .setLabel("📄 Paper")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("rps_scissors")
-          .setLabel("✂️ Scissors")
-          .setStyle(ButtonStyle.Secondary)
-      );
-      replyRow = row;
-
-    } catch (err) {
-      console.error("RPS API error:", err);
-      replyEmbed = new EmbedBuilder()
-        .setTitle("⚠️ Error")
-        .setDescription("Could not reach the game server. Try again later!")
-        .setColor("Red");
-      replyRow = null;
-    }
+    // Play again buttons
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("rps_rock")
+        .setLabel("🪨 Rock")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("rps_paper")
+        .setLabel("📄 Paper")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("rps_scissors")
+        .setLabel("✂️ Scissors")
+        .setStyle(ButtonStyle.Secondary)
+    );
 
     const sent = isSlash
-      ? await context.interaction.editReply({ embeds: [replyEmbed], components: replyRow ? [replyRow] : [] })
-      : await context.message.reply({ embeds: [replyEmbed], components: replyRow ? [replyRow] : [] });
-
-    if (!replyRow) return;  // no buttons if API error
+      ? await context.interaction.editReply({ embeds: [embed], components: [row] })
+      : await context.message.reply({ embeds: [embed], components: [row] });
 
     const collector = sent.createMessageComponentCollector({ time: 60000 });
 
-    collector.on("collect", async i => {
-      const authorId = isSlash ? context.interaction.user.id : context.message.author.id;
-      if (i.user.id !== authorId) {
-        return i.reply({ content: "❌ Only you can press this.", ephemeral: true });
-      }
+    collector.on("collect", async (i) => {
+      const authorId = isSlash
+        ? context.interaction.user.id
+        : context.message.author.id;
+      if (i.user.id !== authorId)
+        return i.reply({ content: "❌ Only the player can click.", ephemeral: true });
 
-      // determine new choice from button id
-      const custom = i.customId;
-      const newChoice = custom.replace("rps_", "");  // "rock" etc.
+      const newChoice = i.customId.replace("rps_", "");
+      const newAIChoice = getAIChoice();
+      const newResult = getResult(newChoice, newAIChoice);
 
-      // recursively do it: play again
-      // fetch again with newChoice
-      // reuse the same logic
+      const newText =
+        newResult === "win"
+          ? "🎉 You Win!"
+          : newResult === "lose"
+          ? "😢 You Lose!"
+          : "🤝 It's a Draw!";
 
-      // Might extract to function to avoid duplication
-      const apiNewChoice = apiChoiceMap[newChoice];
-      let newEmbed, newRow;
+      const newEmbed = new EmbedBuilder()
+        .setTitle("🎮 Rock Paper Scissors")
+        .setDescription(
+          `**You:** ${emojis[newChoice]} (${newChoice})\n` +
+          `**AI:** ${emojis[newAIChoice]} (${newAIChoice})\n\n` +
+          `🧩 **Result:** ${newText}`
+        )
+        .setColor(
+          newResult === "win"
+            ? 0x57F287
+            : newResult === "lose"
+            ? 0xED4245
+            : 0xFEE75C
+        )
+        .setTimestamp();
 
-      try {
-        const res2 = await fetch(`https://rps.gamertike.com/api/${apiNewChoice}`);
-        if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-        const data2 = await res2.json();
-
-        const aiChoice2 = data2.computer;
-        const result2 = data2.winner;
-
-        const emojis = {
-          rock: "🪨",
-          paper: "📄",
-          scissors: "✂️",
-        };
-
-        let resultText2;
-        if (result2 === true) resultText2 = "🎉 You Win!";
-        else if (result2 === false) resultText2 = "😢 You Lose!";
-        else resultText2 = "🤝 It's a Draw!";
-
-        const userEm2 = emojis[newChoice];
-        const aiEm2 = emojis[aiChoice2] || aiChoice2;
-
-        newEmbed = new EmbedBuilder()
-          .setTitle("🎮 Rock Paper Scissors")
-          .setDescription(
-            `**You:** ${userEm2} (${newChoice})\n` +
-            `**AI:** ${aiEm2} (${aiChoice2})\n\n` +
-            `🧩 **Result:** ${resultText2}`
-          )
-          .setColor("Random")
-          .setTimestamp();
-
-        const newRow2 = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("rps_rock")
-            .setLabel("🪨 Rock")
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
-            .setCustomId("rps_paper")
-            .setLabel("📄 Paper")
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
-            .setCustomId("rps_scissors")
-            .setLabel("✂️ Scissors")
-            .setStyle(ButtonStyle.Secondary)
-        );
-
-        await i.update({ embeds: [newEmbed], components: [newRow2] });
-      } catch(err2) {
-        console.error("Error on rematch:", err2);
-        await i.update({ 
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("⚠️ Error")
-              .setDescription("Could not reach the game server. Try again later!")
-              .setColor("Red")
-          ], 
-          components: [] 
-        });
-      }
+      await i.update({ embeds: [newEmbed], components: [row] });
     });
 
     collector.on("end", () => {
       sent.edit({ components: [] }).catch(() => {});
     });
-  }
+  },
 };
