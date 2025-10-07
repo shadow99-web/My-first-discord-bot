@@ -3,7 +3,7 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
+  ButtonStyle
 } = require("discord.js");
 
 const fetch = (...args) =>
@@ -11,10 +11,10 @@ const fetch = (...args) =>
 
 module.exports = {
   name: "ask",
-  description: "Ask AI anything (multi-API fallback with pagination)",
+  description: "Ask AI anything (Render-safe, multi-API fallback)",
   data: new SlashCommandBuilder()
     .setName("ask")
-    .setDescription("Ask AI anything (multi-API fallback)")
+    .setDescription("Ask AI anything (Render-safe, multi-API fallback)")
     .addStringOption((option) =>
       option
         .setName("question")
@@ -37,47 +37,36 @@ module.exports = {
 
     if (isSlash) await context.interaction.deferReply();
 
-    // ✅ Working Public APIs
+    // Render-safe public endpoints
     const apis = [
       {
-        name: "PawanAI",
-        url: `https://api.pawan.krd/v1/chat/completions`,
+        name: "Jina-Wikipedia",
+        url: `https://r.jina.ai/http://en.wikipedia.org/wiki/${encodeURIComponent(
+          question
+        )}`,
+        method: "GET"
+      },
+      {
+        name: "Jina-DuckDuckGo",
+        url: `https://r.jina.ai/http://api.duckduckgo.com/?q=${encodeURIComponent(
+          question
+        )}&format=json`,
+        method: "GET"
+      },
+      {
+        name: "HuggingFace GPT2",
+        url: "https://api-inference.huggingface.co/models/gpt2",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "pai-001",
-          messages: [{ role: "user", content: question }],
-        }),
+        body: { inputs: question },
+        headers: { "Content-Type": "application/json" }
       },
       {
-        name: "MikuAI",
-        url: `https://api.mikuapi.xyz/v1/ai?ask=${encodeURIComponent(
+        name: "Jina-Fallback",
+        url: `https://r.jina.ai/http://textise.net/showtext.aspx?strURL=https://www.google.com/search?q=${encodeURIComponent(
           question
         )}`,
-        method: "GET",
-      },
-      {
-        name: "SomeRandomAPI",
-        url: `https://some-random-api.com/chatbot?message=${encodeURIComponent(
-          question
-        )}`,
-        method: "GET",
-        headers: { "User-Agent": "Mozilla/5.0 (DiscordBot)" },
-      },
-      {
-        name: "MonkeDev",
-        url: `https://api.monkedev.com/fun/chat?msg=${encodeURIComponent(
-          question
-        )}&uid=1`,
-        method: "GET",
-      },
-      {
-        name: "VercelGPT",
-        url: `https://chatgpt.apine.dev/api/gpt?query=${encodeURIComponent(
-          question
-        )}`,
-        method: "GET",
-      },
+        method: "GET"
+      }
     ];
 
     let answer = null;
@@ -90,30 +79,29 @@ module.exports = {
         const res = await fetch(api.url, {
           method: api.method,
           headers: api.headers || {},
-          body: api.body || undefined,
-          signal: controller.signal,
+          body: api.body ? JSON.stringify(api.body) : undefined,
+          signal: controller.signal
         });
         clearTimeout(timeout);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const text = await res.text();
-        if (text.includes("error") || text.length < 5)
-          throw new Error("Bad data");
+        if (text.length < 5) throw new Error("Empty response");
 
         try {
           const json = JSON.parse(text);
           return (
+            json.generated_text ||
             json.response ||
             json.answer ||
-            json.output ||
-            json.message ||
             json.result ||
             json.content ||
-            (json.choices?.[0]?.message?.content ?? null) ||
+            json.message ||
             JSON.stringify(json).slice(0, 500)
           );
         } catch {
-          return text.slice(0, 500);
+          // For text-based responses (Wikipedia/Jina)
+          return text.slice(0, 1500);
         }
       } catch (err) {
         console.log(`⚠️ ${api.name} failed: ${err.message}`);
@@ -121,19 +109,18 @@ module.exports = {
       }
     }
 
-    // Try each API until one succeeds
     for (const api of apis) {
       answer = await tryAPI(api);
       if (answer) {
         usedAPI = api.name;
-        console.log(`✅ Responded from ${api.name}`);
+        console.log(`✅ Response from ${api.name}`);
         break;
       }
     }
 
-    if (!answer) answer = "❌ All AI APIs failed. Try again later.";
+    if (!answer) answer = "❌ All public APIs failed. Try again later.";
 
-    // Split into multiple pages if too long
+    // Split long text into pages
     const chunks = answer.match(/[\s\S]{1,1900}/g) || ["(no response)"];
     let page = 0;
 
@@ -145,10 +132,7 @@ module.exports = {
         .setTitle("🤖 AI Response")
         .setDescription(chunks[page])
         .setColor(0x5865f2)
-        .setFooter({
-          text: `💡 Source: ${usedAPI}`,
-          iconURL: botAvatar,
-        });
+        .setFooter({ text: `💡 Source: ${usedAPI}`, iconURL: botAvatar });
 
     const makeRow = () =>
       new ActionRowBuilder().addComponents(
@@ -167,11 +151,11 @@ module.exports = {
     const sent = isSlash
       ? await context.interaction.editReply({
           embeds: [makeEmbed()],
-          components: [makeRow()],
+          components: [makeRow()]
         })
       : await context.message.reply({
           embeds: [makeEmbed()],
-          components: [makeRow()],
+          components: [makeRow()]
         });
 
     const collector = sent.createMessageComponentCollector({ time: 120000 });
@@ -184,7 +168,7 @@ module.exports = {
       if (i.user.id !== userId)
         return i.reply({
           content: "❌ Only the command user can control this.",
-          ephemeral: true,
+          ephemeral: true
         });
 
       if (i.customId === "next" && page < chunks.length - 1) page++;
@@ -193,8 +177,6 @@ module.exports = {
       await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
     });
 
-    collector.on("end", () => {
-      sent.edit({ components: [] }).catch(() => {});
-    });
-  },
+    collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
+  }
 };
