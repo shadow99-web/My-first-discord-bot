@@ -6,11 +6,12 @@ const {
   ButtonStyle
 } = require("discord.js");
 
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 module.exports = {
   name: "ask",
-  description: "Ask AI anything (multi-API fallback with pagination + all API view)",
+  description: "Ask AI anything using multi-API fallback (Render-safe)",
   data: new SlashCommandBuilder()
     .setName("ask")
     .setDescription("Ask AI anything (multi-API fallback)")
@@ -36,161 +37,171 @@ module.exports = {
 
     if (isSlash) await context.interaction.deferReply();
 
+    // ✅ Render-safe APIs (no auth, use proxy-friendly routes)
     const apis = [
       {
-        name: "MonkeDev",
-        url: `https://api.monkedev.com/fun/chat?msg=${encodeURIComponent(question)}&uid=1`
+        name: "AffiliatePlus",
+        url: `https://api.affiliateplus.xyz/api/chatbot?message=${encodeURIComponent(
+          question
+        )}&botname=AI&ownername=User`,
+        method: "GET",
       },
       {
-        name: "PawanAI",
-        url: `https://api.pawan.krd/v1/chat/completions?ask=${encodeURIComponent(question)}`
+        name: "DuckDuckGo (via Jina)",
+        url: `https://r.jina.ai/http://api.duckduckgo.com/?q=${encodeURIComponent(
+          question
+        )}&format=json&no_html=1`,
+        method: "GET",
       },
       {
-        name: "MikuAI",
-        url: `https://api.mikuapi.xyz/v1/ai?ask=${encodeURIComponent(question)}`
+        name: "Wikipedia (via Jina)",
+        url: `https://r.jina.ai/http://en.wikipedia.org/wiki/${encodeURIComponent(
+          question.replace(/\s+/g, "_")
+        )}`,
+        method: "GET",
       },
       {
-        name: "SomeRandomAPI",
-        url: `https://some-random-api.com/chatbot?message=${encodeURIComponent(question)}`
+        name: "GptGo Proxy",
+        url: `https://r.jina.ai/https://gptgo.ai/?q=${encodeURIComponent(
+          question
+        )}`,
+        method: "GET",
       },
       {
-        name: "DuckDuckGo",
-        url: `https://r.jina.ai/http://api.duckduckgo.com/?q=${encodeURIComponent(question)}&format=json`
+        name: "Lexica (concept search)",
+        url: `https://r.jina.ai/http://lexica.art/api/v1/search?q=${encodeURIComponent(
+          question
+        )}`,
+        method: "GET",
       },
-      {
-        name: "Wikipedia",
-        url: `https://r.jina.ai/http://en.wikipedia.org/wiki/${encodeURIComponent(question)}`
-      }
     ];
 
-    const allResponses = [];
+    const responses = [];
 
     async function tryAPI(api) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 10000);
       try {
-        const res = await fetch(api.url, { signal: controller.signal });
+        const res = await fetch(api.url, {
+          method: api.method,
+          headers: api.headers || {},
+          signal: controller.signal,
+        });
         clearTimeout(timeout);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
         const text = await res.text();
-        if (text.includes("error") || text.length < 5) throw new Error("Bad data");
 
-        let content;
+        // Try parse JSON or return text fallback
         try {
           const json = JSON.parse(text);
-          content =
-            json.response ||
-            json.answer ||
-            json.output ||
+          return (
             json.message ||
+            json.answer ||
             json.result ||
-            json.content ||
             json.AbstractText ||
-            JSON.stringify(json).slice(0, 1000);
+            json.response ||
+            json.output ||
+            JSON.stringify(json).slice(0, 600)
+          );
         } catch {
-          content = text.slice(0, 1000);
+          return text.slice(0, 600);
         }
-
-        allResponses.push({ api: api.name, result: content });
-        console.log(`✅ Responded from ${api.name}`);
-        return content;
       } catch (err) {
         console.log(`⚠️ ${api.name} failed: ${err.message}`);
-        allResponses.push({ api: api.name, result: `❌ Failed: ${err.message}` });
-        return null;
+        return `⚠️ ${api.name} failed: ${err.message}`;
       }
     }
 
-    let mainAnswer = null;
-    let usedAPI = "None";
-
+    // Fetch all APIs one by one (sequentially to avoid rate block)
     for (const api of apis) {
-      const ans = await tryAPI(api);
-      if (ans) {
-        mainAnswer = ans;
-        usedAPI = api.name;
-        break;
-      }
+      const output = await tryAPI(api);
+      responses.push({ name: api.name, text: output });
     }
 
-    if (!mainAnswer) mainAnswer = "❌ All AI APIs failed. Try again later.";
+    // Filter out valid answers
+    const valid = responses.filter(r => !r.text.startsWith("⚠️"));
+    let index = 0;
 
-    // Pagination setup
-    const chunks = mainAnswer.match(/[\s\S]{1,1900}/g) || ["(no response)"];
-    let page = 0;
-    let viewingAll = false;
-    let currentAPIIndex = 0;
+    const botAvatar =
+      context.client?.user?.displayAvatarURL?.({ dynamic: true }) || null;
 
-    const botAvatar = context.client?.user?.displayAvatarURL({ dynamic: true });
-
-    const makeEmbed = () => {
-      const title = viewingAll
-        ? `🌐 ${allResponses[currentAPIIndex]?.api || "API"} Response`
-        : "🤖 AI Response";
-      const desc = viewingAll
-        ? allResponses[currentAPIIndex]?.result || "No data"
-        : chunks[page];
-
-      return new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(desc)
+    const makeEmbed = () =>
+      new EmbedBuilder()
+        .setTitle("🤖 AI Response")
+        .setDescription(valid[index]?.text || "❌ No valid answer found.")
         .setColor(0x5865f2)
-        .setFooter({ text: `💡 Source: ${usedAPI}`, iconURL: botAvatar });
-    };
+        .setFooter({
+          text: `💡 Source: ${valid[index]?.name || "N/A"} (${index + 1}/${
+            valid.length
+          })`,
+          iconURL: botAvatar,
+        });
 
     const makeRow = () =>
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("prev")
-          .setLabel("⬅️")
+          .setLabel("⬅️ Prev")
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(page === 0 || viewingAll),
-
+          .setDisabled(index === 0),
         new ButtonBuilder()
           .setCustomId("next")
-          .setLabel("➡️")
+          .setLabel("Next ➡️")
           .setStyle(ButtonStyle.Secondary)
-          .setDisabled(page === chunks.length - 1 || viewingAll),
-
+          .setDisabled(index === valid.length - 1),
         new ButtonBuilder()
-          .setCustomId("toggleAll")
-          .setLabel("🧩 View All APIs")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("switchAPI")
-          .setLabel("🔄 Next API")
-          .setStyle(ButtonStyle.Success)
-          .setDisabled(!viewingAll)
+          .setCustomId("all")
+          .setLabel("📜 View All")
+          .setStyle(ButtonStyle.Primary)
       );
 
     const sent = isSlash
-      ? await context.interaction.editReply({ embeds: [makeEmbed()], components: [makeRow()] })
-      : await context.message.reply({ embeds: [makeEmbed()], components: [makeRow()] });
+      ? await context.interaction.editReply({
+          embeds: [makeEmbed()],
+          components: [makeRow()],
+        })
+      : await context.message.reply({
+          embeds: [makeEmbed()],
+          components: [makeRow()],
+        });
 
-    const collector = sent.createMessageComponentCollector({ time: 180000 });
+    const collector = sent.createMessageComponentCollector({ time: 120000 });
 
     collector.on("collect", async i => {
       const userId = isSlash
         ? context.interaction.user.id
         : context.message.author.id;
       if (i.user.id !== userId)
-        return i.reply({ content: "❌ Only the command user can control this.", ephemeral: true });
+        return i.reply({
+          content: "❌ Only you can control this.",
+          ephemeral: true,
+        });
 
-      if (i.customId === "next" && page < chunks.length - 1) page++;
-      if (i.customId === "prev" && page > 0) page--;
-      if (i.customId === "toggleAll") {
-        viewingAll = !viewingAll;
-        currentAPIIndex = 0;
-      }
-      if (i.customId === "switchAPI" && viewingAll) {
-        currentAPIIndex = (currentAPIIndex + 1) % allResponses.length;
+      if (i.customId === "next" && index < valid.length - 1) index++;
+      if (i.customId === "prev" && index > 0) index--;
+
+      if (i.customId === "all") {
+        const allText = responses
+          .map(r => `**${r.name}:**\n${r.text}\n`)
+          .join("\n──────────────\n")
+          .slice(0, 3900);
+        return i.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("🧩 All API Responses")
+              .setDescription(allText)
+              .setColor(0x5865f2)
+              .setFooter({ text: "All collected API outputs", iconURL: botAvatar }),
+          ],
+          ephemeral: true,
+        });
       }
 
       await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
     });
 
-    collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
-  }
+    collector.on("end", () => {
+      sent.edit({ components: [] }).catch(() => {});
+    });
+  },
 };
