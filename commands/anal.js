@@ -35,7 +35,7 @@ module.exports = {
       if (!image) throw new Error("No image found");
 
       const embed = new EmbedBuilder()
-        .setTitle("`🔞` ▸ NSFW Pussy Image")
+        .setTitle("`🔞` ▸ NSFW Anal Image")
         .setImage(image)
         .setFooter({ text: guild?.name || "NSFW Command", iconURL: guild?.iconURL({ dynamic: true }) })
         .setColor("Random")
