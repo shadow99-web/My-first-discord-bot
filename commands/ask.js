@@ -3,7 +3,7 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
 } = require("discord.js");
 
 const fetch = (...args) =>
@@ -37,27 +37,17 @@ module.exports = {
 
     if (isSlash) await context.interaction.deferReply();
 
+    // ✅ Working Public APIs
     const apis = [
       {
-        name: "MonkeDev",
-        url: `https://api.monkedev.com/fun/chat?msg=${encodeURIComponent(
-          question
-        )}&uid=1`,
-        method: "GET",
-      },
-      {
-        name: "JinaAI",
-        url: `https://r.jina.ai/http://api.duckduckgo.com/?q=${encodeURIComponent(
-          question
-        )}&format=json`,
-        method: "GET",
-      },
-      {
-        name: "SimSimi",
-        url: `https://api.simsimi.net/v2/?text=${encodeURIComponent(
-          question
-        )}&lc=en`,
-        method: "GET",
+        name: "PawanAI",
+        url: `https://api.pawan.krd/v1/chat/completions`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "pai-001",
+          messages: [{ role: "user", content: question }],
+        }),
       },
       {
         name: "MikuAI",
@@ -74,6 +64,20 @@ module.exports = {
         method: "GET",
         headers: { "User-Agent": "Mozilla/5.0 (DiscordBot)" },
       },
+      {
+        name: "MonkeDev",
+        url: `https://api.monkedev.com/fun/chat?msg=${encodeURIComponent(
+          question
+        )}&uid=1`,
+        method: "GET",
+      },
+      {
+        name: "VercelGPT",
+        url: `https://chatgpt.apine.dev/api/gpt?query=${encodeURIComponent(
+          question
+        )}`,
+        method: "GET",
+      },
     ];
 
     let answer = null;
@@ -86,13 +90,15 @@ module.exports = {
         const res = await fetch(api.url, {
           method: api.method,
           headers: api.headers || {},
+          body: api.body || undefined,
           signal: controller.signal,
         });
         clearTimeout(timeout);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const text = await res.text();
-        if (text.includes("error") || text.length < 5) throw new Error("Bad data");
+        if (text.includes("error") || text.length < 5)
+          throw new Error("Bad data");
 
         try {
           const json = JSON.parse(text);
@@ -103,7 +109,7 @@ module.exports = {
             json.message ||
             json.result ||
             json.content ||
-            json.AbstractText ||
+            (json.choices?.[0]?.message?.content ?? null) ||
             JSON.stringify(json).slice(0, 500)
           );
         } catch {
@@ -115,6 +121,7 @@ module.exports = {
       }
     }
 
+    // Try each API until one succeeds
     for (const api of apis) {
       answer = await tryAPI(api);
       if (answer) {
@@ -126,7 +133,7 @@ module.exports = {
 
     if (!answer) answer = "❌ All AI APIs failed. Try again later.";
 
-    // Split long responses into chunks
+    // Split into multiple pages if too long
     const chunks = answer.match(/[\s\S]{1,1900}/g) || ["(no response)"];
     let page = 0;
 
