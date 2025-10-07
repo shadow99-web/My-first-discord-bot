@@ -1,94 +1,92 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} = require("discord.js");
-
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 module.exports = {
-  name: "userdesc",
-  description: "Fetch a user's Discord description (bio)",
   data: new SlashCommandBuilder()
     .setName("userdesc")
     .setDescription("Fetch a user's Discord description (bio)")
     .addUserOption(option =>
-      option
-        .setName("user")
+      option.setName("user")
         .setDescription("Select the user")
         .setRequired(false)
     ),
 
   async execute(context) {
-    const isSlash = !!context.interaction;
+    const isSlash = !context.isPrefix;
     const target = isSlash
       ? context.interaction.options.getUser("user") || context.interaction.user
       : context.message.mentions.users.first() || context.message.author;
 
     if (isSlash) await context.interaction.deferReply();
 
+    let user;
     try {
-      // Fetch via Discord REST API for accurate bio
-      const res = await fetch(`https://discord.com/api/v10/users/${target.id}/profile`, {
-        headers: {
-          Authorization: `Bot ${process.env.TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      const bio =
-        data?.user?.bio ||
-        data?.bio ||
-        data?.user_profile?.bio ||
-        "❌ This user has no public description.";
-
-      const embed = new EmbedBuilder()
-        .setAuthor({
-          name: `${target.tag}`,
-          iconURL: target.displayAvatarURL({ dynamic: true })
-        })
-        .setDescription(`**🪶 Bio:**\n${bio}`)
-        .setColor(0x5865f2)
-        .setFooter({ text: `User ID: ${target.id}` });
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("copy_bio")
-          .setLabel("📋 Copy Bio")
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      const sent = isSlash
-        ? await context.interaction.editReply({ embeds: [embed], components: [row] })
-        : await context.message.reply({ embeds: [embed], components: [row] });
-
-      // Collector for "Copy Bio" button
-      const collector = sent.createMessageComponentCollector({ time: 60000 });
-      collector.on("collect", async i => {
-        const authorId = isSlash
-          ? context.interaction.user.id
-          : context.message.author.id;
-
-        if (i.user.id !== authorId)
-          return i.reply({
-            content: "❌ Only you can copy this bio.",
-            ephemeral: true
-          });
-
-        await i.reply({ content: `\`\`\`\n${bio}\n\`\`\``, ephemeral: true });
-      });
+      user = await context.client.users.fetch(target.id, { force: true });
     } catch (err) {
-      console.error("⚠️ Error fetching user bio:", err);
-      const msg = "⚠️ Unable to fetch user bio. (Discord API error)";
-      if (isSlash)
-        return context.interaction.editReply({ content: msg });
-      else return context.message.reply(msg);
+      console.error("Error fetching user bio:", err);
+      const failMsg = `⚠️ Cannot fetch bio for **${target.tag}**. The user might have privacy settings or the bot lacks access.`;
+      if (isSlash) return context.interaction.editReply({ content: failMsg });
+      return context.message.reply(failMsg);
     }
+
+    const bio = user.bio || user.description || null;
+
+    if (!bio) {
+      const msg = `❌ No description found for **${user.tag}**.`;
+      if (isSlash) return context.interaction.editReply({ content: msg });
+      return context.message.reply(msg);
+    }
+
+    // Split bio into chunks of 1000 chars max
+    const chunks = bio.match(/[\s\S]{1,1000}/g) || [bio];
+    let page = 0;
+
+    const makeEmbed = () => new EmbedBuilder()
+      .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) })
+      .setDescription(chunks[page])
+      .setColor(0x5865F2)
+      .setFooter({ text: `Page ${page + 1}/${chunks.length} | User ID: ${user.id}` });
+
+    const makeRow = () => new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("prev")
+        .setLabel("⬅️")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(page === 0),
+      new ButtonBuilder()
+        .setCustomId("next")
+        .setLabel("➡️")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(page === chunks.length - 1),
+      new ButtonBuilder()
+        .setCustomId("copy")
+        .setLabel("📋 Copy Bio")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    const sent = isSlash
+      ? await context.interaction.editReply({ embeds: [makeEmbed()], components: [makeRow()] })
+      : await context.message.reply({ embeds: [makeEmbed()], components: [makeRow()] });
+
+    const collector = sent.createMessageComponentCollector({ time: 120000 }); // 2 minutes
+
+    collector.on("collect", async i => {
+      const authorId = isSlash ? context.interaction.user.id : context.message.author.id;
+      if (i.user.id !== authorId)
+        return i.reply({ content: "❌ Only the command invoker can control this.", ephemeral: false });
+
+      if (i.customId === "next" && page < chunks.length - 1) page++;
+      if (i.customId === "prev" && page > 0) page--;
+
+      if (i.customId === "copy") {
+        await i.reply({ content: `\`\`\`\n${bio}\n\`\`\``, ephemeral: false });
+        return;
+      }
+
+      await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
+    });
+
+    collector.on("end", () => {
+      sent.edit({ components: [] }).catch(() => {});
+    });
   }
 };
