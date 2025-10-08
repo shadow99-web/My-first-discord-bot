@@ -12,23 +12,23 @@ module.exports = {
   name: "stealsticker",
   description: "Steal a sticker and upload it to your server (or another via server ID)",
   data: new SlashCommandBuilder()
-    .setName("stealsticker")
-    .setDescription("Steal a sticker and upload it")
-    .addStringOption(option =>
-      option.setName("sticker_url")
-        .setDescription("Sticker URL or send sticker with command")
-        .setRequired(false)
-    )
-    .addStringOption(option =>
-      option.setName("name")
-        .setDescription("Name for the new sticker")
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option.setName("server_id")
-        .setDescription("Optional: Upload to another server (you must have permissions there)")
-        .setRequired(false)
-    ),
+  .setName("stealsticker")
+  .setDescription("Steal a sticker and upload it")
+  .addStringOption(option =>
+    option.setName("name")
+      .setDescription("Name for the new sticker")
+      .setRequired(true)
+  )
+  .addStringOption(option =>
+    option.setName("sticker_url")
+      .setDescription("Sticker URL or send sticker with command")
+      .setRequired(false)
+  )
+  .addStringOption(option =>
+    option.setName("server_id")
+      .setDescription("Optional: Upload to another server (you must have permissions there)")
+      .setRequired(false)
+  ),
 
   async execute(ctx) {
     const isSlash = !!ctx.isChatInputCommand;
