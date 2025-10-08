@@ -13,11 +13,11 @@ const FFMPEG_PATH = path.join(TMP_DIR, "ffmpeg");
 const MAX_DIM = 320;
 const MAX_SIZE = 512 * 1024;
 
-// ✅ Ensure ffmpeg exists
+// ✅ Download ffmpeg binary (Render safe)
 async function ensureFFmpeg() {
   if (fs.existsSync(FFMPEG_PATH)) return FFMPEG_PATH;
-  console.log("🔽 Downloading ffmpeg binary...");
 
+  console.log("🔽 Downloading ffmpeg binary...");
   const url =
     "https://github.com/eugeneware/ffmpeg-static/releases/download/b4.4.0/ffmpeg-linux-x64";
 
@@ -33,19 +33,17 @@ async function ensureFFmpeg() {
           resolve();
         });
       })
-      .on("error", (err) => reject(err));
+      .on("error", reject);
   });
 
   return FFMPEG_PATH;
 }
 
-// ✅ Compress to meet Discord sticker size limit
+// ✅ Compress image below Discord sticker limit
 async function compressToLimit(inputBuffer, outputPath) {
   let quality = 90;
-  let buffer = inputBuffer;
-
   while (true) {
-    const resized = await sharp(buffer)
+    const resized = await sharp(inputBuffer)
       .resize(MAX_DIM, MAX_DIM, { fit: "inside" })
       .webp({ quality })
       .toBuffer();
@@ -61,9 +59,9 @@ async function compressToLimit(inputBuffer, outputPath) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("stealsticker")
-    .setDescription("Steal an image, sticker, or GIF and add it to your server.")
+    .setDescription("Steal an image/sticker/GIF and upload it as a sticker (cross-server supported)")
     .addStringOption((opt) =>
-      opt.setName("serverid").setDescription("Server ID to upload to").setRequired(false)
+      opt.setName("serverid").setDescription("Target server ID to upload to").setRequired(false)
     )
     .addStringOption((opt) =>
       opt.setName("source").setDescription("Sticker ID or image URL").setRequired(false)
@@ -72,7 +70,6 @@ module.exports = {
   async execute(context) {
     const { interaction, message, isPrefix, client } = context;
 
-    // 🔁 Safe reply method
     const reply = async (content) => {
       try {
         if (isPrefix && message?.reply) return await message.reply(content);
@@ -84,6 +81,7 @@ module.exports = {
       }
     };
 
+    // 🧠 Handle args
     const args = isPrefix ? message.content.split(" ").slice(1) : [];
     const serverId = isPrefix ? args[0] : interaction.options.getString("serverid");
     const source = isPrefix ? args[1] : interaction.options.getString("source");
@@ -101,51 +99,60 @@ module.exports = {
     )
       return reply({ content: "❌ I need **Manage Stickers** permission in that server!" });
 
-    if (!source)
-      return reply({ content: "⚠️ Please provide a valid sticker ID or image URL!" });
+    // 🔍 Try getting attachment/sticker/URL
+    let imageURL = source;
+    if (!imageURL && message?.reference) {
+      const repliedMsg = await message.channel.messages.fetch(message.reference.messageId);
+      if (repliedMsg?.attachments.size > 0)
+        imageURL = repliedMsg.attachments.first().url;
+      else if (repliedMsg?.stickers.size > 0)
+        imageURL = repliedMsg.stickers.first().url;
+    }
 
-    let progressMsg = await reply({ content: "🔸🔹▪️ **Downloading image/sticker...**" });
+    if (!imageURL)
+      return reply({
+        content:
+          "⚠️ Please provide a valid URL, sticker ID, or reply to an image/sticker!",
+      });
+
+    let progressMsg = await reply({
+      content: "🔹 Downloading image/sticker...",
+    });
 
     try {
       await ensureFFmpeg();
 
-      let imageBuffer;
-      let isGif = false;
-      let stickerName = `sticker_${Date.now()}`;
-
-      if (/^https?:\/\//.test(source)) {
-        const res = await fetch(source);
-        const type = res.headers.get("content-type") || "";
-        if (type.includes("gif")) isGif = true;
-        imageBuffer = Buffer.from(await res.arrayBuffer());
+      // 🧾 Fetch image data
+      let res;
+      if (/^https?:\/\//.test(imageURL)) {
+        res = await fetch(imageURL);
       } else {
-        const sticker = client.stickers.cache.get(source);
+        const sticker = client.stickers.cache.get(imageURL);
         if (!sticker)
-          return reply({ content: "⚠️ Invalid sticker ID or URL!" });
-
-        const res = await fetch(sticker.url);
-        imageBuffer = Buffer.from(await res.arrayBuffer());
-        stickerName = sticker.name;
-        if (sticker.format === 2) isGif = true;
+          return progressMsg.edit({ content: "⚠️ Invalid sticker ID!" });
+        res = await fetch(sticker.url);
       }
 
+      const type = res.headers.get("content-type") || "";
+      const isGif = type.includes("gif");
+      const buffer = Buffer.from(await res.arrayBuffer());
+
+      const stickerName = `sticker_${Date.now()}`;
       const inputPath = path.join(TMP_DIR, `${stickerName}${isGif ? ".gif" : ".png"}`);
       const outputPath = path.join(TMP_DIR, `${stickerName}.webp`);
-      fs.writeFileSync(inputPath, imageBuffer);
+      fs.writeFileSync(inputPath, buffer);
 
-      // 🔄 Update progress
-      if (progressMsg?.edit)
-        await progressMsg.edit({ content: "⚙️ **Processing and resizing image...**" });
+      await progressMsg.edit({ content: "⚙️ Processing and compressing image..." });
 
       if (isGif) {
         await new Promise((resolve, reject) => {
           exec(
             `"${FFMPEG_PATH}" -i "${inputPath}" -vf "scale=${MAX_DIM}:${MAX_DIM}:force_original_aspect_ratio=decrease" -loop 0 -an -vsync 0 "${outputPath}"`,
-            (error) => (error ? reject(error) : resolve())
+            (err) => (err ? reject(err) : resolve())
           );
         });
       } else {
-        await compressToLimit(imageBuffer, outputPath);
+        await compressToLimit(buffer, outputPath);
       }
 
       const stats = fs.statSync(outputPath);
@@ -154,18 +161,17 @@ module.exports = {
           content: "❌ Couldn’t compress file under Discord’s 512KB limit!",
         });
 
-      // 🔼 Uploading
-      if (progressMsg?.edit)
-        await progressMsg.edit({ content: "🚀 **Uploading sticker to Discord...**" });
+      await progressMsg.edit({ content: "🚀 Uploading sticker..." });
 
+      // ✅ Upload to target server
       const sticker = await guild.stickers.create({
         file: outputPath,
         name: stickerName,
-        tags: "fun, custom, sticker",
+        tags: "custom, sticker, fun",
       });
 
       await progressMsg.edit({
-        content: `✅ **Sticker added successfully!**\n📍 Name: **${sticker.name}**\n🏠 Server: **${guild.name}**\n🔗 ${sticker.url}`,
+        content: `✅ **Sticker added successfully!**\n📍 Name: **${sticker.name}**\n🏠 Uploaded to: **${guild.name}**\n🔗 ${sticker.url}`,
       });
 
       fs.unlinkSync(inputPath);
