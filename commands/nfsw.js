@@ -18,6 +18,8 @@ const categories = {
     thighs: [
         { name: "WaifuPics", url: "https://api.waifu.pics/nsfw/thigh", path: "url" },
     ],
+    anal: [
+        { name: "Nekobot', url: "https://nekobot.xyz/api/image?type=anal", path: " message" }, 
 };
 
 module.exports = {
@@ -33,6 +35,9 @@ module.exports = {
                     { name: "Boobs", value: "boobs" },
                     { name: "Hentai", value: "hentai" },
                     { name: "Thighs", value: "thighs" },
+                    { name: "anal", value: "anal"}, 
+                    { name: "pussy", value: "pussy" }, 
+                    { name: "blowjob", value: "blowjob" }, 
                 )
         ),
 
@@ -59,7 +64,7 @@ module.exports = {
         if (!type || !categories[type]) {
             const embed = new EmbedBuilder()
                 .setTitle('❌ Invalid category')
-                .setDescription('> Available categories: ass, boobs, hentai, thighs')
+                .setDescription('> Available categories: ass, boobs, hentai, thighs, anal, pussy, blowjob')
                 .setFooter({ text: user.username, iconURL: user.displayAvatarURL({ dynamic: true }) })
                 .setColor('Red')
                 .setTimestamp();
