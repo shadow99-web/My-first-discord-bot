@@ -19,7 +19,14 @@ const categories = {
         { name: "WaifuPics", url: "https://api.waifu.pics/nsfw/thigh", path: "url" },
     ],
     anal: [
-        { name: "Nekobot', url: "https://nekobot.xyz/api/image?type=anal", path: " message" }, 
+        { name: "Nekobot", url: "https://nekobot.xyz/api/image?type=anal", path: "message" }, 
+        ], 
+    pussy: [
+        {name: "Nekobot", url: "https://nekobot.xyz/api/image?type=pussy", path: "message" }, 
+        ], 
+    blowjob: [
+        {name: "Nekobot", url: "https://nekobot.xyz/api/image?type=blowjob", path: "message" }, 
+        ], 
 };
 
 module.exports = {
