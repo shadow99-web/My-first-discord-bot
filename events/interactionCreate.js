@@ -1,5 +1,6 @@
 // events/interactionCreate.js
 const Giveaway = require("../models/Giveaway");
+const { ButtonInteraction } = require("discord.js");
 
 module.exports = async (interaction) => {
   if (!(interaction instanceof ButtonInteraction)) return;
