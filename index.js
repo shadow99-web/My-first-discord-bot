@@ -162,53 +162,7 @@ async function deployCommandsAndLogin() {
 
         await client.login(process.env.TOKEN);
         console.log(`🤖 Logged in as ${client.user.tag}`);
-        // ====================
-// Giveaway Scheduler
-// ====================
-const Giveaway = require("./models/Giveaway");
-
-const startGiveawayScheduler = (client) => {
-    const checkIntervalMs = 15_000; // every 15 seconds
-    setInterval(async () => {
-        try {
-            const now = new Date();
-            const exp = await Giveaway.find({ ended: false, endAt: { $lte: now } });
-            for (const gw of exp) {
-                try {
-                    const giveawayCommand = client.commands.get("giveaway");
-                    if (giveawayCommand && typeof giveawayCommand.endGiveaway === "function") {
-                        await giveawayCommand.endGiveaway(gw, client);
-                    } else {
-                        // fallback
-                        gw.ended = true;
-                        const winners = (gw.participants?.length)
-                            ? gw.participants.sort(() => 0.5 - Math.random()).slice(0, gw.winnersCount)
-                            : [];
-                        gw.winners = winners;
-                        await gw.save();
-                        const ch = await client.channels.fetch(gw.channelId).catch(() => null);
-                        if (ch) {
-                            await ch.send({
-                                content: winners.length
-                                    ? `😄 Giveaway ended! Winners: ${winners.map(id => `<@${id}>`).join(", ")} — Prize: **${gw.prize}**`
-                                    : `😞 Giveaway ended for **${gw.prize}**, but there were no participants.`,
-                            }).catch(() => {});
-                        }
-                    }
-                } catch (err) {
-                    console.error("Error ending giveaway:", err);
-                }
-            }
-        } catch (err) {
-            console.error("Giveaway scheduler error:", err);
-        }
-    }, checkIntervalMs);
-};
-
-// Start scheduler after login
-client.once("ready", () => {
-    startGiveawayScheduler(client);
-});
+        // ===============
     } catch (err) {
         console.error("❌ Failed to deploy commands or login:", err);
     }
