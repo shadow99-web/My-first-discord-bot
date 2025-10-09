@@ -30,8 +30,8 @@ module.exports = (client) => {
             if (ch) {
               await ch.send({
                 content: winners.length
-                  ? `🎉 Giveaway ended! Winners: ${winners.map((id) => `<@${id}>`).join(", ")} — Prize: **${gw.prize}**`
-                  : `⚠️ Giveaway ended for **${gw.prize}**, but there were no participants.`,
+                  ? `😄 Giveaway ended! Winners: ${winners.map((id) => `<@${id}>`).join(", ")} — Prize: **${gw.prize}**`
+                  : `😞 Giveaway ended for **${gw.prize}**, but there were no participants.`,
               }).catch(() => {});
             }
           }
