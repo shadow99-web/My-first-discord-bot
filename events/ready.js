@@ -4,9 +4,6 @@ const { setIntervalAsync } = require("set-interval-async/fixed"); // optional (n
 const { EmbedBuilder } = require("discord.js");
 const giveawayCommand = require("../commands/giveaway"); // to reuse endGiveaway helper
 
-module.exports = (client) => {
-  console.log(`Ready — ${client.user.tag}`);
-
   // Simple interval (every 15s)
   const checkIntervalMs = 15_000;
   setInterval(async () => {
