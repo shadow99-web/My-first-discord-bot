@@ -1,3 +1,4 @@
+const Giveaway = require("../models/Giveaway");
 const { EmbedBuilder } = require("discord.js");
 const { sendTicketPanel, handleTicketMenu, handleTicketClose } = require("../Handlers/ticketHandler");
 
@@ -69,7 +70,36 @@ module.exports = (client, blockHelpers) => {
       // ---------- Buttons ----------
       if (interaction.isButton()) {
         try {
-          if (interaction.customId === "ticket_close_button") await handleTicketClose(interaction, safeReply);
+          // Ticket button
+          if (interaction.customId === "ticket_close_button") {
+            await handleTicketClose(interaction, safeReply);
+            return;
+          }
+
+          // Giveaway buttons
+          if (interaction.customId.startsWith("giveaway_enter:")) {
+            const gwId = interaction.customId.split(":")[1];
+            if (!gwId) return safeReply({ content: "❌ Invalid giveaway id.", ephemeral: true });
+
+            const doc = await Giveaway.findById(gwId).catch(() => null);
+            if (!doc) return safeReply({ content: "❌ Giveaway not found.", ephemeral: true });
+            if (doc.ended) return safeReply({ content: "⚠️ This giveaway has ended.", ephemeral: true });
+
+            const userId = interaction.user.id;
+            const participants = new Set(doc.participants.map((s) => s.toString()));
+
+            if (participants.has(userId)) {
+              participants.delete(userId);
+              doc.participants = Array.from(participants);
+              await doc.save();
+              return safeReply({ content: "🙂 You have left the giveaway.", ephemeral: true });
+            } else {
+              participants.add(userId);
+              doc.participants = Array.from(participants);
+              await doc.save();
+              return safeReply({ content: "♥ You have entered the giveaway!", ephemeral: true });
+            }
+          }
         } catch (err) {
           console.error("❌ Button interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
@@ -80,7 +110,9 @@ module.exports = (client, blockHelpers) => {
       // ---------- Select Menus ----------
       if (interaction.isStringSelectMenu()) {
         try {
-          if (interaction.customId === "ticket_menu") await handleTicketMenu(interaction, safeReply);
+          if (interaction.customId === "ticket_menu") {
+            await handleTicketMenu(interaction, safeReply);
+          }
         } catch (err) {
           console.error("❌ Select menu interaction error:", err);
           await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
