@@ -2,7 +2,7 @@
 const Giveaway = require("../models/Giveaway");
 
 module.exports = async (interaction) => {
-  if (!interaction.isButton()) return;
+  if (!(interaction instanceof ButtonInteraction)) return;
 
   const idPrefix = "giveaway_enter:";
   if (interaction.customId.startsWith(idPrefix)) {
