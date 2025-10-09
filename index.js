@@ -116,29 +116,26 @@ try {
 }
 
 // ====================
-// ====================
-// 📡 Load Event Handlers
-// ====================
-const eventFiles = fs.readdirSync("./events").filter(f => f.endsWith(".js"));
-
-for (const file of eventFiles) {
+// 🔔 Safe event loader
+const safeRequireEvent = (path, ...args) => {
     try {
-        const event = require(`./events/${file}`);
-        const eventName = file.split(".")[0];
-
-        if (eventName === "ready") {
-            // Run once when bot starts
-            client.once("ready", (...args) => event(client, ...args));
-        } else {
-            // Run for all other events
-            client.on(eventName, (...args) => event(client, ...args));
-        }
-
-        console.log(`✅ Loaded event: ${eventName}`);
+        require(path)(...args);
+        console.log(`✅ Loaded event: ${path}`);
     } catch (err) {
-        console.warn(`⚠️ Failed to load event file: ${file} — ${err.message}`);
+        console.warn(`⚠️ Failed to load event ${path}:`, err.message);
     }
-}
+};
+
+// Events with extra args
+safeRequireEvent("./events/message", client, getPrefixes, savePrefixes, blockHelpers);
+safeRequireEvent("./events/autorole", client, getAutorole, saveAutorole);
+safeRequireEvent("./events/interaction", client, blockHelpers);
+
+// Events with only client
+safeRequireEvent("./events/snipe", client);
+safeRequireEvent("./events/guildMemberAdd", client);
+safeRequireEvent("./events/autoMod", client);
+safeRequireEvent("./events/truthdare", client);
 
 // ====================
 // 🚀 Deploy commands and login safely
