@@ -67,7 +67,7 @@ module.exports = {
         .setStyle(ButtonStyle.Secondary)
         .setCustomId("help_list"),
       new ButtonBuilder()
-        .setLabel("🎛️ Buttons Menu")
+        .setLabel("🔘 Buttons Menu")
         .setStyle(ButtonStyle.Success)
         .setCustomId("help_buttons")
     );
@@ -119,10 +119,10 @@ module.exports = {
         await i.update({ embeds: [listEmbed], components: [buttons, dropdown] });
       } else if (i.customId === "help_buttons") {
         const btnEmbed = new EmbedBuilder()
-          .setTitle("🎛️ Buttons Menu Info")
+          .setTitle("🔘 Buttons Menu Info")
           .setDescription(
             "This panel lets you easily navigate between help pages.\n\n" +
-            "🏠 **Home:** Show basic info\n📜 **Commands List:** Show all commands\n🎛️ **Buttons Menu:** You’re here!"
+            "🏠 **Home:** Show basic info\n📜 **Commands List:** Show all commands\n🔘 **Buttons Menu:** You’re here!"
           )
           .setColor("Blue");
         await i.update({ embeds: [btnEmbed], components: [buttons, dropdown] });
