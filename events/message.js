@@ -3,11 +3,62 @@ const { EmbedBuilder } = require("discord.js");
 const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
+const Level = require("../models/Level");
+const LevelReward = require("../models/LevelReward");
 
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
+// ---------- XP + Level System ----------
+    const xpGain = Math.floor(Math.random() * 10) + 5; // 5–15 XP per message
+    const guildId = message.guild.id;
+    const userId = message.author.id;
 
+    let userData = await UserXP.findOne({ userId, guildId });
+    if (!userData) {
+      userData = await UserXP.create({ userId, guildId, xp: 0, level: 0 });
+    }
+
+    userData.xp += xpGain;
+
+    // Formula for XP needed to level up (customizable)
+    const nextLevelXP = 100 + userData.level * 50;
+
+    // If user leveled up
+    if (userData.xp >= nextLevelXP) {
+      userData.level += 1;
+      userData.xp = 0;
+
+      await message.channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Gold")
+            .setDescription(`🤞🏻 ${message.author} leveled up to **Level ${userData.level}**!`),
+        ],
+      }).catch(() => {});
+
+      // ✅ Check for role rewards
+      const reward = await LevelReward.findOne({
+        guildId,
+        level: userData.level,
+      });
+
+      if (reward) {
+        const role = message.guild.roles.cache.get(reward.roleId);
+        if (role && message.member) {
+          await message.member.roles.add(role).catch(() => {});
+          await message.channel.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor("Aqua")
+                .setDescription(`🏅 ${message.author} earned the role ${role} for reaching Level ${userData.level}!`),
+            ],
+          }).catch(() => {});
+        }
+      }
+    }
+
+    await userData.save();
     const guildId = message.guild.id;
 
     // ---------- AFK Remove ----------
