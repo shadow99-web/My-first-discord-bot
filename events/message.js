@@ -35,18 +35,18 @@ module.exports = function (client, getPrefixes, blockHelpers) {
       userData.xp -= nextLevelXP
 
       // 🏆 Create rank card
-      const rankCard = new RankCardBuilder();
-        .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
-        .setCurrentXP(earnedXP)
-        .setRequiredXP(nextLevelXP)
-        .setLevel(userData.level)
-        .setUsername(message.author.username)
-        .setDiscriminator(message.author.discriminator)
-        .setStatus(message.member.presence?.status || "online")
-        .setProgressBar("#FFD700", "COLOR")
-        .setBackground("COLOR", "#1e1e2e");
+      const rankCard = new RankCardBuilder()
+  .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
+  .setCurrentXP(userData.xp)        // XP after deducting nextLevelXP
+  .setRequiredXP(nextLevelXP)
+  .setLevel(userData.level)
+  .setUsername(message.author.username)
+  .setDiscriminator(message.author.discriminator)
+  .setStatus(message.member.presence?.status || "online")
+  .setProgressBar("#FFD700", "COLOR")
+  .setBackground("COLOR", "#1e1e2e");
 
-      const rankImage = await rankCard.build();
+const rankImage = await rankCard.build();
 
       // 🔍 Find rank-up channel or fallback to current one
       const rankChannelData = await RankChannel.findOne({ guildId });
