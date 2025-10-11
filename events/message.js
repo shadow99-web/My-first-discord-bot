@@ -59,7 +59,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
     }
 
     await userData.save();
-    const guildId = message.guild.id;
+   
 
     // ---------- AFK Remove ----------
     if (client.afk.has(message.author.id)) {
