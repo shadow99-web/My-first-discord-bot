@@ -1,4 +1,3 @@
-// events/message.js
 const { EmbedBuilder } = require("discord.js");
 const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
@@ -11,79 +10,60 @@ const RankChannel = require("../models/RankChannel");
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
-// ---------- XP + Level System ----------
+
+    // ---------- XP + Level System ----------
     const xpGain = Math.floor(Math.random() * 10) + 5; // 5–15 XP per message
     const guildId = message.guild.id;
     const userId = message.author.id;
 
     let userData = await Level.findOne({ userId, guildId });
-if (!userData) {
-  userData = await Level.create({ userId, guildId, xp: 0, level: 0 });
-}
+    if (!userData) {
+      userData = await Level.create({ userId, guildId, xp: 0, level: 0 });
+    }
 
     userData.xp += xpGain;
 
-    // Formula for XP needed to level up (customizable)
+    // Formula for XP needed to level up
     const nextLevelXP = 100 + userData.level * 50;
 
-   
-  const earnedXP = userData.xp; // store before reset
-userData.level += 1;
-userData.xp = 0;
+    // If user leveled up
+    if (userData.xp >= nextLevelXP) {
+      const earnedXP = userData.xp;
+      userData.level += 1;
+      userData.xp = 0;
 
-const rankCard = new canvacord.Rank()
-  .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
-  .setCurrentXP(earnedXP)
-  .setRequiredXP(nextLevelXP)
-  ...
+      // 🏆 Create rank card
+      const rankCard = new canvacord.Rank()
+        .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
+        .setCurrentXP(earnedXP)
+        .setRequiredXP(nextLevelXP)
+        .setLevel(userData.level)
+        .setUsername(message.author.username)
+        .setDiscriminator(message.author.discriminator)
+        .setStatus(message.member.presence?.status || "online")
+        .setProgressBar("#FFD700", "COLOR")
+        .setBackground("COLOR", "#1e1e2e");
 
-  // 🏆 Create rank card
-  const rankCard = new canvacord.Rank()
-    .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
-    .setCurrentXP(userData.xp)
-    .setRequiredXP(nextLevelXP)
-    .setLevel(userData.level)
-    .setUsername(message.author.username)
-    .setDiscriminator(message.author.discriminator)
-    .setStatus(message.member.presence?.status || "online")
-    .setProgressBar("#FFD700", "COLOR")
-    .setBackground("COLOR", "#1e1e2e");
+      const rankImage = await rankCard.build();
 
-  const rankImage = await rankCard.build();
+      // 🔍 Find rank-up channel or fallback to current one
+      const rankChannelData = await RankChannel.findOne({ guildId });
+      const targetChannel = rankChannelData
+        ? message.guild.channels.cache.get(rankChannelData.channelId) || message.channel
+        : message.channel;
 
-// 🔍 Find rank-up channel or fallback to current one
-const rankChannelData = await RankChannel.findOne({ guildId });
+      await targetChannel.send({
+        content: `🎉 ${message.author} leveled up to **Level ${userData.level}**!`,
+        files: [{ attachment: rankImage, name: "rank-card.png" }],
+      }).catch(() => {});
 
-let targetChannel;
-if (rankChannelData) {
-  const foundChannel = message.guild.channels.cache.get(rankChannelData.channelId);
-  if (foundChannel) {
-    targetChannel = foundChannel;
-  } else {
-    // If the saved channel was deleted, fallback to the current channel
-    targetChannel = message.channel;
-  }
-} else {
-  targetChannel = message.channel;
-}
-
-  await targetChannel.send({
-    content: `（｡>_<｡） ${message.author} leveled up to **Level ${userData.level}**!`,
-    files: [{ attachment: rankImage, name: "rank-card.png" }],
-  }).catch(() => {});
-
-  
-      // ✅ Check for role rewards
-      const reward = await LevelReward.findOne({
-        guildId,
-        level: userData.level,
-      });
-
+      // ✅ Role reward
+      const reward = await LevelReward.findOne({ guildId, level: userData.level });
       if (reward) {
         const role = message.guild.roles.cache.get(reward.roleId);
         if (role && message.member) {
           await message.member.roles.add(role).catch(() => {});
-          await message.channel.send({
+          await targetChannel.send({
             embeds: [
               new EmbedBuilder()
                 .setColor("Aqua")
@@ -95,16 +75,13 @@ if (rankChannelData) {
     }
 
     await userData.save();
-   
 
     // ---------- AFK Remove ----------
     if (client.afk.has(message.author.id)) {
       client.afk.delete(message.author.id);
       message.reply({
         embeds: [
-          new EmbedBuilder()
-            .setColor("Green")
-            .setDescription("✅ You are no longer AFK."),
+          new EmbedBuilder().setColor("Green").setDescription("✅ You are no longer AFK."),
         ],
       }).catch(() => {});
     }
@@ -163,7 +140,6 @@ if (rankChannelData) {
     // ---------- Execute Prefix Command ----------
     try {
       if (typeof command.execute === "function") {
-        // ✅ Unified format (same as interaction.js)
         await command.execute({
           client,
           message,
