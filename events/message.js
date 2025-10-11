@@ -26,10 +26,16 @@ if (!userData) {
     // Formula for XP needed to level up (customizable)
     const nextLevelXP = 100 + userData.level * 50;
 
-    // If user leveled up
-    if (userData.xp >= nextLevelXP) {
-  userData.level += 1;
-  userData.xp = 0;
+   
+  const earnedXP = userData.xp; // store before reset
+userData.level += 1;
+userData.xp = 0;
+
+const rankCard = new canvacord.Rank()
+  .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
+  .setCurrentXP(earnedXP)
+  .setRequiredXP(nextLevelXP)
+  ...
 
   // 🏆 Create rank card
   const rankCard = new canvacord.Rank()
@@ -45,33 +51,28 @@ if (!userData) {
 
   const rankImage = await rankCard.build();
 
-  // 🔍 Find rank-up channel or fallback to current one
-  const rankChannelData = await RankChannel.findOne({ guildId });
-  const targetChannel = rankChannelData
-    ? message.guild.channels.cache.get(rankChannelData.channelId)
-    : message.channel;
+// 🔍 Find rank-up channel or fallback to current one
+const rankChannelData = await RankChannel.findOne({ guildId });
+
+let targetChannel;
+if (rankChannelData) {
+  const foundChannel = message.guild.channels.cache.get(rankChannelData.channelId);
+  if (foundChannel) {
+    targetChannel = foundChannel;
+  } else {
+    // If the saved channel was deleted, fallback to the current channel
+    targetChannel = message.channel;
+  }
+} else {
+  targetChannel = message.channel;
+}
 
   await targetChannel.send({
     content: `（｡>_<｡） ${message.author} leveled up to **Level ${userData.level}**!`,
     files: [{ attachment: rankImage, name: "rank-card.png" }],
   }).catch(() => {});
 
-  // ✅ Role rewards
-  const reward = await LevelReward.findOne({ guildId, level: userData.level });
-  if (reward) {
-    const role = message.guild.roles.cache.get(reward.roleId);
-    if (role && message.member) {
-      await message.member.roles.add(role).catch(() => {});
-      await targetChannel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("Aqua")
-            .setDescription(`🏅 ${message.author} earned the role ${role} for reaching Level ${userData.level}!`),
-        ],
-      }).catch(() => {});
-    }
-  }
-}
+  
       // ✅ Check for role rewards
       const reward = await LevelReward.findOne({
         guildId,
