@@ -4,7 +4,7 @@ const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
-const canvacord = require("canvacord");
+const { Rank } = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 
 module.exports = function (client, getPrefixes, blockHelpers) {
@@ -33,7 +33,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
       userData.xp = 0;
 
       // 🏆 Create rank card
-      const rankCard = new canvacord.Rank()
+      const rankCard = new Rank()
         .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
         .setCurrentXP(earnedXP)
         .setRequiredXP(nextLevelXP)
