@@ -30,7 +30,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
     if (userData.xp >= nextLevelXP) {
       const earnedXP = userData.xp;
       userData.level += 1;
-      userData.xp = 0;
+      userData.xp -= nextLevelXP
 
       // 🏆 Create rank card
       const rankCard = new Rank()
