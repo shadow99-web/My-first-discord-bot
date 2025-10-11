@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
-const RankChannel = require("../../models/RankChannel");
+const RankChannel = require("../models/RankChannel");
 
 module.exports = {
   data: new SlashCommandBuilder()
