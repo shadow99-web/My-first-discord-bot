@@ -81,7 +81,9 @@ module.exports = function (client, getPrefixes, blockHelpers) {
       client.afk.delete(message.author.id);
       message.reply({
         embeds: [
-          new EmbedBuilder().setColor("Green").setDescription("✅ You are no longer AFK."),
+          new EmbedBuilder()
+            .setColor("Green")
+            .setDescription("✅ You are no longer AFK."),
         ],
       }).catch(() => {});
     }
@@ -140,6 +142,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
     // ---------- Execute Prefix Command ----------
     try {
       if (typeof command.execute === "function") {
+        // ✅ Unified format (same as interaction.js)
         await command.execute({
           client,
           message,
