@@ -40,8 +40,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
   .setCurrentXP(userData.xp)        // XP after deducting nextLevelXP
   .setRequiredXP(nextLevelXP)
   .setLevel(userData.level)
-  .setUsername(message.author.username)
-  .setDiscriminator(message.author.discriminator)
+  .setUsername(`${message.author.username}#${message.author.discriminator}`)
   .setStatus(message.member.presence?.status || "online")
   .setProgressBar("#FFD700", "COLOR")
   .setBackground("COLOR", "#1e1e2e");
