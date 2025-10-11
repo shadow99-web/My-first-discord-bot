@@ -14,10 +14,10 @@ module.exports = function (client, getPrefixes, blockHelpers) {
     const guildId = message.guild.id;
     const userId = message.author.id;
 
-    let userData = await UserXP.findOne({ userId, guildId });
-    if (!userData) {
-      userData = await UserXP.create({ userId, guildId, xp: 0, level: 0 });
-    }
+    let userData = await Level.findOne({ userId, guildId });
+if (!userData) {
+  userData = await Level.create({ userId, guildId, xp: 0, level: 0 });
+}
 
     userData.xp += xpGain;
 
