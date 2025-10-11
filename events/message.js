@@ -5,6 +5,8 @@ const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
+const canvacord = require("canvacord");
+const RankChannel = require("../models/RankChannel");
 
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
@@ -26,17 +28,50 @@ if (!userData) {
 
     // If user leveled up
     if (userData.xp >= nextLevelXP) {
-      userData.level += 1;
-      userData.xp = 0;
+  userData.level += 1;
+  userData.xp = 0;
 
-      await message.channel.send({
+  // 🏆 Create rank card
+  const rankCard = new canvacord.Rank()
+    .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
+    .setCurrentXP(userData.xp)
+    .setRequiredXP(nextLevelXP)
+    .setLevel(userData.level)
+    .setUsername(message.author.username)
+    .setDiscriminator(message.author.discriminator)
+    .setStatus(message.member.presence?.status || "online")
+    .setProgressBar("#FFD700", "COLOR")
+    .setBackground("COLOR", "#1e1e2e");
+
+  const rankImage = await rankCard.build();
+
+  // 🔍 Find rank-up channel or fallback to current one
+  const rankChannelData = await RankChannel.findOne({ guildId });
+  const targetChannel = rankChannelData
+    ? message.guild.channels.cache.get(rankChannelData.channelId)
+    : message.channel;
+
+  await targetChannel.send({
+    content: `（｡>_<｡） ${message.author} leveled up to **Level ${userData.level}**!`,
+    files: [{ attachment: rankImage, name: "rank-card.png" }],
+  }).catch(() => {});
+
+  // ✅ Role rewards
+  const reward = await LevelReward.findOne({ guildId, level: userData.level });
+  if (reward) {
+    const role = message.guild.roles.cache.get(reward.roleId);
+    if (role && message.member) {
+      await message.member.roles.add(role).catch(() => {});
+      await targetChannel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor("Gold")
-            .setDescription(`🤞🏻 ${message.author} leveled up to **Level ${userData.level}**!`),
+            .setColor("Aqua")
+            .setDescription(`🏅 ${message.author} earned the role ${role} for reaching Level ${userData.level}!`),
         ],
       }).catch(() => {});
-
+    }
+  }
+}
       // ✅ Check for role rewards
       const reward = await LevelReward.findOne({
         guildId,
