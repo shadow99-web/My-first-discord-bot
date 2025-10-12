@@ -53,7 +53,7 @@ const rankImage = await rankCard.build();
         : message.channel;
 
       await targetChannel.send({
-        content: `🎉 ${message.author} leveled up to **Level ${userData.level}**!`,
+        content: `🌈 ${message.author} leveled up to **Level ${userData.level}**!`,
         files: [{ attachment: rankImage, name: "rank-card.png" }],
       }).catch(() => {});
 
