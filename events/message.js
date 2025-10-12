@@ -37,12 +37,13 @@ module.exports = function (client, getPrefixes, blockHelpers) {
       // 🏆 Create rank card
       const rankCard = new RankCardBuilder()
   .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
-  .setCurrentXP(userData.xp)        // XP after deducting nextLevelXP
+  .setCurrentXP(userData.xp)         // XP after deducting for new level
   .setRequiredXP(nextLevelXP)
   .setLevel(userData.level)
-  .setProgressBar("#FFD700", "COLOR")
+  .setUsername(`${message.author.username}#${message.author.discriminator}`) // Combines username and discriminator
   .setBackground("COLOR", "#1e1e2e");
 
+// .setProgressBar() is not available in v6+
 const rankImage = await rankCard.build();
 
       // 🔍 Find rank-up channel or fallback to current one
