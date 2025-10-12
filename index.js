@@ -93,17 +93,26 @@ const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./util
 const blockHelpers = require("./utils/block");
 
 // ====================
-// 📂 Load Commands safely
+// 📂 Load Commands safely (slash + prefix)
+// ====================
 const commandsData = [];
 try {
     const commandFiles = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
+
     for (const file of commandFiles) {
         try {
             const command = require(`./commands/${file}`);
-            if (command?.data?.name && command?.execute) {
-                client.commands.set(command.data.name, command);
-                commandsData.push(command.data.toJSON());
-                console.log(`✅ Loaded command: ${command.data.name}`);
+            const commandName = command.data?.name || command.name;
+
+            if (commandName && typeof command.execute === "function") {
+                client.commands.set(commandName, command);
+
+                // Push only slash commands to REST deploy
+                if (command.data?.toJSON) {
+                    commandsData.push(command.data.toJSON());
+                }
+
+                console.log(`✅ Loaded command: ${commandName}`);
             } else {
                 console.log(`⚠️ Skipped invalid command: ${file}`);
             }
