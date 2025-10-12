@@ -145,6 +145,7 @@ safeRequireEvent("./events/snipe", client);
 safeRequireEvent("./events/guildMemberAdd", client);
 safeRequireEvent("./events/autoMod", client);
 safeRequireEvent("./events/truthdare", client);
+safeRequireEvent("./events/modLogEvents", client);
 
 // ====================
 // 🚀 Deploy commands and login safely
