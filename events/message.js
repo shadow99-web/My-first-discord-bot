@@ -41,7 +41,7 @@ module.exports = function (client, getPrefixes, blockHelpers) {
   .setRequiredXP(nextLevelXP)
   .setLevel(userData.level)
   .setUsername(`${message.author.username}#${message.author.discriminator}`) // Combines username and discriminator
-  .setBackground("COLOR", "#2196f3");
+  .setBackground("COLOR", "#F2F3F5");
 
 // .setProgressBar() is not available in v6+
 const rankImage = await rankCard.build();
