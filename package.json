@@ -37,8 +37,7 @@
     "gif-frames": "^1.0.1",
      "set-interval-async": "^2.0.2", 
     "gifencoder": "^2.0.1", 
-    "canvacord": "^6.0.2", 
-    "scrape-pinterest": "^3.0.4"
+    "canvacord": "^6.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
