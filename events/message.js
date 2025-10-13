@@ -8,12 +8,17 @@ const { RankCardBuilder, Font } = require("canvacord");
 Font.loadDefault(); // Needed to avoid blank text
 
 const RankChannel = require("../models/RankChannel");
+const RankSettings = require("../models/RankSettings");
 
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
     // ---------- XP + Level System ----------
+    // ---------- Check if rank system is enabled ----------
+const rankSettings = await RankSettings.findOne({ guildId: message.guild.id });
+if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
+    
     const xpGain = Math.floor(Math.random() * 10) + 5; // 5–15 XP per message
     const guildId = message.guild.id;
     const userId = message.author.id;
