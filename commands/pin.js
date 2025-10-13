@@ -5,7 +5,7 @@ const {
     ButtonBuilder, 
     ButtonStyle 
 } = require("discord.js");
- // npm i node-fetch
+// npm i node-fetch
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -35,7 +35,6 @@ module.exports = {
 
         let sub, query;
 
-        // ✅ Handle both Slash & Prefix commands
         if (isPrefix) {
             sub = args[0]?.toLowerCase();
             query = args.slice(1).join(" ");
@@ -45,25 +44,27 @@ module.exports = {
             if (!interaction.isChatInputCommand()) return;
             sub = interaction.options.getSubcommand();
             query = interaction.options.getString("query");
-            // Only defer for slash commands
             await interaction.deferReply().catch(() => {});
         }
 
         try {
-            // ✅ Fetch data from Pinterest JSON API
-            const url = `https://api.pinterest.com/v3/search/pins/?q=${encodeURIComponent(query)}&limit=20`;
-            const res = await fetch(url);
-            const data = await res.json();
+            // ✅ Pinterest JSON endpoint
+            const url = `https://www.pinterest.com/search/${sub === "clips" ? "videos" : "pins"}/?q=${encodeURIComponent(query)}&format=json`;
 
-            if (!data || !data.data || !data.data.results?.length) {
-                const content = `⚠️ No results found for \`${query}\`.`;
-                return isPrefix
-                    ? message.reply(content)
-                    : interaction.editReply({ content }).catch(() => {});
-            }
+            const res = await fetch(url, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                    "Accept": "application/json",
+                },
+            });
 
-            // Extract image or clip URLs
-            const results = data.data.results
+            let text = await res.text();
+            text = text.replace("])}while(1);", ""); // remove Pinterest prefix
+            const data = JSON.parse(text);
+
+            // Extract images/videos
+            const items = data.resource_response?.data || [];
+            const results = items
                 .map(item => sub === "clips" ? item.video?.video_url : item.images?.orig?.url)
                 .filter(Boolean)
                 .slice(0, 15);
@@ -101,17 +102,12 @@ module.exports = {
                 );
 
             const replyOptions = { embeds: [getEmbed()], components: [makeButtons()] };
-
-            // Send initial message
             const msg = isPrefix
                 ? await message.reply(replyOptions)
                 : await interaction.editReply(replyOptions);
 
-            // Collector for buttons
             const collector = msg.createMessageComponentCollector({ time: 60_000 });
-
             collector.on("collect", async (btn) => {
-                // Only allow the original user
                 if (btn.user.id !== (isPrefix ? message.author.id : interaction.user.id))
                     return btn.reply({ content: "⛔ Not for you!", ephemeral: true });
 
