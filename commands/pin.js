@@ -5,7 +5,7 @@ const {
     ButtonBuilder, 
     ButtonStyle 
 } = require("discord.js");
-const puppeteer = require("puppeteer");
+ // Make sure to install node-fetch
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -37,7 +37,6 @@ module.exports = {
 
         // ✅ Handle both Slash & Prefix commands
         if (isPrefix) {
-            // Prefix example: !pin images cars
             sub = args[0]?.toLowerCase();
             query = args.slice(1).join(" ");
             if (!sub || !query)
@@ -50,37 +49,34 @@ module.exports = {
         }
 
         try {
-            // ✅ Puppeteer settings (Render-friendly)
-            const browser = await puppeteer.launch({
-                headless: true,
-                args: ["--no-sandbox", "--disable-setuid-sandbox"],
-            });
-            const page = await browser.newPage();
+            // ✅ Fetch data from Pinterest JSON API
+            const type = sub === "clips" ? "videos" : "pins";
+            const url = `https://api.pinterest.com/v3/search/pins/?q=${encodeURIComponent(query)}&limit=20`;
+            
+            const res = await fetch(url);
+            const data = await res.json();
 
-            const url = `https://www.pinterest.com/search/${sub === "clips" ? "videos" : "pins"}/?q=${encodeURIComponent(query)}`;
-            await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-
-            // ✅ Scrape Pinterest
-            const results = await page.evaluate(() => {
-                const items = [];
-                const imgs = document.querySelectorAll("img[srcset]");
-                imgs.forEach(img => {
-                    const src = img.src;
-                    if (src && !items.includes(src)) items.push(src);
-                });
-                return items.slice(0, 15);
-            });
-
-            await browser.close();
-
-            if (!results.length) {
-                const content = "⚠️ No results found for `" + query + "`.";
+            if (!data || !data.data || !data.data.results?.length) {
+                const content = `⚠️ No results found for \`${query}\`.`;
                 return isPrefix
                     ? message.reply(content)
                     : interaction.editReply({ content });
             }
 
-            // ✅ Pagination logic
+            // Extract image or clip URLs
+            const results = data.data.results
+                .map(item => sub === "clips" ? item.video?.video_url : item.images?.orig?.url)
+                .filter(Boolean)
+                .slice(0, 15);
+
+            if (!results.length) {
+                const content = `⚠️ No results found for \`${query}\`.`;
+                return isPrefix
+                    ? message.reply(content)
+                    : interaction.editReply({ content });
+            }
+
+            // ✅ Pagination
             let index = 0;
             const getEmbed = () =>
                 new EmbedBuilder()
