@@ -5,7 +5,7 @@ const {
     ButtonBuilder, 
     ButtonStyle 
 } = require("discord.js");
- // Make sure to install node-fetch
+ // npm i node-fetch
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -42,17 +42,16 @@ module.exports = {
             if (!sub || !query)
                 return message.reply("❌ Usage: `!pin <images|clips> <topic>`");
         } else {
-            if (!interaction.isChatInputCommand?.()) return;
+            if (!interaction.isChatInputCommand()) return;
             sub = interaction.options.getSubcommand();
             query = interaction.options.getString("query");
-            await interaction.deferReply();
+            // Only defer for slash commands
+            await interaction.deferReply().catch(() => {});
         }
 
         try {
             // ✅ Fetch data from Pinterest JSON API
-            const type = sub === "clips" ? "videos" : "pins";
             const url = `https://api.pinterest.com/v3/search/pins/?q=${encodeURIComponent(query)}&limit=20`;
-            
             const res = await fetch(url);
             const data = await res.json();
 
@@ -60,7 +59,7 @@ module.exports = {
                 const content = `⚠️ No results found for \`${query}\`.`;
                 return isPrefix
                     ? message.reply(content)
-                    : interaction.editReply({ content });
+                    : interaction.editReply({ content }).catch(() => {});
             }
 
             // Extract image or clip URLs
@@ -73,7 +72,7 @@ module.exports = {
                 const content = `⚠️ No results found for \`${query}\`.`;
                 return isPrefix
                     ? message.reply(content)
-                    : interaction.editReply({ content });
+                    : interaction.editReply({ content }).catch(() => {});
             }
 
             // ✅ Pagination
@@ -103,13 +102,16 @@ module.exports = {
 
             const replyOptions = { embeds: [getEmbed()], components: [makeButtons()] };
 
+            // Send initial message
             const msg = isPrefix
                 ? await message.reply(replyOptions)
                 : await interaction.editReply(replyOptions);
 
+            // Collector for buttons
             const collector = msg.createMessageComponentCollector({ time: 60_000 });
 
             collector.on("collect", async (btn) => {
+                // Only allow the original user
                 if (btn.user.id !== (isPrefix ? message.author.id : interaction.user.id))
                     return btn.reply({ content: "⛔ Not for you!", ephemeral: true });
 
