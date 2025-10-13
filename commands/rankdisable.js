@@ -7,11 +7,27 @@ module.exports = {
     .setDescription("Disable the rank system in this server.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-  async execute({ interaction, isPrefix, message }) {
-    const guildId = isPrefix ? message.guild.id : interaction.guild.id;
+  name: "rankdisable",
+  description: "Disable the rank system in this server.",
+  permissions: [PermissionFlagsBits.ManageGuild],
 
-    let settings = await RankSettings.findOne({ guildId });
-    if (!settings) settings = new RankSettings({ guildId });
+  async execute(context) {
+    const { interaction, message, isPrefix } = context;
+    const guild = isPrefix ? message.guild : interaction.guild;
+    const member = isPrefix ? message.member : interaction.member;
+
+    // Permission check
+    if (!member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      const embed = new EmbedBuilder()
+        .setColor("Red")
+        .setDescription("❌ You don’t have permission to manage this server.");
+      return isPrefix
+        ? message.reply({ embeds: [embed] })
+        : interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    let settings = await RankSettings.findOne({ guildId: guild.id });
+    if (!settings) settings = new RankSettings({ guildId: guild.id });
 
     settings.enabled = false;
     await settings.save();
@@ -20,7 +36,8 @@ module.exports = {
       .setColor("Red")
       .setDescription("🛑 Rank system has been **disabled** in this server.");
 
-    if (isPrefix) await message.reply({ embeds: [embed] });
-    else await interaction.reply({ embeds: [embed], ephemeral: true });
+    return isPrefix
+      ? message.reply({ embeds: [embed] })
+      : interaction.reply({ embeds: [embed], ephemeral: true });
   },
 };
