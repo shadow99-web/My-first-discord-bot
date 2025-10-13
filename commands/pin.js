@@ -1,28 +1,13 @@
-const { 
-    SlashCommandBuilder, 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle 
-} = require("discord.js");
-const Pinterest = require("pinterest-scraper"); // CommonJS-compatible
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { search } = require("pinterest-dl");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("pin")
-        .setDescription("Fetch images or clips from Pinterest by topic")
+        .setDescription("Fetch images from Pinterest by topic")
         .addSubcommand(sub =>
             sub.setName("images")
                 .setDescription("Fetch Pinterest images by topic")
-                .addStringOption(opt =>
-                    opt.setName("query")
-                        .setDescription("Search topic")
-                        .setRequired(true)
-                )
-        )
-        .addSubcommand(sub =>
-            sub.setName("clips")
-                .setDescription("Fetch Pinterest clips by topic")
                 .addStringOption(opt =>
                     opt.setName("query")
                         .setDescription("Search topic")
@@ -32,25 +17,23 @@ module.exports = {
 
     async execute(context) {
         const { interaction, message, args, isPrefix } = context;
-        let sub, query;
+        let query;
 
         if (isPrefix) {
-            sub = args[0]?.toLowerCase();
             query = args.slice(1).join(" ");
-            if (!sub || !query)
-                return message.reply("❌ Usage: `!pin <images|clips> <topic>`");
+            if (!query)
+                return message.reply("❌ Usage: `!pin images <topic>`");
         } else {
             if (!interaction.isChatInputCommand()) return;
-            sub = interaction.options.getSubcommand();
             query = interaction.options.getString("query");
             await interaction.deferReply().catch(() => {});
         }
 
         try {
             // Fetch pins
-            const pins = await Pinterest.search(query);
+            const pins = await search(query);
             const results = pins
-                .map(p => sub === "clips" ? p.video : p.image)
+                .map(p => p.image)
                 .filter(Boolean)
                 .slice(0, 15);
 
@@ -66,7 +49,7 @@ module.exports = {
             const getEmbed = () =>
                 new EmbedBuilder()
                     .setColor("#E60023")
-                    .setTitle(`📌 Pinterest ${sub === "clips" ? "Clips" : "Images"} - ${query}`)
+                    .setTitle(`📌 Pinterest Images - ${query}`)
                     .setImage(results[index])
                     .setFooter({ text: `Result ${index + 1}/${results.length}` });
 
