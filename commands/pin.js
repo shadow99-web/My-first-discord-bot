@@ -34,22 +34,25 @@ module.exports = {
     try {
       // Pinterest Search URL
       const url = `https://www.pinterest.com/search/${sub === "clips" ? "videos" : "pins"}/?q=${encodeURIComponent(query)}`;
-      const { data } = await axios.get(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      });
+      const proxyUrl = `https://r.jina.ai/${url}`;
+const { data } = await axios.get(proxyUrl, {
+  headers: {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept": "text/html",
+  },
+});
 
       // Parse HTML
       const $ = cheerio.load(data);
       const results = new Set();
 
       $("img").each((_, el) => {
-        const src = $(el).attr("src");
-        if (src && src.startsWith("https") && !src.includes("blank.gif")) results.add(src);
-      });
-
+  let src = $(el).attr("src") || $(el).attr("data-src") || $(el).attr("srcset");
+  if (src && src.includes("https")) {
+    src = src.split(" ")[0]; // get the first image in srcset
+    results.add(src);
+  }
+});
       const items = Array.from(results).slice(0, 15);
 
       if (!items.length)
