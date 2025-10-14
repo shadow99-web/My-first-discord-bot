@@ -1,5 +1,27 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const axios = require("axios");
 
+// ⚡ Safe fetch utility (with retry + proxy fallback)
+async function safeFetch(url, retries = 2) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const { data } = await axios.get(url, { timeout: 10000 });
+            return data;
+        } catch (err) {
+            console.warn(`⚠️ Fetch attempt ${i + 1} failed: ${err.message}`);
+            if (i === retries - 1) {
+                console.log("➡️ Trying proxy fallback...");
+                try {
+                    const proxyUrl = `https://r.jina.ai/${url}`; // proxy bypass
+                    const { data } = await axios.get(proxyUrl, { timeout: 15000 });
+                    return data;
+                } catch (proxyErr) {
+                    throw proxyErr;
+                }
+            }
+        }
+    }
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -18,47 +40,40 @@ module.exports = {
         const interaction = context.interaction;
         const message = context.message;
 
-        // ✅ Get input
         const query = context.isPrefix
             ? context.args.join(" ")
             : interaction.options.getString("name");
 
         if (!query) {
-            return context.isPrefix
-                ? message.reply("❌ Please provide a character name!")
-                : interaction.reply("❌ Please provide a character name!");
+            const msg = "❌ Please provide a character name!";
+            return context.isPrefix ? message.reply(msg) : interaction.reply(msg);
         }
 
         try {
-            // ✅ Fetch up to 10 characters
-            const res = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(query)}&limit=10`);
-            const data = await res.json();
+            // ✅ Use Jikan API (safe fetch)
+            const apiUrl = `https://api.jikan.moe/v4/characters?q=${encodeURIComponent(query)}&limit=10`;
+            const data = await safeFetch(apiUrl);
 
-            if (!data.data || data.data.length === 0) {
-                return context.isPrefix
-                    ? message.reply(`❌ No character found with name **${query}**`)
-                    : interaction.reply(`❌ No character found with name **${query}**`);
+            if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+                const msg = `❌ No character found with name **${query}**`;
+                return context.isPrefix ? message.reply(msg) : interaction.reply(msg);
             }
 
             let page = 0;
 
-            // ✅ Build image-only embed
-            const buildEmbed = (char, pageIndex) => {
-                return new EmbedBuilder()
+            const buildEmbed = (char, index) =>
+                new EmbedBuilder()
                     .setTitle(`✨ ${char.name}`)
                     .setURL(char.url)
-                    .setImage(char.images.jpg.image_url)
+                    .setImage(char.images?.jpg?.image_url || null)
                     .setColor("Purple")
-                    .setFooter({ text: `Result ${pageIndex + 1} of ${data.data.length} | Data from Jikan API` });
-            };
+                    .setFooter({ text: `Result ${index + 1}/${data.data.length} | Source: Jikan API` });
 
-            // ✅ Buttons
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId("prev").setLabel("⬅️ Previous").setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId("next").setLabel("➡️ Next").setStyle(ButtonStyle.Primary)
             );
 
-            // ✅ Send first result
             let msg;
             if (context.isPrefix) {
                 msg = await message.reply({ embeds: [buildEmbed(data.data[page], page)], components: [row] });
@@ -66,31 +81,23 @@ module.exports = {
                 msg = await interaction.reply({ embeds: [buildEmbed(data.data[page], page)], components: [row], fetchReply: true });
             }
 
-            // ✅ Collector for button interaction
             const filter = (i) => i.user.id === (context.isPrefix ? message.author.id : interaction.user.id);
             const collector = msg.createMessageComponentCollector({ filter, time: 60000 });
 
             collector.on("collect", async (i) => {
-                if (i.customId === "prev") {
-                    page = (page - 1 + data.data.length) % data.data.length;
-                } else if (i.customId === "next") {
-                    page = (page + 1) % data.data.length;
-                }
-
+                if (i.customId === "prev") page = (page - 1 + data.data.length) % data.data.length;
+                if (i.customId === "next") page = (page + 1) % data.data.length;
                 await i.update({ embeds: [buildEmbed(data.data[page], page)], components: [row] });
             });
 
             collector.on("end", async () => {
-                try {
-                    await msg.edit({ components: [] });
-                } catch (e) {}
+                try { await msg.edit({ components: [] }); } catch {}
             });
 
         } catch (err) {
-            console.error("AnimeGallery Error:", err);
-            return context.isPrefix
-                ? message.reply("⚠️ Error fetching gallery. Try again later.")
-                : interaction.reply("⚠️ Error fetching gallery. Try again later.");
+            console.error("❌ AnimeGallery Error:", err.message);
+            const msg = "⚠️ Error fetching gallery. Try again later.";
+            return context.isPrefix ? message.reply(msg) : interaction.reply(msg);
         }
     }
 };
