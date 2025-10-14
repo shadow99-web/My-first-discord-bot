@@ -89,7 +89,7 @@ module.exports = {
     const getEmbed = () =>
       new EmbedBuilder()
         .setColor("#E60023")
-        .setTitle(`📌 Pinterest ${sub === "clips" ? "Clips" : "Images"}: ${query}`)
+        .setTitle(`📌 𝙎𝙃𝘼𝘿𝙊𝙒 ${sub === "clips" ? "Clips" : "Images"}: ${query}`)
         .setImage(items[index])
         .setFooter({ text: `Result ${index + 1}/${items.length}` });
 
