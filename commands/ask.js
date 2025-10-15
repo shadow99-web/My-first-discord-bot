@@ -10,7 +10,7 @@ const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fet
 
 module.exports = {
   name: "ask",
-  description: "Ask AI anything using Gemini with multi-API fallback",
+  description: "Ask AI anything using Gemini with automatic fallback",
   data: new SlashCommandBuilder()
     .setName("ask")
     .setDescription("Ask AI anything (Gemini + fallback APIs)")
@@ -34,120 +34,116 @@ module.exports = {
     if (isSlash) await context.interaction.deferReply();
 
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    const apis = [
-      {
-        name: "Gemini",
-        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: question }] }],
-        }),
-        extract: (json) =>
-          json?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          json?.candidates?.[0]?.output_text ||
-          null,
-      },
-      {
-        name: "PawanAI",
-        url: `https://api.pawan.krd/api/chat/send`,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bot: "gpt",
-          text: question,
-          user: "1",
-        }),
-        extract: (json) => json.message,
-      },
-      {
-        name: "DuckDuckGo (via Jina)",
-        url: `https://r.jina.ai/http://api.duckduckgo.com/?q=${encodeURIComponent(
-          question
-        )}&format=json`,
-        method: "GET",
-        extract: (json) =>
-          json.AbstractText ||
-          json.RelatedTopics?.[0]?.Text ||
-          json.Answer ||
-          json.Definition ||
-          null,
-      },
-      {
-        name: "Wikipedia (via Jina)",
-        url: `https://r.jina.ai/http://en.wikipedia.org/wiki/${encodeURIComponent(
-          question
-        )}`,
-        method: "GET",
-        extract: (text) =>
-          typeof text === "string"
-            ? text.slice(0, 800)
-            : JSON.stringify(text).slice(0, 800),
-      },
-      {
-        name: "MonkeDev",
-        url: `https://api.monkedev.com/fun/chat?msg=${encodeURIComponent(
-          question
-        )}&uid=1`,
-        method: "GET",
-        extract: (json) => json.response,
-      },
-      {
-        name: "SomeRandomAPI",
-        url: `https://some-random-api.com/chatbot?message=${encodeURIComponent(
-          question
-        )}`,
-        method: "GET",
-        extract: (json) => json.response,
-      },
-    ];
+    const geminiModels = ["gemini-1.5-flash", "gemini-1.5-pro"];
 
-    let responses = [];
+    async function askGemini(model, text) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text }] }],
+          }),
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini ${model} failed: HTTP ${res.status} → ${errText.slice(0, 100)}`);
+      }
+      const data = await res.json();
+      return (
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        data?.candidates?.[0]?.output_text ||
+        null
+      );
+    }
+
     let finalAnswer = null;
     let usedAPI = null;
+    let responses = [];
 
-    async function tryAPI(api) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+    // 🧠 Try Gemini first (Flash → Pro)
+    for (const model of geminiModels) {
       try {
-        const res = await fetch(api.url, {
-          method: api.method,
-          headers: api.headers || {},
-          body: api.body || null,
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        let data;
-        const text = await res.text();
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = text;
+        const ans = await askGemini(model, question);
+        if (ans) {
+          finalAnswer = ans;
+          usedAPI = `Gemini (${model})`;
+          break;
         }
-
-        const extracted = api.extract ? api.extract(data) : data;
-        if (!extracted) throw new Error("No valid response");
-        return extracted;
       } catch (err) {
-        console.log(`⚠️ ${api.name} failed: ${err.message}`);
-        return `⚠️ ${api.name} failed: ${err.message}`;
+        console.log("⚠️", err.message);
+        responses.push(`**${model}:** ${err.message}`);
       }
     }
 
-    for (const api of apis) {
-      const result = await tryAPI(api);
-      responses.push(`**${api.name}:**\n${result}\n──────────────`);
-      if (!result.startsWith("⚠️") && !finalAnswer) {
-        finalAnswer = result;
-        usedAPI = api.name;
+    // 🔁 Fallback to other public APIs if Gemini fails
+    if (!finalAnswer) {
+      const backups = [
+        {
+          name: "PawanAI",
+          url: `https://api.pawan.krd/api/chat/send`,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bot: "gpt", text: question, user: "1" }),
+          extract: (json) => json.message,
+        },
+        {
+          name: "DuckDuckGo (via Jina)",
+          url: `https://r.jina.ai/http://api.duckduckgo.com/?q=${encodeURIComponent(
+            question
+          )}&format=json`,
+          method: "GET",
+          extract: (json) =>
+            json.AbstractText ||
+            json.RelatedTopics?.[0]?.Text ||
+            json.Answer ||
+            json.Definition ||
+            null,
+        },
+        {
+          name: "MonkeDev",
+          url: `https://api.monkedev.com/fun/chat?msg=${encodeURIComponent(question)}&uid=1`,
+          method: "GET",
+          extract: (json) => json.response,
+        },
+      ];
+
+      async function tryBackup(api) {
+        try {
+          const res = await fetch(api.url, {
+            method: api.method,
+            headers: api.headers || {},
+            body: api.body || null,
+          });
+          const text = await res.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = text;
+          }
+          const extracted = api.extract ? api.extract(data) : data;
+          if (extracted) return extracted;
+        } catch (err) {
+          console.log(`⚠️ ${api.name} failed: ${err.message}`);
+        }
+        return null;
+      }
+
+      for (const api of backups) {
+        const ans = await tryBackup(api);
+        responses.push(`**${api.name}:** ${ans || "failed"}`);
+        if (ans) {
+          finalAnswer = ans;
+          usedAPI = api.name;
+          break;
+        }
       }
     }
 
-    const botAvatar =
-      context.client?.user?.displayAvatarURL?.({ dynamic: true }) || null;
-
+    // 🟢 Display result
     if (!finalAnswer) finalAnswer = "❌ All APIs failed. Please try again.";
 
     const chunks = finalAnswer.match(/[\s\S]{1,1900}/g) || ["(no response)"];
@@ -159,8 +155,7 @@ module.exports = {
         .setDescription(desc)
         .setColor(0x00a67e)
         .setFooter({
-          text: `🤖 ${usedAPI || "Multi-API"} | Page ${page + 1}/${chunks.length}`,
-          iconURL: botAvatar,
+          text: `🤖 ${usedAPI || "Unknown"} | Page ${page + 1}/${chunks.length}`,
         });
 
     const makeRow = () =>
@@ -177,12 +172,8 @@ module.exports = {
           .setDisabled(page === chunks.length - 1),
         new ButtonBuilder()
           .setCustomId("view_all")
-          .setLabel("📚 View All API Results")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("retry")
-          .setLabel("🔁 Retry")
-          .setStyle(ButtonStyle.Success)
+          .setLabel("📚 View Logs")
+          .setStyle(ButtonStyle.Secondary)
       );
 
     const sent = isSlash
@@ -211,22 +202,8 @@ module.exports = {
       if (i.customId === "next" && page < chunks.length - 1) page++;
       if (i.customId === "prev" && page > 0) page--;
 
-      if (i.customId === "view_all") {
-        return i.reply({
-          content: responses.join("\n"),
-          ephemeral: true,
-        });
-      }
-
-      if (i.customId === "retry") {
-        await i.deferReply({ ephemeral: true });
-        const newResult = await tryAPI(apis[0]); // Gemini retry
-        await i.followUp({
-          content: newResult || "❌ Retry failed.",
-          ephemeral: true,
-        });
-        return;
-      }
+      if (i.customId === "view_all")
+        return i.reply({ content: responses.join("\n"), ephemeral: true });
 
       await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
     });
