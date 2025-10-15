@@ -12,24 +12,37 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("pin")
     .setDescription("Fetch Pinterest images by topic")
-    .addSubcommand(sub =>
-      sub
-        .setName("images")
-        .setDescription("Fetch Pinterest images by topic")
-        .addStringOption(opt =>
-          opt.setName("query").setDescription("Search topic").setRequired(true)
-        )
+    .addStringOption(opt =>
+      opt
+        .setName("query")
+        .setDescription("Search topic")
+        .setRequired(true)
     ),
 
-  async execute({ interaction }) {
-    const query = interaction.options.getString("query");
-    await interaction.deferReply();
+  name: "pin",
+  aliases: ["pinterest", "pinimg", "pimg"],
+
+  async execute(context) {
+    const interaction = context.interaction;
+    const message = context.message;
+
+    // ✅ Get query for both prefix and slash
+    const query = context.isPrefix
+      ? context.args.join(" ")
+      : interaction.options.getString("query");
+
+    if (!query) {
+      const msg = "❌ Please provide a topic to search!";
+      return context.isPrefix ? message.reply(msg) : interaction.reply(msg);
+    }
+
+    if (!context.isPrefix) await interaction.deferReply();
 
     const apiKey = process.env.SCRAPE_CREATORS_API_KEY;
     let items = [];
 
     try {
-      // ✅ 1️⃣ Try ScrapeCreators API first
+      // ✅ 1️⃣ Try ScrapeCreators API
       const { data } = await axios.get(
         `https://api.scrapecreators.com/v1/pinterest/search?query=${encodeURIComponent(query)}&type=image`,
         {
@@ -48,7 +61,7 @@ module.exports = {
       console.warn("⚠️ ScrapeCreators API failed:", apiErr.message);
     }
 
-    // ✅ 2️⃣ Fallback HTML Scraper
+    // ✅ 2️⃣ Fallback Scraper (Free HTML)
     if (!items.length) {
       try {
         const pinterestURL = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
@@ -75,17 +88,18 @@ module.exports = {
       }
     }
 
-    // ✅ 3️⃣ No results case
+    // ✅ 3️⃣ No results
     if (!items.length) {
-      return interaction.editReply({ content: `⚠️ No results found for **${query}**.` });
+      const msg = `⚠️ No results found for **${query}**.`;
+      return context.isPrefix ? message.reply(msg) : interaction.editReply(msg);
     }
 
-    // ✅ 4️⃣ Pagination + Embed display
+    // ✅ 4️⃣ Pagination
     let index = 0;
     const getEmbed = () =>
       new EmbedBuilder()
         .setColor("#E60023")
-        .setTitle(`♥ 𝙎𝙃𝘼𝘿𝙊𝙒 Images: ${query}`)
+        .setTitle(`♥𝚂𝙷𝙰𝙳𝙾𝚆 𝙸𝙼𝙰𝙶𝙴𝚂: ${query}`)
         .setImage(items[index])
         .setFooter({ text: `Result ${index + 1}/${items.length}` });
 
@@ -96,11 +110,19 @@ module.exports = {
         new ButtonBuilder().setLabel("Download").setStyle(ButtonStyle.Link).setURL(items[index])
       );
 
-    const msg = await interaction.editReply({ embeds: [getEmbed()], components: [getButtons()] });
+    // ✅ Send first embed
+    let msg;
+    if (context.isPrefix) {
+      msg = await message.reply({ embeds: [getEmbed()], components: [getButtons()] });
+    } else {
+      msg = await interaction.editReply({ embeds: [getEmbed()], components: [getButtons()] });
+    }
+
+    const userId = context.isPrefix ? message.author.id : interaction.user.id;
     const collector = msg.createMessageComponentCollector({ time: 60_000 });
 
     collector.on("collect", async btn => {
-      if (btn.user.id !== interaction.user.id)
+      if (btn.user.id !== userId)
         return btn.reply({ content: "⛔ This interaction isn’t for you!", ephemeral: true });
 
       if (btn.customId === "prev") index = (index - 1 + items.length) % items.length;
