@@ -1,9 +1,17 @@
 // ask-ai.js
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { GoogleGenAI } = require("@google/genai");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
 
-// Make sure GEMINI_API_KEY is in your .env or process.env
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// ✅ Correct Gemini SDK import
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// ✅ Instantiate with API key
+const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 module.exports = {
   name: "ask",
@@ -41,10 +49,9 @@ module.exports = {
     let aiText = "❌ Sorry, an error occurred or the Gemini API didn't reply.";
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash", 
-        contents: [{ role: "user", parts: [{ text: question }] }],
-      });
+      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" }); // ✅ correct model name
+const result = await model.generateContent(question);
+const aiText = result.response.text();
       
       // Simplified response parsing for the modern SDK
       aiText = response.text; 
