@@ -41,7 +41,6 @@
     "canvacord": "^6.0.2", 
     "pinterest-dl": "^1.0.0", 
     "@google/genai": "^0.5.0"
-}
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
