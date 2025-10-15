@@ -39,7 +39,9 @@
      "set-interval-async": "^2.0.2", 
     "gifencoder": "^2.0.1", 
     "canvacord": "^6.0.2", 
-    "pinterest-dl": "^1.0.0"
+    "pinterest-dl": "^1.0.0", 
+    "@google/genai": "^0.5.0"
+}
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
