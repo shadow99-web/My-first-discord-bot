@@ -1,11 +1,17 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require("discord.js");
 const axios = require("axios");
 const cheerio = require("cheerio");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("pin")
-    .setDescription("Fetch Pinterest images or clips by topic")
+    .setDescription("Fetch Pinterest images by topic")
     .addSubcommand(sub =>
       sub
         .setName("images")
@@ -13,18 +19,9 @@ module.exports = {
         .addStringOption(opt =>
           opt.setName("query").setDescription("Search topic").setRequired(true)
         )
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName("clips")
-        .setDescription("Fetch Pinterest clips by topic")
-        .addStringOption(opt =>
-          opt.setName("query").setDescription("Search topic").setRequired(true)
-        )
     ),
 
-  async execute({ interaction, safeReply }) {
-    const sub = interaction.options.getSubcommand();
+  async execute({ interaction }) {
     const query = interaction.options.getString("query");
     await interaction.deferReply();
 
@@ -33,9 +30,8 @@ module.exports = {
 
     try {
       // ✅ 1️⃣ Try ScrapeCreators API first
-      const type = sub === "clips" ? "video" : "image";
       const { data } = await axios.get(
-        `https://api.scrapecreators.com/v1/pinterest/search?query=${encodeURIComponent(query)}&type=${type}`,
+        `https://api.scrapecreators.com/v1/pinterest/search?query=${encodeURIComponent(query)}&type=image`,
         {
           headers: { "x-api-key": apiKey },
           timeout: 15000,
@@ -52,10 +48,10 @@ module.exports = {
       console.warn("⚠️ ScrapeCreators API failed:", apiErr.message);
     }
 
-    // ✅ 2️⃣ Fallback Scraper (Free HTML)
+    // ✅ 2️⃣ Fallback HTML Scraper
     if (!items.length) {
       try {
-        const pinterestURL = `https://www.pinterest.com/search/${sub === "clips" ? "videos" : "pins"}/?q=${encodeURIComponent(query)}`;
+        const pinterestURL = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
         const proxyURL = `https://r.jina.ai/${pinterestURL}`;
         const { data } = await axios.get(proxyURL, {
           headers: {
@@ -89,7 +85,7 @@ module.exports = {
     const getEmbed = () =>
       new EmbedBuilder()
         .setColor("#E60023")
-        .setTitle(`📌 𝙎𝙃𝘼𝘿𝙊𝙒 ${sub === "clips" ? "Clips" : "Images"}: ${query}`)
+        .setTitle(`♥ 𝙎𝙃𝘼𝘿𝙊𝙒 Images: ${query}`)
         .setImage(items[index])
         .setFooter({ text: `Result ${index + 1}/${items.length}` });
 
