@@ -6,20 +6,16 @@ const {
   ButtonStyle
 } = require("discord.js");
 
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 module.exports = {
   name: "ask",
-  description: "Ask AI anything using multiple APIs (with fallback)",
+  description: "Ask AI anything using Gemini with multi-API fallback",
   data: new SlashCommandBuilder()
     .setName("ask")
-    .setDescription("Ask AI anything (multi-API fallback)")
+    .setDescription("Ask AI anything (Gemini + fallback APIs)")
     .addStringOption((option) =>
-      option
-        .setName("question")
-        .setDescription("Your question for the AI")
-        .setRequired(true)
+      option.setName("question").setDescription("Your question for the AI").setRequired(true)
     ),
 
   async execute(context) {
@@ -37,7 +33,21 @@ module.exports = {
 
     if (isSlash) await context.interaction.deferReply();
 
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     const apis = [
+      {
+        name: "Gemini",
+        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: question }] }],
+        }),
+        extract: (json) =>
+          json?.candidates?.[0]?.content?.parts?.[0]?.text ||
+          json?.candidates?.[0]?.output_text ||
+          null,
+      },
       {
         name: "PawanAI",
         url: `https://api.pawan.krd/api/chat/send`,
@@ -98,7 +108,7 @@ module.exports = {
 
     async function tryAPI(api) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 10000);
       try {
         const res = await fetch(api.url, {
           method: api.method,
@@ -147,9 +157,9 @@ module.exports = {
       new EmbedBuilder()
         .setTitle("💬 AI Response")
         .setDescription(desc)
-        .setColor(0x5865f2)
+        .setColor(0x00a67e)
         .setFooter({
-          text: `🤖 ${context.client.user.username} | ${usedAPI || "Multi-API"}`,
+          text: `🤖 ${usedAPI || "Multi-API"} | Page ${page + 1}/${chunks.length}`,
           iconURL: botAvatar,
         });
 
@@ -171,7 +181,7 @@ module.exports = {
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("retry")
-          .setLabel("🔁 Try Again")
+          .setLabel("🔁 Retry")
           .setStyle(ButtonStyle.Success)
       );
 
@@ -209,11 +219,13 @@ module.exports = {
       }
 
       if (i.customId === "retry") {
-        i.deferReply({ ephemeral: true });
-        return i.followUp({
-          content: "🔄 Retrying... please wait.",
+        await i.deferReply({ ephemeral: true });
+        const newResult = await tryAPI(apis[0]); // Gemini retry
+        await i.followUp({
+          content: newResult || "❌ Retry failed.",
           ephemeral: true,
         });
+        return;
       }
 
       await i.update({ embeds: [makeEmbed()], components: [makeRow()] });
