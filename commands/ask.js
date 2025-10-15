@@ -57,7 +57,7 @@ module.exports = {
 
     const makeEmbed = () =>
       new EmbedBuilder()
-        .setTitle("💬 Gemini 2.0 Response")
+        .setTitle("♡𝚂𝙷𝙰𝙳𝙾𝚆 𝚁𝙴𝚂𝙿𝙾𝙽𝚂𝙴 ✔️")
         .setDescription(chunks[page])
         .setColor(0x00a67e)
         .setFooter({ text: `Page ${page + 1}/${chunks.length}` });
