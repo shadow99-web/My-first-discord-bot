@@ -2,6 +2,9 @@ const { EmbedBuilder } = require("discord.js");
 const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
+const ChatBotConfig = require("../models/chatbot");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
 const { RankCardBuilder, Font } = require("canvacord");
@@ -111,6 +114,32 @@ const rankImage = await rankCard.build();
       });
     }
 
+    // ---------- Chatbot System ----------
+try {
+  const config = await ChatBotConfig.findOne({ guildId: message.guild.id });
+  if (config && message.channel.id === config.channelId && !message.author.bot) {
+    // If message is in chatbot channel
+    await message.channel.sendTyping();
+
+    try {
+      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const result = await model.generateContent(message.content);
+      const replyText = result.response.text() || "🤖 ...";
+
+      const chunks = replyText.match(/[\s\S]{1,1900}/g) || [];
+      for (const chunk of chunks) {
+        await message.reply(chunk);
+      }
+    } catch (err) {
+      console.error("❌ Chatbot Error:", err);
+      await message.reply("⚠️ I couldn’t reply this time. Try again later.").catch(() => {});
+    }
+
+    return; // stop other systems (autoresponse/prefix)
+  }
+} catch (err) {
+  console.error("❌ Chatbot system failed:", err);
+}
     // ---------- Autoresponse ----------
     try {
       const response = await getResponse(guildId, message.content);
@@ -133,6 +162,7 @@ const rankImage = await rankCard.build();
     const command = client.commands.get(commandName);
     if (!command) return;
 
+    
     // ---------- Block Check ----------
     if (blockHelpers?.isBlocked && blockHelpers.isBlocked(guildId, message.author.id, commandName)) {
       return message.reply("🚫 You are blocked from using this command.");
