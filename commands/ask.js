@@ -30,30 +30,38 @@ module.exports = {
       else
         return context.message.reply(msg);
     }
-
-    if (isSlash) await context.interaction.deferReply();
+    
+    // Defer reply for slash commands or send typing for message commands
+    if (isSlash) {
+        await context.interaction.deferReply();
+    } else {
+        await context.message.channel.sendTyping();
+    }
 
     let aiText = "❌ Sorry, an error occurred or the Gemini API didn't reply.";
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash", // update if Google AI Studio shows a different name!
+        model: "gemini-2.5-flash", 
         contents: [{ role: "user", parts: [{ text: question }] }],
       });
-      // For new SDKs: Some versions return .text, some .candidates[0].content.parts[0].text
-      aiText =
-        response?.text ||
-        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        response?.candidates?.[0]?.output_text ||
-        "❌ No useful response from Gemini.";
+      
+      // Simplified response parsing for the modern SDK
+      aiText = response.text; 
+      
+      if (!aiText) {
+          aiText = "❌ No useful response from Gemini. The content may have been blocked.";
+      }
+      
     } catch (err) {
       aiText = `❌ Error: ${err.message?.slice(0, 200) || "Unexpected error."}`;
       // optionally log err for debugging
       console.error("Gemini AI error", err);
     }
 
-    // Paginate if > 1900 chars
-    const chunks = aiText.match(/[sS]{1,1900}/g) || ["(no response)"];
+    // CRITICAL FIX: Use the correct regex to split the text, including newlines
+    // This is the correct pattern to match ANY character (whitespace \s or non-whitespace \S)
+    const chunks = aiText.match(/[\s\S]{1,1900}/g) || ["(no response)"];
     let page = 0;
 
     const makeEmbed = (desc = chunks[page]) =>
@@ -109,6 +117,7 @@ module.exports = {
     });
 
     collector.on("end", () => {
+      // Remove buttons when the collector ends (e.g., after 2 minutes)
       sent.edit({ components: [] }).catch(() => {});
     });
   },
