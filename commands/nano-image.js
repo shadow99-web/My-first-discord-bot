@@ -34,7 +34,7 @@ module.exports = {
   async execute({ client, interaction, message, args, isPrefix }) {
     let style, imageUrl, fileName;
 
-    // 🧠 Define style prompt library
+    // Prompt library
     const prompts = {
       1: `Create a 1/7 scale commercialized figure of the character in the illustration, in a realistic style and environment.
       Place the figure on a computer desk, using a circular transparent acrylic base without any text.
@@ -54,9 +54,8 @@ module.exports = {
       The background is a deep, saturated crimson red, creating a bold visual clash with the model’s luminous skin and dark wardrobe.`,
     };
 
-    // 🔹 Handle prefix or slash input
+    // Handle slash or prefix
     if (isPrefix) {
-      // Prefix: !nano-image <style> <imageURL>
       if (args.length < 2)
         return message.reply("⚠️ Usage: `!nano-image <style-number> <image-url>`");
       style = parseInt(args[0]);
@@ -65,7 +64,6 @@ module.exports = {
       fileName = "nano-result.png";
       await message.channel.sendTyping();
     } else {
-      // Slash command input
       await interaction.deferReply();
       const attachment = interaction.options.getAttachment("image");
       imageUrl = attachment.url;
@@ -74,23 +72,18 @@ module.exports = {
     }
 
     try {
-      // 🧠 Prepare base64 image data
+      // Fetch image and convert to base64
       const imgBuffer = await fetch(imageUrl).then(r => r.arrayBuffer());
       const base64 = Buffer.from(imgBuffer).toString("base64");
 
-      // ✨ Generate with Gemini 2.0 Flash
+      // ✅ NEW Gemini format: pass array of input parts
       const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
       const result = await model.generateContent([
-        {
-          role: "user",
-          parts: [
-            { text: prompts[style] },
-            { inlineData: { mimeType: "image/png", data: base64 } }
-          ]
-        }
+        { text: prompts[style] },
+        { inlineData: { mimeType: "image/png", data: base64 } },
       ]);
 
-      // 🖼️ Extract output
+      // Get generated image
       const imagePart = result.response?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
       if (!imagePart) {
         const msg = "❌ No image could be generated. Try again later.";
@@ -102,7 +95,7 @@ module.exports = {
       const file = new AttachmentBuilder(imageBuffer, { name: fileName });
 
       const embed = new EmbedBuilder()
-        .setTitle("⚡ Nano Banana Style Image")
+        .setTitle("🍁 Nano Banana Style Image")
         .setDescription(`**Style ${style} Applied!**`)
         .setColor("Gold")
         .setImage(`attachment://${fileName}`);
