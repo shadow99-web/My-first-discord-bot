@@ -5,6 +5,7 @@ const {
 } = require("discord.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args)); // ✅ fix for CJS
 
 module.exports = {
   name: "nano-image",
@@ -34,7 +35,6 @@ module.exports = {
   async execute({ client, interaction, message, args, isPrefix }) {
     let style, imageUrl, fileName;
 
-    // 🧩 Prompt Library
     const prompts = {
       1: `Create a 1/7 scale commercialized figure of the character in the illustration, in a realistic style and environment.
       Place the figure on a computer desk, using a circular transparent acrylic base without any text.
@@ -54,7 +54,6 @@ module.exports = {
       The background is a deep, saturated crimson red, creating a bold visual clash with the model’s luminous skin and dark wardrobe.`,
     };
 
-    // 🧠 Handle prefix or slash
     if (isPrefix) {
       if (args.length < 2)
         return message.reply("⚠️ Usage: `!nano-image <style-number> <image-url>`");
@@ -72,11 +71,10 @@ module.exports = {
     }
 
     try {
-      // 🧩 Fetch image
-      const imgBuffer = await fetch(imageUrl).then((r) => r.arrayBuffer());
+      const res = await fetch(imageUrl);
+      const imgBuffer = await res.arrayBuffer();
       const base64 = Buffer.from(imgBuffer).toString("base64");
 
-      // 🧠 Use gemini-2.5-flash-image for image generation
       const model = ai.getGenerativeModel({
         model: "gemini-2.5-flash-image",
         generationConfig: {
@@ -89,7 +87,6 @@ module.exports = {
         { inlineData: { mimeType: "image/png", data: base64 } },
       ]);
 
-      // 🖼️ Extract image data
       const imageBase64 =
         result.response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
@@ -103,7 +100,7 @@ module.exports = {
       const file = new AttachmentBuilder(imageBuffer, { name: fileName });
 
       const embed = new EmbedBuilder()
-        .setTitle("🍌 Nano Banana Style Image")
+        .setTitle("🐼 Nano Banana Style Image")
         .setDescription(`**Style ${style} Applied Successfully!**`)
         .setColor("Gold")
         .setImage(`attachment://${fileName}`);
@@ -118,19 +115,6 @@ module.exports = {
       const msg = "⚠️ Failed to generate image. Please try again later.";
       if (isPrefix) message.reply(msg).catch(() => {});
       else interaction.editReply(msg).catch(() => {});
-    }
-  },
-};
-        await interaction.editReply({ content: "", embeds: [embed], files: [file] });
-      }
-    } catch (err) {
-      console.error("❌ Nano Image Error:", err);
-      const msg = "⚠️ Failed to generate image. Please try again later.";
-      if (isPrefix) message.reply(msg).catch(() => {});
-      else if (interaction && !interaction.replied)
-        await interaction.reply(msg).catch(() => {});
-      else
-        await interaction.editReply(msg).catch(() => {});
     }
   },
 };
