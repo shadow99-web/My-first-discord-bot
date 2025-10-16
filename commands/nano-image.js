@@ -5,7 +5,6 @@ const {
 } = require("discord.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args)); // ✅ fix for CJS
 
 module.exports = {
   name: "nano-image",
@@ -13,13 +12,13 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("nano-image")
     .setDescription("Generate an image based on Nano Banana style presets.")
-    .addAttachmentOption((option) =>
+    .addAttachmentOption(option =>
       option
         .setName("image")
         .setDescription("Upload the reference image")
         .setRequired(true)
     )
-    .addIntegerOption((option) =>
+    .addIntegerOption(option =>
       option
         .setName("style")
         .setDescription("Choose the image style prompt")
@@ -28,7 +27,7 @@ module.exports = {
           { name: "Option 1 — Figure on Desk (ZBrush / BANDAI)", value: 1 },
           { name: "Option 2 — Rhythm Dance Game Scene", value: 2 },
           { name: "Option 3 — 9 Nature Portraits", value: 3 },
-          { name: "Option 4 — Cinematic Red Portrait", value: 4 }
+          { name: "Option 4 — Cinematic Red Portrait", value: 4 },
         )
     ),
 
@@ -36,22 +35,22 @@ module.exports = {
     let style, imageUrl, fileName;
 
     const prompts = {
-      1: `Create a 1/7 scale commercialized figure of the character in the illustration, in a realistic style and environment.
-      Place the figure on a computer desk, using a circular transparent acrylic base without any text.
-      On the computer screen, display the ZBrush modeling process of the figure.
-      Next to the computer screen, place a BANDAI-style toy packaging box printed with the original artwork.`,
-
-      2: `A vibrant rhythm dance game screenshot featuring the 3D animated character from the reference photo, keeping its unique style, hat, outfit, and confident dance pose.
-      Immersive cinematic lighting with neon pink and purple glow, glossy reflective dance floor shining under spotlights, and dynamic 3D cartoon style.
-      Rhythm game interface with immersive UI: score meter at the top, colorful music waveform animations synced to the beat, stage timer countdown, and floating combo numbers.
-      Highly detailed, game-like atmosphere with energy bars, neon particle effects, and immersive arcade rhythm game HUD elements. Ultra-detailed, cinematic, immersive, 3D animation.`,
-
-      3: `Using the uploaded photo as a reference, generate a set of 9 vibrant half-length portraits featuring natural life.
-      Each portrait should show a different pose and be placed in a unique setting, with rich, colorful details that highlight the diversity of nature.`,
-
-      4: `Create a vertical portrait shot using the exact same face features, characterized by stark cinematic lighting and intense contrast.
-      Captured in a slightly low, upward-facing angle that dramatizes the subject’s jawline and neck.
-      The background is a deep, saturated crimson red, creating a bold visual clash with the model’s luminous skin and dark wardrobe.`,
+      1: `Create a 1/7 scale commercialized figure of the character in the illustration,
+      in a realistic style and environment. Place the figure on a computer desk, using
+      a circular transparent acrylic base without text. On the computer screen, show
+      the ZBrush modeling process of the figure. Next to it, place a BANDAI toy box
+      printed with the original artwork.`,
+      
+      2: `Make a vibrant rhythm dance game scene with the 3D animated character from
+      the image, same outfit and pose. Add neon lights, rhythm game UI (score, combo,
+      timer), glossy floor reflections, and cinematic energy.`,
+      
+      3: `Generate 9 half-length portraits based on the reference image. Each shows a
+      different natural theme — forests, oceans, deserts, mountains — vivid, colorful,
+      detailed backgrounds.`,
+      
+      4: `Create a dramatic red cinematic portrait with deep shadows, strong light
+      contrast, upward camera angle, and rich crimson background.`
     };
 
     if (isPrefix) {
@@ -71,37 +70,31 @@ module.exports = {
     }
 
     try {
-      const res = await fetch(imageUrl);
-      const imgBuffer = await res.arrayBuffer();
+      // Fetch and convert image to base64
+      const imgBuffer = await fetch(imageUrl).then(r => r.arrayBuffer());
       const base64 = Buffer.from(imgBuffer).toString("base64");
 
-      const model = ai.getGenerativeModel({
-        model: "gemini-2.5-flash-image",
-        generationConfig: {
-          responseMimeType: "image/png",
-        },
-      });
-
+      // ✅ Gemini 1.5 Flash supports text + image input
+      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
       const result = await model.generateContent([
         { text: prompts[style] },
         { inlineData: { mimeType: "image/png", data: base64 } },
       ]);
 
-      const imageBase64 =
-        result.response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-
-      if (!imageBase64) {
+      const imagePart =
+        result.response?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (!imagePart) {
         const msg = "❌ No image could be generated. Try again later.";
         if (isPrefix) return message.reply(msg);
         else return interaction.editReply(msg);
       }
 
-      const imageBuffer = Buffer.from(imageBase64, "base64");
+      const imageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
       const file = new AttachmentBuilder(imageBuffer, { name: fileName });
 
       const embed = new EmbedBuilder()
-        .setTitle("🐼 Nano Banana Style Image")
-        .setDescription(`**Style ${style} Applied Successfully!**`)
+        .setTitle("🍁 Nano Banana Style Image")
+        .setDescription(`**Style ${style} Applied!**`)
         .setColor("Gold")
         .setImage(`attachment://${fileName}`);
 
@@ -110,6 +103,7 @@ module.exports = {
       } else {
         await interaction.editReply({ embeds: [embed], files: [file] });
       }
+
     } catch (err) {
       console.error("❌ Nano Image Error:", err);
       const msg = "⚠️ Failed to generate image. Please try again later.";
