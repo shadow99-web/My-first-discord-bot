@@ -34,7 +34,7 @@ module.exports = {
   async execute({ client, interaction, message, args, isPrefix }) {
     let style, imageUrl, fileName;
 
-    // ✅ Prompt library
+    // ✅ Prompt presets
     const prompts = {
       1: `Create a 1/7 scale commercialized figure of the character in the illustration, in a realistic style and environment.
       Place the figure on a computer desk, using a circular transparent acrylic base without any text.
@@ -54,29 +54,32 @@ module.exports = {
       The background is a deep, saturated crimson red, creating a bold visual clash with the model’s luminous skin and dark wardrobe.`,
     };
 
-    // ✅ Defer instantly for slash commands (before any async task)
-    if (!isPrefix) {
-      await interaction.deferReply({ ephemeral: false }).catch(() => {});
-    }
-
-    // ✅ Handle slash or prefix logic
-    if (isPrefix) {
-      if (args.length < 2)
-        return message.reply("⚠️ Usage: `!nano-image <style-number> <image-url>`");
-      style = parseInt(args[0]);
-      if (!prompts[style]) return message.reply("❌ Invalid style number (1–4).");
-      imageUrl = args[1];
-      fileName = "nano-result.png";
-      await message.channel.sendTyping();
-    } else {
-      const attachment = interaction.options.getAttachment("image");
-      imageUrl = attachment.url;
-      style = interaction.options.getInteger("style");
-      fileName = "nano-result.png";
-    }
-
     try {
-      // ✅ Fetch + AI Generation
+      // ✅ Ensure deferReply for slash commands
+      if (!isPrefix && interaction && !interaction.replied && !interaction.deferred) {
+        await interaction.deferReply({ ephemeral: false }).catch(() => {});
+      }
+
+      // ✅ Handle both Prefix & Slash modes
+      if (isPrefix) {
+        if (args.length < 2)
+          return message.reply("⚠️ Usage: `!nano-image <style-number> <image-url>`");
+        style = parseInt(args[0]);
+        if (!prompts[style]) return message.reply("❌ Invalid style number (1–4).");
+        imageUrl = args[1];
+        fileName = "nano-result.png";
+        await message.channel.sendTyping();
+      } else {
+        const attachment = interaction.options.getAttachment("image");
+        imageUrl = attachment.url;
+        style = interaction.options.getInteger("style");
+        fileName = "nano-result.png";
+
+        // Optional nice feedback message
+        await interaction.editReply("⏳ Generating your **Nano Banana** image... Please wait.").catch(() => {});
+      }
+
+      // ✅ Fetch & AI process
       const imgBuffer = await fetch(imageUrl).then(r => r.arrayBuffer());
       const base64 = Buffer.from(imgBuffer).toString("base64");
 
@@ -95,24 +98,27 @@ module.exports = {
 
       const imageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
       const file = new AttachmentBuilder(imageBuffer, { name: fileName });
+
       const embed = new EmbedBuilder()
         .setTitle("🍁 Nano Banana Style Image")
         .setDescription(`**Style ${style} Applied!**`)
         .setColor("Gold")
         .setImage(`attachment://${fileName}`);
 
-      // ✅ Send final result
+      // ✅ Send result
       if (isPrefix) {
         await message.reply({ embeds: [embed], files: [file] });
       } else {
-        await interaction.editReply({ embeds: [embed], files: [file] });
+        await interaction.editReply({ content: "", embeds: [embed], files: [file] });
       }
-
     } catch (err) {
       console.error("❌ Nano Image Error:", err);
       const msg = "⚠️ Failed to generate image. Please try again later.";
       if (isPrefix) message.reply(msg).catch(() => {});
-      else interaction.editReply(msg).catch(() => {});
+      else if (interaction && !interaction.replied)
+        await interaction.reply(msg).catch(() => {});
+      else
+        await interaction.editReply(msg).catch(() => {});
     }
   },
 };
