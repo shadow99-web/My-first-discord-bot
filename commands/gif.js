@@ -6,6 +6,7 @@ const {
   ButtonStyle,
 } = require("discord.js");
 const axios = require("axios");
+const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
 
@@ -35,104 +36,119 @@ module.exports = {
     try {
       const tenorKey = process.env.TENOR_API_KEY;
       const tenorClientKey = process.env.TENOR_CLIENT_KEY;
-
-      if (!tenorKey || !tenorClientKey) {
-        const msg = "❌ Missing Tenor API key(s).";
-        return isPrefix ? message.reply(msg) : interaction.editReply(msg);
-      }
+      if (!tenorKey || !tenorClientKey)
+        return (isPrefix
+          ? message.reply("❌ Missing TENOR API keys.")
+          : interaction.editReply("❌ Missing TENOR API keys."));
 
       const limit = 10;
-      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${tenorKey}&client_key=${tenorClientKey}&limit=${limit}&media_filter=gif`;
+      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
+        query
+      )}&key=${tenorKey}&client_key=${tenorClientKey}&limit=${limit}&media_filter=gif`;
 
       const resp = await axios.get(url);
       const results = resp.data.results;
-
-      if (!results || results.length === 0) {
-        const msg = `⚠️ No GIFs found for **${query}**`;
-        return isPrefix ? message.reply(msg) : interaction.editReply(msg);
-      }
+      if (!results || results.length === 0)
+        return (isPrefix
+          ? message.reply(`⚠️ No GIFs found for **${query}**`)
+          : interaction.editReply(`⚠️ No GIFs found for **${query}**`));
 
       let index = 0;
 
-      const getEmbed = () => {
-        const media = results[index].media_formats?.gif?.url;
-        return new EmbedBuilder()
-          .setTitle(`🐼 Gif Result: ${query}`)
-          .setImage(media)
-          .setFooter({ text: `Result ${index + 1}/${results.length} | Powered by Tenor` })
+      const getEmbed = () =>
+        new EmbedBuilder()
+          .setTitle(`🐼 GIF result: ${query}`)
+          .setImage(results[index].media_formats.gif.url)
+          .setFooter({ text: `Result ${index + 1}/${results.length}` })
           .setColor("Aqua");
-      };
 
       const getButtons = () =>
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("next").setLabel("▶️").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("saveEmoji").setLabel("🧩 Save as Emoji").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("saveSticker").setLabel("💖 Save as Sticker").setStyle(ButtonStyle.Primary)
+          new ButtonBuilder()
+            .setCustomId("prev")
+            .setLabel("◀️")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("next")
+            .setLabel("▶️")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("save_emoji")
+            .setLabel("💾 Save as Emoji")
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId("save_sticker")
+            .setLabel("❤️ Save as Sticker")
+            .setStyle(ButtonStyle.Primary)
         );
 
-      const replyOptions = {
-        embeds: [getEmbed()],
-        components: [getButtons()],
-        fetchReply: true,
-      };
-
       const sent = isPrefix
-        ? await message.reply(replyOptions)
-        : await interaction.editReply(replyOptions);
+        ? await message.reply({ embeds: [getEmbed()], components: [getButtons()] })
+        : await interaction.editReply({ embeds: [getEmbed()], components: [getButtons()] });
 
-      const collector = sent.createMessageComponentCollector({ time: 90_000 });
+      const collector = sent.createMessageComponentCollector({ time: 60_000 });
 
       collector.on("collect", async (btn) => {
-        const authorId = isPrefix ? message.author.id : interaction.user.id;
-        if (btn.user.id !== authorId)
-          return btn.reply({ content: "⛔ That button isn't for you!", ephemeral: true });
+        const userId = isPrefix ? message.author.id : interaction.user.id;
+        if (btn.user.id !== userId)
+          return btn.reply({ content: "⛔ That button isn’t for you!", ephemeral: true });
 
-        const media = results[index].media_formats?.gif?.url;
+        const currentGif = results[index].media_formats.gif.url;
 
-        // Navigation buttons
-        if (btn.customId === "next") {
-          index = (index + 1) % results.length;
-          return btn.update({ embeds: [getEmbed()], components: [getButtons()] });
-        } else if (btn.customId === "prev") {
-          index = (index - 1 + results.length) % results.length;
-          return btn.update({ embeds: [getEmbed()], components: [getButtons()] });
-        }
+        // 🔁 Navigation
+        if (btn.customId === "next") index = (index + 1) % results.length;
+        else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
 
-        // Save as emoji
-        else if (btn.customId === "saveEmoji") {
+        // 💾 Convert GIF to PNG for emoji/sticker
+        else if (["save_emoji", "save_sticker"].includes(btn.customId)) {
           try {
-            const name = `gif_${Date.now()}`;
-            const res = await axios.get(media, { responseType: "arraybuffer" });
-            const emoji = await btn.guild.emojis.create({
-              attachment: Buffer.from(res.data),
-              name,
+            const tempGif = path.join(__dirname, `temp_${Date.now()}.gif`);
+            const tempPng = path.join(__dirname, `temp_${Date.now()}.png`);
+
+            // Download GIF
+            const response = await axios.get(currentGif, { responseType: "arraybuffer" });
+            fs.writeFileSync(tempGif, Buffer.from(response.data, "binary"));
+
+            // Convert to PNG (first frame only)
+            await sharp(tempGif, { pages: 1 }).png().toFile(tempPng);
+
+            const buffer = fs.readFileSync(tempPng);
+            const name = `tenor_${index + 1}`;
+
+            if (btn.customId === "save_emoji") {
+              const emoji = await btn.guild.emojis.create({ attachment: buffer, name });
+              await btn.reply({
+                content: `✅ Saved as emoji: <:${emoji.name}:${emoji.id}>`,
+                ephemeral: true,
+              });
+            } else {
+              await btn.guild.stickers.create({
+                file: buffer,
+                name,
+                tags: "fun",
+                description: `Sticker from Tenor by ${btn.user.username}`,
+              });
+              await btn.reply({
+                content: `✅ Saved as sticker **${name}**`,
+                ephemeral: true,
+              });
+            }
+
+            // Cleanup
+            fs.unlinkSync(tempGif);
+            fs.unlinkSync(tempPng);
+          } catch (e) {
+            console.error(e);
+            return btn.reply({
+              content: "❌ Failed to save — check bot permissions or file limits.",
+              ephemeral: true,
             });
-            await btn.reply({ content: `✅ Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`, ephemeral: true });
-          } catch (err) {
-            console.error(err);
-            btn.reply({ content: "❌ Failed to save as emoji (might be full or missing perms).", ephemeral: true });
           }
         }
 
-        // Save as sticker
-        else if (btn.customId === "saveSticker") {
-          try {
-            const res = await axios.get(media, { responseType: "arraybuffer" });
-            const filePath = path.join(__dirname, "temp.gif");
-            fs.writeFileSync(filePath, res.data);
-            await btn.guild.stickers.create({
-              file: filePath,
-              name: `sticker_${Date.now()}`,
-              tags: "fun",
-              description: "Created from GIF command",
-            });
-            fs.unlinkSync(filePath);
-            await btn.reply({ content: "💖 Sticker added successfully!", ephemeral: true });
-          } catch (err) {
-            console.error(err);
-            btn.reply({ content: "❌ Failed to save as sticker (missing Manage Stickers or invalid file).", ephemeral: true });
-          }
+        // 🔄 Update embed
+        if (["next", "prev"].includes(btn.customId)) {
+          await btn.update({ embeds: [getEmbed()], components: [getButtons()] });
         }
       });
 
