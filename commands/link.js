@@ -91,8 +91,8 @@ Redirect: **https://yourdomain.com/invite/${name}**`
         return interaction.reply("✨ No links found for this server.");
 
       const desc = links
-        .map(l => `🔹 **${l.name}** → [Invite](${l.invite})`)
-        .join("
+  .map(l => `🔹 **${l.name}** → [Invite](${l.invite})`)
+  .join("
 ");
 
       return interaction.reply({
