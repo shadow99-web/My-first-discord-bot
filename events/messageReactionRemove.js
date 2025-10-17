@@ -3,21 +3,21 @@ const ReactLock = require("../models/reactLock.js");
 module.exports = {
   name: "messageReactionRemove",
   async execute(reaction, user) {
-    if (user.bot) return;
-
     try {
-      const msg = reaction.message;
-      const lock = await ReactLock.findOne({ messageId: msg.id });
-      if (!lock) return;
+      if (user.bot) return;
 
-      // Optional: add bypass role check
-      const member = await msg.guild.members.fetch(user.id);
-      if (member.roles.cache.some(r => ["Admin", "Moderator"].includes(r.name))) return;
+      const { message } = reaction;
+      const data = await ReactLock.findOne({ messageId: message.id });
+      if (!data) return; // Not locked
 
-      // Re-add removed reaction
-      await msg.react(reaction.emoji);
+      const lockedUser = data.lockedReactions.find(
+        r => r.userId === user.id && r.emoji === reaction.emoji.name
+      );
+      if (lockedUser) {
+        await message.react(reaction.emoji.name);
+      }
     } catch (err) {
       console.error("Reaction re-add failed:", err);
     }
-  }
+  },
 };
