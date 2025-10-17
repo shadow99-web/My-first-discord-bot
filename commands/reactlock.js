@@ -1,53 +1,84 @@
-const { SlashCommandBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+} = require("discord.js");
 const ReactLock = require("../models/reactLock.js");
 
 module.exports = {
   name: "reactlock",
+  description: "Lock reactions on a message (prevent removal)",
   data: new SlashCommandBuilder()
     .setName("reactlock")
-    .setDescription("Lock reactions on a message so they can't be removed.")
+    .setDescription("Lock reactions on a message")
     .addStringOption(option =>
-      option.setName("message_id").setDescription("Message ID to lock").setRequired(true)
+      option
+        .setName("message_id")
+        .setDescription("ID of the message to lock")
+        .setRequired(true)
     ),
 
-  async execute(interaction, prefixArgs) {
-    const isSlash = !!interaction.isChatInputCommand;
-    const messageId = isSlash
-      ? interaction.options.getString("message_id")
-      : prefixArgs[0];
-    const channel = interaction.channel;
+  async execute({ client, interaction, message, args = [], isPrefix }) {
+    const guild = interaction?.guild || message.guild;
+    const channel = interaction?.channel || message.channel;
+    let messageId;
 
-    if (!messageId)
-      return interaction.reply({
-        content: "❌ Please provide a message ID!",
-        ephemeral: isSlash
-      });
+    // ✅ Safe handling for missing args
+    if (isPrefix) {
+      if (!args || args.length === 0) {
+        return message.reply("⚠️ Usage: `!reactlock <messageId>`");
+      }
+      messageId = args[0];
+    } else {
+      messageId = interaction.options.getString("message_id");
+      await interaction.deferReply();
+    }
 
     try {
-      const msg = await channel.messages.fetch(messageId);
-      if (!msg) return interaction.reply({ content: "❌ Message not found!", ephemeral: isSlash });
+      const targetMsg = await channel.messages.fetch(messageId).catch(() => null);
+      if (!targetMsg) {
+        const reply = "❌ Could not find that message in this channel.";
+        return isPrefix ? message.reply(reply) : interaction.editReply(reply);
+      }
 
-      const existing = await ReactLock.findOne({ messageId: msg.id });
-      if (existing)
-        return interaction.reply({
-          content: "🔒 This message is already locked!",
-          ephemeral: isSlash
+      // Fetch all reactions
+      const allReacts = [];
+      for (const [emoji, reaction] of targetMsg.reactions.cache) {
+        const users = await reaction.users.fetch();
+        users.forEach(user => {
+          if (!user.bot) {
+            allReacts.push({
+              emoji: emoji,
+              userId: user.id,
+            });
+          }
         });
+      }
 
-      await ReactLock.create({
-        messageId: msg.id,
-        channelId: msg.channel.id,
-        guildId: msg.guild.id,
-        lockedBy: interaction.user.id
-      });
+      await ReactLock.findOneAndUpdate(
+        { messageId },
+        {
+          guildId: guild.id,
+          channelId: channel.id,
+          lockedReactions: allReacts,
+        },
+        { upsert: true }
+      );
 
-      await interaction.reply({
-        content: `🔒 Locked reactions on [this message](${msg.url}).`,
-        ephemeral: isSlash
-      });
+      const embed = new EmbedBuilder()
+        .setTitle("🔒 Reaction Lock Enabled")
+        .setDescription(
+          `All current reactions on [this message](${targetMsg.url}) are now locked.\nNo one can remove them!`
+        )
+        .setColor("Aqua")
+        .setTimestamp();
+
+      if (isPrefix) message.reply({ embeds: [embed] });
+      else interaction.editReply({ embeds: [embed] });
     } catch (err) {
-      console.error(err);
-      interaction.reply({ content: "❌ Failed to lock reactions.", ephemeral: isSlash });
+      console.error("ReactLock error:", err);
+      const reply = "❌ Failed to lock reactions.";
+      if (isPrefix) message.reply(reply);
+      else interaction.editReply(reply);
     }
-  }
+  },
 };
