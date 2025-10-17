@@ -79,18 +79,25 @@ Redirect: **https://yourdomain.com/invite/${name}**`
           flags: MessageFlags.Ephemeral
         });
 
-      return interaction.reply(`🗑️ Deleted link **${name}**`);
+      return interaction.reply(`🤞🏻 Deleted link **${name}**`);
     }
 
     if (sub === "list") {
-      const links = await Link.find({ guildId });
-      if (!links.length)
-        return interaction.reply("✨ No links found for this server.");
+  const links = await Link.find({ guildId });
+  if (!links.length)
+    return interaction.reply({ content: "✨ No links found for this server.", ephemeral: true });
 
-      const desc = links
-        .map(l => `🔹 **${l.name}** → [Invite](${l.invite})`)
-        .join("
-");
+  const desc = links.map(l => `🔹 **${l.name}** → [Invite](${l.invite})`).join("\n");
+
+  return interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🔗 Custom Links")
+        .setDescription(desc)
+        .setColor("Aqua")
+    ]
+  });
+    }
 
       return interaction.reply({
         embeds: [
