@@ -22,9 +22,7 @@ module.exports = {
     .addSubcommand(cmd =>
       cmd.setName("list").setDescription("List all custom links")),
 
-  /** Command execution */
   async execute(interaction, args = [], prefixMode = false) {
-    // guard against undefined interactions
     if (!interaction?.guild || !interaction?.user) {
       console.error("Interaction missing guild or user data", interaction);
       return;
@@ -33,7 +31,6 @@ module.exports = {
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
 
-    // determine command source
     let sub, name, invite;
     if (prefixMode) {
       sub = args[0];
@@ -82,7 +79,7 @@ Redirect: **https://yourdomain.com/invite/${name}**`
           flags: MessageFlags.Ephemeral
         });
 
-      return interaction.reply(`😑 Deleted link **${name}**`);
+      return interaction.reply(`🗑️ Deleted link **${name}**`);
     }
 
     if (sub === "list") {
@@ -91,8 +88,8 @@ Redirect: **https://yourdomain.com/invite/${name}**`
         return interaction.reply("✨ No links found for this server.");
 
       const desc = links
-  .map(l => `🔹 **${l.name}** → [Invite](${l.invite})`)
-  .join("
+        .map(l => `🔹 **${l.name}** → [Invite](${l.invite})`)
+        .join("
 ");
 
       return interaction.reply({
