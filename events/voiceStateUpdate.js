@@ -1,4 +1,4 @@
-const VCStats = require("../schemas/vcStats.js");
+const VCStats = require("../models/vcStatsSchema.js");
 
 module.exports = async (client, oldState, newState) => {
   const user = newState.member?.user || oldState.member?.user;
