@@ -1,125 +1,98 @@
 const { EmbedBuilder } = require("discord.js");
-const Link = require("../models/Link");
+const { sendTicketPanel, handleTicketMenu, handleTicketClose } = require("../Handlers/ticketHandler");
 
-module.exports = {
-  data: {
-    name: "link",
-    description: "Manage custom invite links",
-    type: 1, // Slash command
-    options: [
-      {
-        type: 1,
-        name: "create",
-        description: "Create a custom invite link",
-        options: [
-          {
-            type: 3,
-            name: "name",
-            description: "Custom name",
-            required: true,
-          },
-          {
-            type: 3,
-            name: "invite",
-            description: "Real Discord invite",
-            required: true,
-          },
-        ],
-      },
-      {
-        type: 1,
-        name: "delete",
-        description: "Delete a custom link",
-        options: [
-          {
-            type: 3,
-            name: "name",
-            description: "Name to delete",
-            required: true,
-          },
-        ],
-      },
-      {
-        type: 1,
-        name: "list",
-        description: "List all custom links",
-      },
-    ],
-  },
+module.exports = (client, blockHelpers) => {
+  client.on("interactionCreate", async (interaction) => {
 
-  async execute({ client, interaction, safeReply }) {
+    const safeReply = async (options) => {
+      try {
+        if (interaction.replied) return await interaction.followUp(options).catch(() => {});
+        if (interaction.deferred) return await interaction.editReply(options).catch(() => {});
+        return await interaction.reply(options).catch(() => {});
+      } catch (e) {
+        console.error("❌ safeReply error:", e);
+      }
+    };
+
     try {
-      await interaction.deferReply({ ephemeral: true });
 
-      const guildId = interaction.guild.id;
-      const userId = interaction.user.id;
+      // ---------- Slash Commands ----------
+      if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return safeReply({ content: "❌ Command not found.", ephemeral: true });
 
-      const sub = interaction.options.getSubcommand();
-      const name = interaction.options.getString("name");
-      const invite = interaction.options.getString("invite");
+        const guildId = interaction.guildId;
+        const userId = interaction.user.id;
 
-      // --- CREATE ---
-      if (sub === "create") {
-        if (!name || !invite)
-          return safeReply({ content: "❌ Provide both name and invite link.", ephemeral: true });
+        // Block check
+        if (blockHelpers?.isBlocked?.(userId, guildId, interaction.commandName)) {
+          return safeReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor("Red")
+                .setTitle("🚫 Command Blocked")
+                .setDescription(`You are blocked from using \`${interaction.commandName}\``),
+            ],
+            ephemeral: true,
+          });
+        }
 
-        const inviteRegex = /^(https?:\/\/)?(www\.)?(discord\.gg|discord\.com\/invite)\/[A-Za-z0-9]+$/;
-        if (!inviteRegex.test(invite))
-          return safeReply({ content: "❌ Invalid Discord invite link.", ephemeral: true });
-
-        const existing = await Link.findOne({ guildId, name });
-        if (existing)
-          return safeReply({ content: `❌ The name **${name}** is already taken.`, ephemeral: true });
-
-        const redirectBase = "https://yourdomain.com/invite";
-        const redirectLink = `${redirectBase}/${encodeURIComponent(name)}`;
-
-        await Link.create({ guildId, name, invite, redirect: redirectLink, createdBy: userId });
-
-        return safeReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("✅ Custom Link Created")
-              .setColor("Green")
-              .setDescription(
-                `**Name:** ${name}\n**Invite:** [Join Server](${invite})\n**Redirect:** [${redirectLink}](${redirectLink})`
-              ),
-          ],
-        });
+        try {
+          // Command should use safeReply only
+          await command.execute({
+            client,
+            interaction,
+            safeReply,
+            args: [],
+            isPrefix: false,
+          });
+        } catch (err) {
+          console.error(`❌ Error in command ${interaction.commandName}:`, err);
+          await safeReply({ content: "⚠️ Something went wrong while executing the command!", ephemeral: true });
+        }
+        return;
       }
 
-      // --- DELETE ---
-      if (sub === "delete") {
-        const deleted = await Link.findOneAndDelete({ guildId, name });
-        if (!deleted)
-          return safeReply({ content: "❌ Link not found.", ephemeral: true });
-
-        return safeReply({ content: `🗑️ Deleted link **${name}**`, ephemeral: true });
+      // ---------- Context Menus ----------
+      if (interaction.isUserContextMenuCommand() || interaction.isMessageContextMenuCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+        try {
+          await command.execute({ client, interaction, safeReply, args: [], isPrefix: false });
+        } catch (err) {
+          console.error(`❌ Context menu error ${interaction.commandName}:`, err);
+          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+        }
+        return;
       }
 
-      // --- LIST ---
-      if (sub === "list") {
-        const links = await Link.find({ guildId });
-        if (!links.length)
-          return safeReply({ content: "✨ No links found for this server.", ephemeral: true });
-
-        const desc = links
-          .map(l => `🔹 **${l.name}** → [Invite](${l.invite}) | [Redirect](${l.redirect || "N/A"})`)
-          .join("\n");
-
-        return safeReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("🔗 Custom Links")
-              .setDescription(desc)
-              .setColor("Aqua"),
-          ],
-          ephemeral: true,
-        });
+      // ---------- Buttons ----------
+      if (interaction.isButton()) {
+        try {
+          if (interaction.customId === "ticket_close_button") await handleTicketClose(interaction, safeReply);
+        } catch (err) {
+          console.error("❌ Button interaction error:", err);
+          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+        }
+        return;
       }
+
+      // ---------- Select Menus ----------
+      if (interaction.isStringSelectMenu()) {
+        try {
+          if (interaction.customId === "ticket_menu") await handleTicketMenu(interaction, safeReply);
+        } catch (err) {
+          console.error("❌ Select menu interaction error:", err);
+          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+        }
+        return;
+      }
+
+      console.warn("⚠️ Unknown interaction type:", interaction.type);
+
     } catch (err) {
-      console.error("❌ Error in /link command:", err);
-      await safeReply({ content: "⚠️ Something went wrong while processing your command.", ephemeral: true });
+      console.error("❌ Interaction handler error:", err);
+      await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
     }
-  },
+  });
 };
