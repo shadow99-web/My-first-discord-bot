@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const VCStats = require("../schemas/vcStats.js");
+const VCStats = require("..models/vcStatsSchema.js");
 
 module.exports = {
   name: "vcstats",
