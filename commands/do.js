@@ -78,7 +78,7 @@ module.exports = {
         .setDescription(`**${author.username}** ${action}s ${targetName}!`)
         .setImage(gifUrl)
         .setColor("Random")
-        .setFooter({ text: "🎬 Powered by Tenor" });
+        .setFooter({ text: "♡ SHADOW" });
 
       if (isPrefix) {
         await message.reply({ embeds: [embed] });
