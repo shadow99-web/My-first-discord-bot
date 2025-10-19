@@ -1,13 +1,11 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-} = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const axios = require("axios");
 
 module.exports = {
   name: "ship",
   description: "Ship two users together 💘",
-  aliases: ["love"], // For prefix version
+  aliases: ["love"],
+
   data: new SlashCommandBuilder()
     .setName("ship")
     .setDescription("💞 Ship two users together!")
@@ -18,73 +16,89 @@ module.exports = {
       option.setName("user2").setDescription("Second user").setRequired(true)
     ),
 
-  async execute(context, args) {
-    const isInteraction = !!context.isChatInputCommand;
-    const guild = isInteraction ? context.guild : context.guild;
+  async execute(context, args = []) {
+    const isInteraction = typeof context.isChatInputCommand === "function" && context.isChatInputCommand();
+
     const tenorKey = process.env.TENOR_API_KEY;
     const clientKey = process.env.TENOR_CLIENT_KEY;
 
     let user1, user2;
 
-    // For slash command
+    // Handle slash command
     if (isInteraction) {
       user1 = context.options.getUser("user1");
       user2 = context.options.getUser("user2");
-    } else {
-      // For prefix command: !ship @user1 @user2
-      if (args.length < 2)
+    } 
+    // Handle prefix command
+    else {
+      if (!args || args.length < 2) {
         return context.reply("💔 You must mention two users to ship!");
+      }
 
-      user1 = context.mentions.users.at(0);
-      user2 = context.mentions.users.at(1);
+      user1 = context.mentions?.users?.at(0);
+      user2 = context.mentions?.users?.at(1);
 
-      if (!user1 || !user2)
+      if (!user1 || !user2) {
         return context.reply("💔 Please mention two valid users!");
+      }
     }
 
-    // Generate a "consistent" random score
-    const loveScore = Math.floor(
-      ((user1.id.charCodeAt(0) + user2.id.charCodeAt(0)) * 17) % 101
-    );
+    // Ensure both users are defined
+    if (!user1 || !user2) {
+      return context.reply({ content: "❌ Missing user references!", ephemeral: true });
+    }
 
-    // Heart bar visualization 💖
-    const filled = "❤️".repeat(Math.floor(loveScore / 10));
-    const empty = "🤍".repeat(10 - Math.floor(loveScore / 10));
-    const loveBar = `${filled}${empty} (${loveScore}%)`;
+    // Generate love score
+    const loveScore = Math.floor(((user1.id.charCodeAt(0) + user2.id.charCodeAt(0)) * 17) % 101);
 
-    // Choose mood based on love score
-    let mood = "neutral";
-    if (loveScore >= 80) mood = "romantic";
-    else if (loveScore >= 50) mood = "happy";
-    else if (loveScore >= 25) mood = "funny";
-    else mood = "sad";
+    // Love bar visual
+    const heartsFilled = "❤️".repeat(Math.floor(loveScore / 10));
+    const heartsEmpty = "🤍".repeat(10 - Math.floor(loveScore / 10));
+    const loveBar = `${heartsFilled}${heartsEmpty} (${loveScore}%)`;
 
-    // Fetch a GIF from Tenor 💞
-    let gifUrl;
+    // Choose mood
+    const mood = loveScore >= 80 ? "romantic" : loveScore >= 50 ? "happy" : loveScore >= 25 ? "funny" : "sad";
+
+    // Fetch GIF safely
+    let gifUrl = null;
     try {
-      const tenorRes = await axios.get(
-        `https://tenor.googleapis.com/v2/search?q=${mood}%20love&key=${tenorKey}&client_key=${clientKey}&limit=20`
+      const response = await axios.get(
+        `https://tenor.googleapis.com/v2/search`,
+        {
+          params: {
+            q: `${mood} love`,
+            key: tenorKey,
+            client_key: clientKey,
+            limit: 20,
+          },
+        }
       );
-      const results = tenorRes.data.results;
-      gifUrl =
-        results[Math.floor(Math.random() * results.length)]?.media_formats?.gif
-          ?.url || null;
-    } catch (err) {
-      console.error("Tenor fetch failed:", err);
+
+      const results = response.data?.results || [];
+      if (results.length > 0) {
+        const randomGif = results[Math.floor(Math.random() * results.length)];
+        gifUrl = randomGif?.media_formats?.gif?.url || null;
+      }
+    } catch (error) {
+      console.error("Tenor fetch failed:", error);
     }
 
+    // Create embed
     const embed = new EmbedBuilder()
       .setTitle("💘 Love Compatibility 💘")
-      .setDescription(
-        `**${user1.username}** ❤️ **${user2.username}**\n\n${loveBar}`
-      )
+      .setDescription(`**${user1.username}** ❤️ **${user2.username}**
+
+${loveBar}`)
       .setColor("LuminousVividPink")
       .setFooter({ text: "💞 True love is calculated by the bot gods." });
 
     if (gifUrl) embed.setImage(gifUrl);
 
-    if (isInteraction)
+    // Send response
+    if (isInteraction) {
       await context.reply({ embeds: [embed] });
-    else context.reply({ embeds: [embed] });
+    } else {
+      await context.reply({ embeds: [embed] });
+    }
   },
 };
