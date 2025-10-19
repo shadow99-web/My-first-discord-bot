@@ -146,7 +146,6 @@ safeRequireEvent("./events/guildMemberAdd", client);
 safeRequireEvent("./events/autoMod", client);
 safeRequireEvent("./events/truthdare", client);
 safeRequireEvent("./events/modLogEvents", client);
-safeRequireEvent("./events/messageReactionRemove", client);
 safeRequireEvent("./events/voiceStateUpdate", client);
 // ====================
 // 🚀 Deploy commands and login safely
