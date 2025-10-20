@@ -1,105 +1,67 @@
-// commands/template.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
   name: "template",
-  aliases: ["createtemplate", "savemod", "srvtemplate"],
+  description: "📄 Create a public server template for this server.",
+  aliases: ["servertemplate", "maketemplate"],
+
   data: new SlashCommandBuilder()
     .setName("template")
-    .setDescription("Create a server template (requires Manage Guild)")
+    .setDescription("📄 Create a public server template for this server.")
     .addStringOption(opt =>
       opt.setName("name")
-         .setDescription("Template name (optional)")
-         .setRequired(false)
-    )
+        .setDescription("Enter the template name")
+        .setRequired(true))
     .addStringOption(opt =>
       opt.setName("description")
-         .setDescription("Template description (optional)")
-         .setRequired(false)
-    ),
+        .setDescription("Enter a short description")
+        .setRequired(false)),
 
-  /**
-   * Unified execute signature used across your project:
-   * execute({ client, interaction, message, args, isPrefix })
-   */
-  async execute({ client, interaction, message, args, isPrefix }) {
-    // determine context
-    const guild = isPrefix ? message.guild : interaction.guild;
-    const user = isPrefix ? message.author : interaction.user;
+  async execute(interactionOrMessage, client) {
+    const isSlash = !!interactionOrMessage.isChatInputCommand;
+    const interaction = isSlash ? interactionOrMessage : null;
+    const message = isSlash ? null : interactionOrMessage;
+    const guild = isSlash ? interaction.guild : message.guild;
 
-    // simple permission rule: allow guild owner or members with ManageGuild.
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    const userHasPerm = member && (member.permissions.has("ManageGuild") || guild.ownerId === user.id);
-
-    if (!userHasPerm) {
-      const reply = "🚫 You need to be the server owner or have the **Manage Server** permission to create a template.";
-      return isPrefix ? message.reply(reply) : interaction.reply({ content: reply, ephemeral: true });
-    }
-
-    // Bot permission check
-    const me = guild.members.me;
-    if (!me.permissions.has("ManageGuild")) {
-      const reply = "❌ I need the **Manage Server** permission to create templates. Please grant it and try again.";
-      return isPrefix ? message.reply(reply) : interaction.reply({ content: reply, ephemeral: true });
-    }
-
-    // Gather name/description from slash or prefix args
-    let name, description;
-    if (isPrefix) {
-      // prefix usage examples:
-      // !template "My Template" "My description here"
-      // or !template MyTemplate My description...
-      if (args.length === 0) {
-        name = `${guild.name} template`;
-        description = `Template created by ${user.tag}`;
-      } else {
-        // try to support quoted name
-        const raw = args.join(" ");
-        const quoted = raw.match(/^"([^"]+)"(?:\s+"([^"]+)")?/);
-        if (quoted) {
-          name = quoted[1];
-          description = quoted[2] || `Template created by ${user.tag}`;
-        } else {
-          // fallback: first token = name, rest = description
-          name = args[0];
-          description = args.slice(1).join(" ") || `Template created by ${user.tag}`;
-        }
-      }
-    } else {
-      name = interaction.options.getString("name") || `${guild.name} template`;
-      description = interaction.options.getString("description") || `Template created by ${user.tag}`;
+    if (!guild) {
+      const reply = "❌ This command can only be used inside a server.";
+      return isSlash ? interaction.reply({ content: reply, flags: 64 }) : message.reply(reply);
     }
 
     try {
-      // Create the template
-      const template = await guild.templates.create({
-        name,
-        description,
-      });
+      const name = isSlash
+        ? interaction.options.getString("name")
+        : message.content.split(" ").slice(1).join(" ") || `Template-${Date.now()}`;
 
-      const url = `https://discord.new/${template.code}`;
+      const desc = isSlash
+        ? (interaction.options.getString("description") || "No description provided.")
+        : "No description provided.";
+
+      const template = await guild.templates.create(name, desc);
 
       const embed = new EmbedBuilder()
-        .setTitle("✅ Server Template Created")
-        .setDescription(`Template **${template.name}** created successfully.`)
+        .setTitle("✅ Server Template Created!")
+        .setDescription(`Here’s your template link:\n[**Use Template**](${template.url})`)
         .addFields(
-          { name: "Template URL", value: url },
-          { name: "Server", value: guild.name, inline: true },
-          { name: "By", value: `${user.tag}`, inline: true }
+          { name: "⭐ Template Name", value: name, inline: true },
+          { name: "✨ Description", value: desc, inline: true },
         )
-        .setFooter({ text: `Template ID: ${template.id}` })
-        .setTimestamp();
+        .setColor("Green")
+        .setTimestamp()
+        .setFooter({
+          text: `${isSlash ? interaction.user.username : message.author.username}`,
+          iconURL: `${isSlash ? interaction.user.displayAvatarURL() : message.author.displayAvatarURL()}`
+        });
 
-      if (isPrefix) {
-        await message.reply({ embeds: [embed] });
-      } else {
-        await interaction.reply({ embeds: [embed] });
-      }
+      if (isSlash) await interaction.reply({ embeds: [embed] });
+      else await message.reply({ embeds: [embed] });
+
     } catch (err) {
-      console.error("template command error:", err);
-      const errMsg = "❌ Failed to create template. Ensure I have Manage Server permission and templates are allowed on this server.";
-      if (isPrefix) message.reply(errMsg).catch(() => {});
-      else interaction.reply({ content: errMsg, ephemeral: true }).catch(() => {});
+      console.error("Template Command Error:", err);
+      const reply = "❌ I couldn’t create a template. I may not have `Manage Server` permission.";
+      return isSlash
+        ? interaction.reply({ content: reply, flags: 64 })
+        : message.reply(reply);
     }
-  }
+  },
 };
