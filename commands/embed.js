@@ -41,11 +41,14 @@ module.exports = {
 
     if (!isPrefix) await interaction.deferReply({ ephemeral: true });
 
-    // Blue heart animated emoji
     const blueHeart = "<a:blue_heart:1414309560231002194>";
 
-    // Initial embed with bot footer
+    // ✨ Create base embed with author avatar + bot footer
     let embed = new EmbedBuilder()
+      .setAuthor({
+        name: `${user.username}'s Embed`,
+        iconURL: user.displayAvatarURL({ dynamic: true }),
+      })
       .setTitle(`${blueHeart} Custom Embed Builder ${blueHeart}`)
       .setDescription("Use the buttons below to customize this embed.")
       .setColor("#00BFFF")
@@ -74,7 +77,7 @@ module.exports = {
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("send")
-          .setLabel(`${blueHeart} Send`)
+          .setLabel("♥ Send")
           .setStyle(ButtonStyle.Danger)
       );
 
