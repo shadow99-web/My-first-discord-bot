@@ -16,15 +16,17 @@ module.exports = {
   description: "💥 Delete and recreate this channel (Developer Only)",
 
   async execute(ctx, client) {
+    // Detect if command is slash or prefix
     const isSlash =
       typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
 
-    const channel = isSlash ? ctx.channel : ctx.channel;
-    const guild = channel?.guild;
     const user = isSlash ? ctx.user : ctx.author;
+    const channel = isSlash ? ctx.channel : ctx.channel || ctx.message?.channel;
+    const guild = channel?.guild;
 
-    const devIds = ["1378954077462986772"]; // your dev IDs
+    const devIds = ["1378954077462986772"]; // your dev IDs here
 
+    // Reply helper — now safe for both slash and prefix
     const reply = async (options) => {
       try {
         if (isSlash) {
@@ -33,9 +35,8 @@ module.exports = {
             flags: options.ephemeral ? 64 : undefined,
           });
         } else {
-          if (!ctx.channel)
-            return console.warn("⚠️ Prefix message has no channel!");
-          return await ctx.channel.send(options);
+          if (!channel) return console.warn("⚠️ Prefix command: no channel found!");
+          return await channel.send(options);
         }
       } catch (err) {
         console.error("Reply error:", err);
