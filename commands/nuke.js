@@ -15,41 +15,20 @@ module.exports = {
     .setName("nuke")
     .setDescription("💥 Delete and recreate this channel (Developer Only)"),
 
-  async execute(ctx) {
-    const isSlash =
-      typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
-
-    // Define variables for context
-    const channel = isSlash ? ctx.channel : ctx.channel || ctx.message?.channel;
-    const guild = channel?.guild;
-    const user = isSlash ? ctx.user : ctx.author;
-    const devIds = ["1378954077462986772"]; // Developer IDs
-
-    // Reply helper for both command types
-    const reply = async (options) => {
-      try {
-        if (isSlash) {
-          return await ctx.reply({
-            ...options,
-            flags: options.ephemeral ? 64 : undefined,
-          });
-        } else {
-          if (!channel) throw new Error("Channel not found for prefix command");
-          return await channel.send(options);
-        }
-      } catch (error) {
-        console.error("Reply error:", error);
-      }
-    };
+  async execute({ client, interaction, message, safeReply, isPrefix }) {
+    const channel = isPrefix ? message.channel : interaction.channel;
+    const guild = channel.guild;
+    const user = isPrefix ? message.author : interaction.user;
+    const devIds = ["1378954077462986772"]; // Your developers' Discord IDs here
 
     if (!guild)
-      return reply({
+      return safeReply({
         content: "❌ This command can only be used inside a server.",
         ephemeral: true,
       });
 
     if (!devIds.includes(user.id))
-      return reply({
+      return safeReply({
         content: "❌ Only developers can use this command.",
         ephemeral: true,
       });
@@ -62,7 +41,7 @@ module.exports = {
         PermissionsBitField.Flags.SendMessages,
       ])
     )
-      return reply({
+      return safeReply({
         content:
           "❌ I need **Manage Channels**, **View Channel**, and **Send Messages** permissions here.",
         ephemeral: true,
@@ -70,7 +49,7 @@ module.exports = {
 
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (!member || !member.permissions.has(PermissionsBitField.Flags.ManageChannels))
-      return reply({
+      return safeReply({
         content: "❌ You need the **Manage Channels** permission to do this.",
         ephemeral: true,
       });
@@ -87,37 +66,45 @@ module.exports = {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    const confirmMsg = await reply({
+    const confirmMsg = await safeReply({
       content:
         "⚠️ Are you sure you want to **nuke** this channel? This cannot be undone!",
       components: [row],
+      ephemeral: isPrefix, // ephemeral only on prefix to avoid clutter
     });
 
-    const msgForCollector = isSlash
-      ? await ctx.fetchReply().catch(() => confirmMsg)
-      : confirmMsg;
+    // Retrieve the message for collector (slash replies may not return the message)
+    let msgForCollector;
+    if (isPrefix) {
+      msgForCollector = confirmMsg;
+    } else {
+      try {
+        msgForCollector = await interaction.fetchReply();
+      } catch {
+        msgForCollector = confirmMsg;
+      }
+    }
 
-    const filter = (interaction) => interaction.user.id === user.id;
+    const filter = (i) => i.user.id === user.id;
 
     const collector = msgForCollector.createMessageComponentCollector({
       filter,
       time: 15000,
     });
 
-    collector.on("collect", async (interaction) => {
-      await interaction.deferUpdate().catch(() => {});
+    collector.on("collect", async (btnInt) => {
+      await btnInt.deferUpdate().catch(() => {});
 
-      if (interaction.customId === "cancel_nuke") {
+      if (btnInt.customId === "cancel_nuke") {
         collector.stop("cancelled");
-        return interaction.editReply({
+        return btnInt.editReply({
           content: "❌ Nuke cancelled.",
           components: [],
         });
       }
 
-      if (interaction.customId === "confirm_nuke") {
+      if (btnInt.customId === "confirm_nuke") {
         collector.stop("confirmed");
-
         try {
           const position = channel.position;
           const newChannel = await channel.clone({
@@ -138,7 +125,7 @@ module.exports = {
           await newChannel.send({ embeds: [embed] });
         } catch (error) {
           console.error("Failed to nuke channel:", error);
-          await reply({
+          await safeReply({
             content: `❌ Failed to nuke channel: ${error.message}`,
             ephemeral: true,
           });
