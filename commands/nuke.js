@@ -4,7 +4,7 @@ const {
   PermissionsBitField,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
 } = require("discord.js");
 
 module.exports = {
@@ -15,50 +15,44 @@ module.exports = {
     .setName("nuke")
     .setDescription("💥 Delete and recreate this channel (Developer Only)"),
 
-  async execute(ctx, client) {
-    // Determine context type
+  async execute(ctx) {
     const isSlash =
       typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
 
-    // Normalize variables
-    const message = !isSlash ? ctx : null;
-    const interaction = isSlash ? ctx : null;
-    const channel = isSlash ? interaction.channel : message?.channel;
+    // Define variables for context
+    const channel = isSlash ? ctx.channel : ctx.channel || ctx.message?.channel;
     const guild = channel?.guild;
-    const user = isSlash ? interaction.user : message?.author;
+    const user = isSlash ? ctx.user : ctx.author;
+    const devIds = ["1378954077462986772"]; // Developer IDs
 
-    const devIds = ["1378954077462986772"]; // your developer IDs
-
-    // Universal reply helper
+    // Reply helper for both command types
     const reply = async (options) => {
       try {
         if (isSlash) {
-          return await interaction.reply({
+          return await ctx.reply({
             ...options,
             flags: options.ephemeral ? 64 : undefined,
           });
         } else {
-          if (!channel) throw new Error("No channel context found for prefix command.");
+          if (!channel) throw new Error("Channel not found for prefix command");
           return await channel.send(options);
         }
-      } catch (err) {
-        console.error("Reply Error:", err);
+      } catch (error) {
+        console.error("Reply error:", error);
       }
     };
 
-    if (!guild) {
+    if (!guild)
       return reply({
         content: "❌ This command can only be used inside a server.",
         ephemeral: true,
       });
-    }
 
-    if (!devIds.includes(user.id)) {
+    if (!devIds.includes(user.id))
       return reply({
         content: "❌ Only developers can use this command.",
         ephemeral: true,
       });
-    }
 
     const botMember = guild.members.me;
     if (
@@ -67,13 +61,19 @@ module.exports = {
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
       ])
-    ) {
+    )
       return reply({
         content:
           "❌ I need **Manage Channels**, **View Channel**, and **Send Messages** permissions here.",
         ephemeral: true,
       });
-    }
+
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    if (!member || !member.permissions.has(PermissionsBitField.Flags.ManageChannels))
+      return reply({
+        content: "❌ You need the **Manage Channels** permission to do this.",
+        ephemeral: true,
+      });
 
     // Confirmation buttons
     const row = new ActionRowBuilder().addComponents(
@@ -88,52 +88,56 @@ module.exports = {
     );
 
     const confirmMsg = await reply({
-      content: "⚠️ Are you sure you want to **nuke** this channel? This cannot be undone!",
+      content:
+        "⚠️ Are you sure you want to **nuke** this channel? This cannot be undone!",
       components: [row],
     });
 
-    // Retrieve the reply message for collector support
-    let msgForCollector;
-    try {
-      msgForCollector = isSlash ? await interaction.fetchReply() : confirmMsg;
-    } catch {
-      msgForCollector = confirmMsg;
-    }
+    const msgForCollector = isSlash
+      ? await ctx.fetchReply().catch(() => confirmMsg)
+      : confirmMsg;
 
-    // Create button collector
+    const filter = (interaction) => interaction.user.id === user.id;
+
     const collector = msgForCollector.createMessageComponentCollector({
+      filter,
       time: 15000,
-      filter: (i) => i.user.id === user.id,
     });
 
-    collector.on("collect", async (i) => {
-      await i.deferUpdate().catch(() => {});
+    collector.on("collect", async (interaction) => {
+      await interaction.deferUpdate().catch(() => {});
 
-      if (i.customId === "cancel_nuke") {
-        await i.editReply({ content: "❌ Nuke cancelled.", components: [] });
-        return collector.stop("cancelled");
+      if (interaction.customId === "cancel_nuke") {
+        collector.stop("cancelled");
+        return interaction.editReply({
+          content: "❌ Nuke cancelled.",
+          components: [],
+        });
       }
 
-      if (i.customId === "confirm_nuke") {
+      if (interaction.customId === "confirm_nuke") {
         collector.stop("confirmed");
+
         try {
           const position = channel.position;
-          const clonedChannel = await channel.clone({
+          const newChannel = await channel.clone({
             position,
             reason: `Nuked by ${user.tag}`,
           });
-          await channel.delete("Nuked via bot");
+          await channel.delete("Nuked by bot command");
 
           const embed = new EmbedBuilder()
             .setTitle("💣 Channel Nuked!")
             .setDescription(`💥 Channel recreated by <@${user.id}>`)
-            .setImage("https://media.tenor.com/8vN6VbB3FSgAAAAC/explosion-nuke.gif")
+            .setImage(
+              "https://media.tenor.com/8vN6VbB3FSgAAAAC/explosion-nuke.gif"
+            )
             .setColor("Red")
             .setTimestamp();
 
-          await clonedChannel.send({ embeds: [embed] });
+          await newChannel.send({ embeds: [embed] });
         } catch (error) {
-          console.error("Nuke Error:", error);
+          console.error("Failed to nuke channel:", error);
           await reply({
             content: `❌ Failed to nuke channel: ${error.message}`,
             ephemeral: true,
