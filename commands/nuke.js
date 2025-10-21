@@ -1,10 +1,10 @@
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-  ButtonBuilder,
-  ActionRowBuilder,
-  ButtonStyle,
   PermissionsBitField,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require("discord.js");
 
 module.exports = {
@@ -18,16 +18,28 @@ module.exports = {
   async execute(ctx, client) {
     const isSlash =
       typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
-    const user = isSlash ? ctx.user : ctx.author;
+
     const channel = isSlash ? ctx.channel : ctx.channel;
     const guild = channel?.guild;
+    const user = isSlash ? ctx.user : ctx.author;
 
-    const devIds = ["1378954077462986772"]; // Your ID(s)
+    const devIds = ["1378954077462986772"]; // your dev IDs
 
     const reply = async (options) => {
-      if (isSlash)
-        return ctx.reply({ ...options, flags: options.ephemeral ? 64 : undefined });
-      else return ctx.channel.send(options);
+      try {
+        if (isSlash) {
+          return await ctx.reply({
+            ...options,
+            flags: options.ephemeral ? 64 : undefined,
+          });
+        } else {
+          if (!ctx.channel)
+            return console.warn("⚠️ Prefix message has no channel!");
+          return await ctx.channel.send(options);
+        }
+      } catch (err) {
+        console.error("Reply error:", err);
+      }
     };
 
     if (!guild)
@@ -48,95 +60,74 @@ module.exports = {
         ephemeral: true,
       });
 
-    // Create confirmation buttons
-    const confirm = new ButtonBuilder()
-      .setCustomId("confirm_nuke")
-      .setLabel("Confirm 💥")
-      .setStyle(ButtonStyle.Danger);
+    // 🔘 Confirmation buttons
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("confirm_nuke")
+        .setLabel("Confirm 💣")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId("cancel_nuke")
+        .setLabel("Cancel ❌")
+        .setStyle(ButtonStyle.Secondary)
+    );
 
-    const cancel = new ButtonBuilder()
-      .setCustomId("cancel_nuke")
-      .setLabel("Cancel ❌")
-      .setStyle(ButtonStyle.Secondary);
+    const confirmMsg = await reply({
+      content: "⚠️ Are you sure you want to **nuke** this channel? This cannot be undone!",
+      components: [row],
+    });
 
-    const row = new ActionRowBuilder().addComponents(confirm, cancel);
-
-    const embed = new EmbedBuilder()
-      .setTitle("⚠️ Confirm Nuke")
-      .setDescription(
-        `Are you **sure** you want to nuke this channel?\n\nThis will delete and recreate **#${channel.name}**.\n\n💣 Proceed with caution!`
-      )
-      .setColor("Yellow");
-
-    const confirmationMsg = await reply({ embeds: [embed], components: [row] });
-
-    // Create button collector
-    const filter = (i) => i.user.id === user.id;
-    const collector = confirmationMsg.createMessageComponentCollector({
-      filter,
-      time: 30000, // 30s timeout
+    const collector = confirmMsg.createMessageComponentCollector({
+      time: 15000,
+      filter: (i) => i.user.id === user.id,
     });
 
     collector.on("collect", async (interaction) => {
-      if (interaction.customId === "confirm_nuke") {
-        await interaction.update({
-          content: "💣 Nuking channel...",
-          embeds: [],
+      await interaction.deferUpdate();
+
+      if (interaction.customId === "cancel_nuke") {
+        collector.stop("cancelled");
+        return interaction.editReply({
+          content: "❌ Nuke cancelled.",
           components: [],
         });
+      }
 
+      if (interaction.customId === "confirm_nuke") {
+        collector.stop("confirmed");
         try {
           const position = channel.position;
           const newChannel = await channel.clone({
-            position,
-            reason: `💥 Nuked by ${user.tag}`,
+            position: position,
+            reason: `Nuked by ${user.tag}`,
           });
+
           await channel.delete();
 
-          const nukeEmbed = new EmbedBuilder()
+          const embed = new EmbedBuilder()
             .setTitle("💣 Channel Nuked!")
-            .setDescription(`Channel recreated by <@${user.id}>`)
+            .setDescription(`💥 Channel recreated by <@${user.id}>`)
             .setImage("https://media.tenor.com/8vN6VbB3FSgAAAAC/explosion-nuke.gif")
             .setColor("Red")
             .setTimestamp();
 
-          await newChannel.send({ embeds: [nukeEmbed] });
-
-          try {
-            const dmEmbed = new EmbedBuilder()
-              .setTitle("✅ Channel Nuked Successfully")
-              .setDescription(
-                `💥 **#${newChannel.name}** in **${guild.name}** has been nuked.\n\n[Jump to Channel](https://discord.com/channels/${guild.id}/${newChannel.id})`
-              )
-              .setColor("Green");
-            await user.send({ embeds: [dmEmbed] });
-          } catch {
-            console.warn(`⚠️ Could not DM ${user.tag}`);
-          }
+          await newChannel.send({ embeds: [embed] });
         } catch (err) {
-          console.error("Nuke Error:", err);
-          return reply({
-            content: `❌ Failed: **${err.message}**`,
+          console.error("❌ Nuke Error:", err);
+          await reply({
+            content: `❌ Failed to nuke: **${err.message}**`,
             ephemeral: true,
           });
         }
-      } else if (interaction.customId === "cancel_nuke") {
-        await interaction.update({
-          content: "❌ Nuke cancelled.",
-          embeds: [],
-          components: [],
-        });
-        collector.stop("cancelled");
       }
     });
 
-    collector.on("end", async (collected, reason) => {
-      if (reason === "time") {
+    collector.on("end", async (_, reason) => {
+      if (reason !== "confirmed" && reason !== "cancelled") {
         try {
-          await confirmationMsg.edit({
-            content: "⌛ Nuke confirmation timed out.",
+          await confirmMsg.edit({
+            content: "⌛ Time expired, nuke cancelled.",
             components: [],
-            embeds: [],
           });
         } catch {}
       }
