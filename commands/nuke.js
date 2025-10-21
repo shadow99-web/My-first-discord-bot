@@ -4,7 +4,7 @@ const {
   PermissionsBitField,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
+  ButtonStyle
 } = require("discord.js");
 
 module.exports = {
@@ -16,23 +16,29 @@ module.exports = {
     .setDescription("💥 Delete and recreate this channel (Developer Only)"),
 
   async execute(ctx, client) {
+    // Determine context type
     const isSlash =
       typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
 
-    const guild = isSlash ? ctx.guild : ctx.guild || ctx.message?.guild;
-    const channel = isSlash ? ctx.channel : ctx.channel || ctx.message?.channel;
-    const user = isSlash ? ctx.user : ctx.author;
+    // Normalize variables
+    const message = !isSlash ? ctx : null;
+    const interaction = isSlash ? ctx : null;
+    const channel = isSlash ? interaction.channel : message?.channel;
+    const guild = channel?.guild;
+    const user = isSlash ? interaction.user : message?.author;
 
-    const devIds = ["1378954077462986772"]; // 👈 your developer IDs here
+    const devIds = ["1378954077462986772"]; // your developer IDs
 
+    // Universal reply helper
     const reply = async (options) => {
       try {
         if (isSlash) {
-          return await ctx.reply({
+          return await interaction.reply({
             ...options,
             flags: options.ephemeral ? 64 : undefined,
           });
         } else {
+          if (!channel) throw new Error("No channel context found for prefix command.");
           return await channel.send(options);
         }
       } catch (err) {
@@ -40,40 +46,31 @@ module.exports = {
       }
     };
 
-    // Check context
-    if (!guild)
+    if (!guild) {
       return reply({
         content: "❌ This command can only be used inside a server.",
         ephemeral: true,
       });
+    }
 
-    // Developer restriction
-    if (!devIds.includes(user.id))
+    if (!devIds.includes(user.id)) {
       return reply({
         content: "❌ Only developers can use this command.",
         ephemeral: true,
       });
+    }
 
-    // Permission checks (bot)
     const botMember = guild.members.me;
     if (
-      !botMember.permissions.has([
+      !botMember.permissionsIn(channel).has([
         PermissionsBitField.Flags.ManageChannels,
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
       ])
     ) {
       return reply({
-        content: "❌ I need **Manage Channels**, **View Channel**, and **Send Messages** permissions.",
-        ephemeral: true,
-      });
-    }
-
-    // Permission checks (user)
-    const member = guild.members.cache.get(user.id);
-    if (!member || !member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-      return reply({
-        content: "🚫 You need the **Manage Channels** permission to do this.",
+        content:
+          "❌ I need **Manage Channels**, **View Channel**, and **Send Messages** permissions here.",
         ephemeral: true,
       });
     }
@@ -95,65 +92,60 @@ module.exports = {
       components: [row],
     });
 
-    // For slash commands, `reply()` returns void sometimes; fetch if necessary
-    const targetMsg = isSlash ? await ctx.fetchReply() : confirmMsg;
+    // Retrieve the reply message for collector support
+    let msgForCollector;
+    try {
+      msgForCollector = isSlash ? await interaction.fetchReply() : confirmMsg;
+    } catch {
+      msgForCollector = confirmMsg;
+    }
 
-    const collector = targetMsg.createMessageComponentCollector({
+    // Create button collector
+    const collector = msgForCollector.createMessageComponentCollector({
       time: 15000,
       filter: (i) => i.user.id === user.id,
     });
 
-    collector.on("collect", async (interaction) => {
-      try {
-        if (interaction.customId === "cancel_nuke") {
-          await interaction.update({
-            content: "❌ Nuke cancelled.",
-            components: [],
+    collector.on("collect", async (i) => {
+      await i.deferUpdate().catch(() => {});
+
+      if (i.customId === "cancel_nuke") {
+        await i.editReply({ content: "❌ Nuke cancelled.", components: [] });
+        return collector.stop("cancelled");
+      }
+
+      if (i.customId === "confirm_nuke") {
+        collector.stop("confirmed");
+        try {
+          const position = channel.position;
+          const clonedChannel = await channel.clone({
+            position,
+            reason: `Nuked by ${user.tag}`,
           });
-          return collector.stop("cancelled");
-        }
+          await channel.delete("Nuked via bot");
 
-        if (interaction.customId === "confirm_nuke") {
-          await interaction.update({
-            content: "💣 Channel nuking in progress...",
-            components: [],
+          const embed = new EmbedBuilder()
+            .setTitle("💣 Channel Nuked!")
+            .setDescription(`💥 Channel recreated by <@${user.id}>`)
+            .setImage("https://media.tenor.com/8vN6VbB3FSgAAAAC/explosion-nuke.gif")
+            .setColor("Red")
+            .setTimestamp();
+
+          await clonedChannel.send({ embeds: [embed] });
+        } catch (error) {
+          console.error("Nuke Error:", error);
+          await reply({
+            content: `❌ Failed to nuke channel: ${error.message}`,
+            ephemeral: true,
           });
-          collector.stop("confirmed");
-
-          try {
-            const position = channel.position;
-            const newChannel = await channel.clone({
-              position,
-              reason: `Nuked by ${user.tag}`,
-            });
-
-            await channel.delete("Nuked via bot");
-
-            const embed = new EmbedBuilder()
-              .setTitle("💣 Channel Nuked!")
-              .setDescription(`💥 Channel recreated by <@${user.id}>`)
-              .setImage("https://media.tenor.com/8vN6VbB3FSgAAAAC/explosion-nuke.gif")
-              .setColor("Red")
-              .setTimestamp();
-
-            await newChannel.send({ embeds: [embed] });
-          } catch (error) {
-            console.error("Nuke Error:", error);
-            await reply({
-              content: `❌ Failed to nuke channel: ${error.message}`,
-              ephemeral: true,
-            });
-          }
         }
-      } catch (err) {
-        console.error("Collector Error:", err);
       }
     });
 
     collector.on("end", async (_, reason) => {
       if (!["confirmed", "cancelled"].includes(reason)) {
         try {
-          await targetMsg.edit({
+          await msgForCollector.edit({
             content: "⌛ Time expired, nuke cancelled.",
             components: [],
           });
