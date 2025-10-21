@@ -9,10 +9,9 @@ module.exports = {
   description: "Generate a Discord server template link for this server.",
 
   async execute(ctx, client) {
-    const isSlash =
-      typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
+    const isSlash = typeof ctx.isChatInputCommand === "function" && ctx.isChatInputCommand();
     const user = isSlash ? ctx.user : ctx.author;
-    const guild = isSlash ? ctx.guild : ctx.guild;
+    const guild = ctx.guild;
 
     const reply = async (options) => {
       if (isSlash) {
@@ -23,7 +22,7 @@ module.exports = {
     };
 
     try {
-      // Check permissions
+      // Check for Manage Server permission
       if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
         return reply({
           content: "❌ I need **Manage Server** permission to create a template.",
@@ -31,8 +30,8 @@ module.exports = {
         });
       }
 
-      // Create server template
-      const template = await guild.templates.create(
+      // ✅ Create template (correct method)
+      const template = await guild.createTemplate(
         `Template by ${user.username}`,
         "Server template generated using the bot"
       );
@@ -40,11 +39,14 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setTitle("📄 Server Template Created!")
         .setDescription(
-          `✅ Template created successfully!\n\n**Server:** ${guild.name}\n**Creator:** ${user}\n\n[Click here to use the template](${template.url})`
+          `✅ Template created successfully!\n\n**Server:** ${guild.name}\n**Creator:** ${user}\n\n[📎 Click here to use the template](${template.url})`
         )
         .setThumbnail(guild.iconURL({ dynamic: true }))
         .setColor("Green")
-        .setFooter({ text: "Server Template • Public Command" })
+        .setFooter({
+          text: `Server Template • Requested by ${user.username}`,
+          iconURL: user.displayAvatarURL({ dynamic: true }),
+        })
         .setTimestamp();
 
       await reply({ embeds: [embed] });
