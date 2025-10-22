@@ -148,6 +148,7 @@ safeRequireEvent("./events/truthdare", client);
 safeRequireEvent("./events/modLogEvents", client);
 safeRequireEvent("./events/voiceStateUpdate", client);
 safeRequireEvent("./events/antinukeHandler", client);
+safeRequireEvent("./", client);
 // ====================
 // 🚀 Deploy commands and login safely
 async function deployCommandsAndLogin() {
