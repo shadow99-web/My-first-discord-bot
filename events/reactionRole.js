@@ -6,26 +6,31 @@ module.exports = (client) => {
     client.on(Events.MessageReactionAdd, async (reaction, user) => {
         if (user.bot) return;
 
-        if (reaction.partial) await reaction.fetch().catch(() => {});
-        if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+        try {
+            // Handle partials
+            if (reaction.partial) await reaction.fetch();
+            if (reaction.message.partial) await reaction.message.fetch();
 
-        const guildId = reaction.message.guildId;
-        const member = reaction.message.guild.members.cache.get(user.id);
-        if (!member) return;
+            const guild = reaction.message.guild;
+            if (!guild) return;
 
-        const roles = await getReactionRoles(guildId, reaction.message.id);
-        const emoji = reaction.emoji.id || reaction.emoji.name;
-        const roleId = roles[emoji];
-        if (!roleId) return;
+            // Fetch member safely
+            const member = await guild.members.fetch(user.id).catch(() => null);
+            if (!member) return;
 
-        const role = reaction.message.guild.roles.cache.get(roleId);
-        if (role) {
-            try {
-                await member.roles.add(role);
-                console.log(`✅ Added ${role.name} to ${user.tag}`);
-            } catch (err) {
-                console.error("Failed to add reaction role:", err);
-            }
+            // Get roles from DB
+            const roles = await getReactionRoles(guild.id, reaction.message.id);
+            const emojiKey = reaction.emoji.id || reaction.emoji.name;
+            const roleId = roles[emojiKey];
+            if (!roleId) return;
+
+            const role = guild.roles.cache.get(roleId);
+            if (!role) return;
+
+            await member.roles.add(role);
+            console.log(`✅ Added ${role.name} to ${user.tag}`);
+        } catch (err) {
+            console.error("❌ Error in MessageReactionAdd handler:", err);
         }
     });
 
@@ -33,26 +38,31 @@ module.exports = (client) => {
     client.on(Events.MessageReactionRemove, async (reaction, user) => {
         if (user.bot) return;
 
-        if (reaction.partial) await reaction.fetch().catch(() => {});
-        if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+        try {
+            // Handle partials
+            if (reaction.partial) await reaction.fetch();
+            if (reaction.message.partial) await reaction.message.fetch();
 
-        const guildId = reaction.message.guildId;
-        const member = reaction.message.guild.members.cache.get(user.id);
-        if (!member) return;
+            const guild = reaction.message.guild;
+            if (!guild) return;
 
-        const roles = await getReactionRoles(guildId, reaction.message.id);
-        const emoji = reaction.emoji.id || reaction.emoji.name;
-        const roleId = roles[emoji];
-        if (!roleId) return;
+            // Fetch member safely
+            const member = await guild.members.fetch(user.id).catch(() => null);
+            if (!member) return;
 
-        const role = reaction.message.guild.roles.cache.get(roleId);
-        if (role) {
-            try {
-                await member.roles.remove(role);
-                console.log(`❌ Removed ${role.name} from ${user.tag}`);
-            } catch (err) {
-                console.error("Failed to remove reaction role:", err);
-            }
+            // Get roles from DB
+            const roles = await getReactionRoles(guild.id, reaction.message.id);
+            const emojiKey = reaction.emoji.id || reaction.emoji.name;
+            const roleId = roles[emojiKey];
+            if (!roleId) return;
+
+            const role = guild.roles.cache.get(roleId);
+            if (!role) return;
+
+            await member.roles.remove(role);
+            console.log(`❌ Removed ${role.name} from ${user.tag}`);
+        } catch (err) {
+            console.error("❌ Error in MessageReactionRemove handler:", err);
         }
     });
 };
