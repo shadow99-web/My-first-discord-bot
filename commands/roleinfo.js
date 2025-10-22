@@ -8,7 +8,7 @@ module.exports = {
 
     async execute(context) {
         // Emojis (animated for consistency)
-        const arrow = "<a:flecha:1414301944868245574>";
+       
         const heart = "<a:blue_heart:1414309560231002194>";
 
         // Role selection
@@ -27,13 +27,13 @@ module.exports = {
             .setColor(role.color || "Blue")
             .setTimestamp()
             .addFields(
-                { name: "🆔 __Role ID__", value: `${arrow} ${role.id}`, inline: true },
+                { name: "⚫ __Role ID__", value: `${heart} ${role.id}`, inline: true },
                 { name: "💎 __Color__", value: `${heart} ${role.hexColor === "#000000" ? "Default" : role.hexColor}`, inline: true },
-                { name: "🥂 __Members__", value: `${arrow} ${memberCount}`, inline: true },
-                { name: "💟 __Position__", value: `${heart} ${role.position}`, inline: true },
-                { name: "📍 __Mentionable__", value: `${arrow} ${role.mentionable ? "Yes" : "No"}`, inline: true },
-                { name: "✨ __Hoist in Sidebar__", value: `${heart} ${role.hoist ? "Yes" : "No"}`, inline: true },
-                { name: "📜 __Created On__", value: `${arrow} <t:${Math.floor(role.createdTimestamp / 1000)}:f>`, inline: false }
+                { name: "🥂 __Members__", value: `${heart} ${memberCount}`, inline: true },
+                { name: "♥ __Position__", value: `${heart} ${role.position}`, inline: true },
+                { name: "🤞🏻 __Mentionable__", value: `${heart} ${role.mentionable ? "Yes" : "No"}`, inline: true },
+                { name: "🤍 __Hoist in Sidebar__", value: `${heart} ${role.hoist ? "Yes" : "No"}`, inline: true },
+                { name: "✏ __Created On__", value: `${heart} <t:${Math.floor(role.createdTimestamp / 1000)}:f>`, inline: false }
             );
 
         if (context.isPrefix) await context.message.reply({ embeds: [embed] });
