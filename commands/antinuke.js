@@ -3,18 +3,18 @@ const AntiNuke = require("../models/AntiNuke");
 
 module.exports = {
   name: "antinuke",
-  description: "Enable or disable anti-nuke protections (admin only).",
+  description: "Enable or disable Anti-Nuke protections (server-Owner only).",
   data: new SlashCommandBuilder()
     .setName("antinuke")
-    .setDescription("Enable or disable anti-nuke protections")
+    .setDescription("Enable or disable Anti-Nuke protections (server-Owner only)")
     .addSubcommand(sub =>
       sub
         .setName("enable")
-        .setDescription("Enable protections")
+        .setDescription("Enable Anti-Nuke protections")
         .addStringOption(opt =>
           opt
             .setName("action")
-            .setDescription("Action to take on attacker: ban/demote")
+            .setDescription("Action to take against attacker: ban/demote")
             .addChoices(
               { name: "ban", value: "ban" },
               { name: "demote", value: "demote" }
@@ -24,13 +24,12 @@ module.exports = {
     .addSubcommand(sub =>
       sub
         .setName("disable")
-        .setDescription("Disable protections")
+        .setDescription("Disable Anti-Nuke protections")
     ),
 
   async execute({ client, interaction, message, args, isPrefix, safeReply }) {
-    const caller = isPrefix ? message.author : interaction.user;
     const guild = isPrefix ? message.guild : interaction.guild;
-    const member = isPrefix ? message.member : interaction.member;
+    const user = isPrefix ? message.author : interaction.user;
 
     const reply = async (options) => {
       if (isPrefix) return message.channel.send(options).catch(() => {});
@@ -41,9 +40,9 @@ module.exports = {
     if (!guild)
       return reply({ content: "❌ This command can only be used in a server.", ephemeral: true });
 
-    if (!member.permissions.has("ManageGuild") && !member.permissions.has("Administrator")) {
+    if (guild.ownerId !== user.id) {
       return reply({
-        content: "❌ You must be an administrator or have Manage Server permission.",
+        content: "🚫 Only the **Server Owner** can enable or disable Anti-Nuke.",
         ephemeral: true,
       });
     }
@@ -70,13 +69,18 @@ module.exports = {
 
       if (sub === "enable") {
         record.enabled = true;
-        if (chosenAction && ["ban", "demote"].includes(chosenAction))
-          record.action = chosenAction;
+        record.action = ["ban", "demote"].includes(chosenAction)
+          ? chosenAction
+          : "ban";
         await record.save();
 
         const embed = new EmbedBuilder()
           .setTitle("💠 Anti-Nuke Enabled <a:blue_heart:1414309560231002194>")
-          .setDescription(`Anti-Nuke protections are now **enabled**.\nAction: **${record.action}**`)
+          .setDescription(
+            `✅ Anti-Nuke is now **enabled**.\n` +
+            `Only **you (Server Owner)** can create, delete, or modify channels/roles.\n\n` +
+            `Action on attackers: **${record.action.toUpperCase()}**`
+          )
           .setColor("Blue")
           .setTimestamp();
 
@@ -87,7 +91,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
           .setTitle("💤 Anti-Nuke Disabled <a:blue_heart:1414309560231002194>")
-          .setDescription("Anti-Nuke protections are now **disabled**.")
+          .setDescription("❌ Anti-Nuke protections are now **disabled**.")
           .setColor("Grey")
           .setTimestamp();
 
