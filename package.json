@@ -41,7 +41,8 @@
     "canvacord": "^6.0.2", 
     "pinterest-dl": "^1.0.0", 
     "@google/generative-ai": "^0.11.4", 
-    "tinify": "^1.7.1"
+    "tinify": "^1.7.1", 
+    "chess.js": "^1.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
