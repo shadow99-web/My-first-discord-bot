@@ -1,333 +1,194 @@
-// chess.js
+// commands/chess.js
 const {
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  AttachmentBuilder,
 } = require("discord.js");
 const { Chess } = require("chess.js");
+const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const path = require("path");
+const fs = require("fs");
 
-// In-memory active games (messageId -> gameState). You can migrate to DB if needed.
-const activeGames = new Map();
+const games = new Map();
 
-// Unicode piece icons
-const pieceIcons = {
-  p: "♟️", r: "♜", n: "♞", b: "♝", q: "♛", k: "♚",
-  P: "♙", R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔"
-};
+async function renderBoard(chess) {
+  const tileSize = 80;
+  const canvas = createCanvas(tileSize * 8, tileSize * 8);
+  const ctx = canvas.getContext("2d");
 
-function squareIndexToCoords(i) {
-  // i: 0..63 -> a8..h1
-  const rank = 8 - Math.floor(i / 8);
-  const file = String.fromCharCode(97 + (i % 8)); // a..h
-  return `${file}${rank}`;
-}
-
-function coordsToIndex(square) {
-  if (!/^[a-h][1-8]$/.test(square)) return -1;
-  const file = square.charCodeAt(0) - 97;
-  const rank = 8 - parseInt(square[1], 10);
-  return rank * 8 + file;
-}
-
-function renderBoard(chess, cursorIndex = -1, selectedIndex = -1) {
-  // Return a string board: 8 lines
-  const board = chess.board();
-  let out = "";
-  for (let r = 0; r < 8; r++) {
-    const row = board[r];
-    for (let c = 0; c < 8; c++) {
-      const idx = r * 8 + c;
-      const sq = row[c];
-      let cell = "▫️"; // empty cell icon
-      if (sq) {
-        const key = sq.color === "w" ? sq.type.toUpperCase() : sq.type;
-        cell = pieceIcons[key] || (sq.type);
-      }
-      if (idx === selectedIndex) {
-        // selected square highlight
-        cell = `🟩`; // visually show selection — we will append piece after
-        if (sq) cell = `🟩${pieceIcons[sq.color === "w" ? sq.type.toUpperCase() : sq.type]}`;
-      } else if (idx === cursorIndex) {
-        // cursor highlight
-        cell = `🟦`;
-        if (sq) cell = `🟦${pieceIcons[sq.color === "w" ? sq.type.toUpperCase() : sq.type]}`;
-      } else {
-        // keep original cell
-      }
-      // to keep consistent widths, append a space
-      // if we used a two-char emoji like 🟦♙ it's fine.
-      out += cell + " ";
+  // draw background
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      ctx.fillStyle = (x + y) % 2 === 0 ? "#EEEED2" : "#769656";
+      ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
     }
-    out += `\n`;
   }
-  // below board show labels
-  out += `\nFiles: a b c d e f g h\n`;
-  return out;
+
+  // draw pieces
+  const board = chess.board();
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq = board[r][c];
+      if (!sq) continue;
+      const code = `${sq.color}${sq.type}`;
+      const imgPath = path.join(__dirname, "..", "assets", "chess", `${code}.png`);
+      if (fs.existsSync(imgPath)) {
+        const img = await loadImage(imgPath);
+        ctx.drawImage(img, c * tileSize, r * tileSize, tileSize, tileSize);
+      }
+    }
+  }
+
+  return canvas.toBuffer("image/png");
 }
 
-function makeBoardEmbed(chess, whiteId, blackId, currentPlayerId, cursorIndex, selectedIndex) {
-  const title = `♟️ Chess — ${chess.turn() === "w" ? "White" : "Black"} to move`;
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(renderBoard(chess, cursorIndex, selectedIndex))
-    .addFields(
-      { name: "White", value: `<@${whiteId}>`, inline: true },
-      { name: "Black", value: `<@${blackId}>`, inline: true },
-      { name: "Turn", value: `<@${currentPlayerId}>`, inline: true }
+function moveButtons(validMoves) {
+  const rows = [];
+  const perRow = 5;
+  for (let i = 0; i < validMoves.length; i += perRow) {
+    const slice = validMoves.slice(i, i + perRow);
+    const row = new ActionRowBuilder();
+    slice.forEach(m => {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`move_${m.to}`)
+          .setLabel(m.to)
+          .setStyle(ButtonStyle.Primary)
+      );
+    });
+    rows.push(row);
+  }
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("cancel")
+        .setLabel("❌ Cancel")
+        .setStyle(ButtonStyle.Danger)
     )
-    .setColor("Blue")
-    .setFooter({ text: `Use arrows to move cursor, Select to pick source/destination. Timeout 90s per move.` })
-    .setTimestamp();
-  return embed;
-}
-
-function getControlRows(disabled = false) {
-  const navRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("left").setLabel("◀️").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("up").setLabel("⬆️").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("select").setLabel("✅ Select").setStyle(ButtonStyle.Primary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("down").setLabel("⬇️").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("right").setLabel("▶️").setStyle(ButtonStyle.Secondary).setDisabled(disabled)
   );
-
-  const actionRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("undo").setLabel("↩️ Undo").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("confirm").setLabel("🟢 Confirm").setStyle(ButtonStyle.Success).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("resign").setLabel("🏳️ Resign").setStyle(ButtonStyle.Danger).setDisabled(disabled),
-    new ButtonBuilder().setCustomId("cancel").setLabel("❌ Cancel").setStyle(ButtonStyle.Secondary).setDisabled(disabled)
-  );
-
-  return [navRow, actionRow];
+  return rows;
 }
 
 module.exports = {
   name: "chess",
-  description: "Play chess with another user (buttons + cursor).",
+  description: "Play chess with another user (visual board + valid moves).",
   data: new SlashCommandBuilder()
     .setName("chess")
     .setDescription("Play chess with another user")
     .addUserOption(o => o.setName("opponent").setDescription("Your opponent").setRequired(true)),
 
-  // execute receives your framework object
   async execute({ client, interaction, message, args, isPrefix, safeReply }) {
-    // unify reply helper
-    const caller = isPrefix ? message.author : interaction.user;
-    const reply = async (options) => {
-      if (isPrefix) return message.channel.send(options);
-      if (safeReply) return safeReply(options);
-      return interaction.reply({ ...options, ephemeral: options.ephemeral ?? false });
-    };
+    const author = isPrefix ? message.author : interaction.user;
+    const opponent = isPrefix
+      ? message.mentions.users.first() || client.users.cache.get(args[0])
+      : interaction.options.getUser("opponent");
 
-    // resolve opponent
-    let opponent;
-    if (isPrefix) {
-      opponent = message.mentions.users.first() || client.users.cache.get(args[0]);
-    } else {
-      opponent = interaction.options.getUser("opponent");
-    }
+    const reply = async (opt) =>
+      isPrefix ? message.channel.send(opt) :
+      safeReply ? safeReply(opt) :
+      interaction.reply(opt);
 
-    if (!opponent) return reply({ content: "❌ You must mention an opponent." });
-    if (opponent.bot) return reply({ content: "❌ You can't play against a bot." });
-    if (opponent.id === caller.id) return reply({ content: "❌ You cannot play against yourself." });
+    if (!opponent) return reply({ content: "❌ Mention an opponent." });
+    if (opponent.bot) return reply({ content: "❌ You can’t play against bots." });
+    if (opponent.id === author.id) return reply({ content: "❌ You can’t play yourself." });
 
-    // determine who is white/black: challenger = white
-    const whiteId = caller.id;
-    const blackId = opponent.id;
     const chess = new Chess();
-
-    // initial cursor at e2 for white or e7 for black
-    const initialCursor = coordsToIndex(chess.turn() === "w" ? "e2" : "e7");
-
-    // game state stored per message
     const state = {
+      white: author.id,
+      black: opponent.id,
+      turn: author.id,
       chess,
-      whiteId,
-      blackId,
-      currentPlayerId: whiteId,
-      cursor: initialCursor,
-      selected: -1, // when player selects source becomes index
-      messageRef: null,
-      lastMoveSAN: null,
     };
 
-    // send initial embed
-    const embed = makeBoardEmbed(chess, whiteId, blackId, state.currentPlayerId, state.cursor, state.selected);
+    const buf = await renderBoard(chess);
+    const attachment = new AttachmentBuilder(buf, { name: "board.png" });
+    const embed = new EmbedBuilder()
+      .setTitle("♟️ Chess Game Started!")
+      .setDescription(`**White:** <@${author.id}>\n**Black:** <@${opponent.id}>`)
+      .setImage("attachment://board.png")
+      .setColor("Blue");
 
-    // send via appropriate method
-    let sent;
-    if (isPrefix) {
-      sent = await message.channel.send({ embeds: [embed], components: getControlRows(false) });
-    } else {
-      await interaction.deferReply();
-      sent = await interaction.editReply({ embeds: [embed], components: getControlRows(false), fetchReply: true });
-    }
+    const sent = await reply({ embeds: [embed], files: [attachment] });
+    const msg = isPrefix ? sent : await interaction.fetchReply();
+    games.set(msg.id, state);
 
-    // save game keyed by message id
-    activeGames.set(sent.id, state);
-    state.messageRef = sent;
-
-    // create collector
-    const collector = sent.createMessageComponentCollector({ time: 90_000 });
-
-    // helper to update embed
-    const updateMessage = async (reason) => {
-      const e = makeBoardEmbed(state.chess, state.whiteId, state.blackId, state.currentPlayerId, state.cursor, state.selected);
-      if (reason) e.setFooter({ text: reason });
-      try {
-        await sent.edit({ embeds: [e], components: getControlRows(false) });
-      } catch (err) { /* ignore */ }
-    };
-
-    // movement helpers
-    const moveCursor = (dir) => {
-      let r = Math.floor(state.cursor / 8);
-      let c = state.cursor % 8;
-      if (dir === "left") c = Math.max(0, c - 1);
-      if (dir === "right") c = Math.min(7, c + 1);
-      if (dir === "up") r = Math.max(0, r - 1);
-      if (dir === "down") r = Math.min(7, r + 1);
-      state.cursor = r * 8 + c;
-    };
+    const collector = msg.createMessageComponentCollector({ time: 90_000 });
 
     collector.on("collect", async (btn) => {
-      try {
-        // only allow players (white or black) to interact; but only current player may move
-        const userId = btn.user.id;
-        const turnColor = state.chess.turn() === "w" ? "w" : "b";
-        const expectedPlayer = (turnColor === "w") ? state.whiteId : state.blackId;
+      const userId = btn.user.id;
+      const game = games.get(msg.id);
+      if (!game) return btn.reply({ content: "Game not found.", ephemeral: true });
 
-        // Quick check: only game players can click (viewers prevented)
-        if (![state.whiteId, state.blackId].includes(userId)) {
-          return btn.reply({ content: "❌ You're not part of this game.", ephemeral: true });
-        }
+      const turnColor = game.chess.turn();
+      const expectedPlayer = turnColor === "w" ? game.white : game.black;
+      if (userId !== expectedPlayer)
+        return btn.reply({ content: "❌ Not your turn!", ephemeral: true });
 
-        // allow viewer to press resign if they're the opponent? only current player allowed to control except resign
-        if (btn.customId === "resign") {
-          if (userId !== state.whiteId && userId !== state.blackId) {
-            return btn.reply({ content: "❌ Only players can resign.", ephemeral: true });
-          }
-          collector.stop("resigned");
-          const winner = userId === state.whiteId ? state.blackId : state.whiteId;
-          await sent.edit({
-            embeds: [new EmbedBuilder().setTitle("🏳️ Resignation").setDescription(`<@${userId}> resigned. <@${winner}> wins!`).setColor("Red")],
-            components: []
-          });
-          return;
-        }
-
-        // Only current player can use navigation/select/confirm/undo/cancel
-        if (userId !== expectedPlayer) {
-          return btn.reply({ content: "❌ It's not your turn.", ephemeral: true });
-        }
-
-        // defer update quickly to avoid "This interaction failed"
-        await btn.deferUpdate();
-
-        if (["left","right","up","down"].includes(btn.customId)) {
-          moveCursor(btn.customId);
-          await updateMessage();
-          return;
-        }
-
-        if (btn.customId === "select") {
-          // If nothing selected => select source if piece of player's color exists
-          if (state.selected === -1) {
-            const sq = squareIndexToCoords(state.cursor);
-            const piece = state.chess.get(sq);
-            if (!piece || (piece.color !== (state.chess.turn() === "w" ? "w" : "b"))) {
-              // invalid select
-              await sent.edit({ embeds: [makeBoardEmbed(state.chess, state.whiteId, state.blackId, state.currentPlayerId, state.cursor, -1)] });
-              try { await btn.followUp({ content: "❌ You must select one of your pieces as source.", ephemeral: true }); } catch {}
-              return;
-            }
-            state.selected = state.cursor;
-            await updateMessage("Source selected. Move cursor to destination and press Select again.");
-            return;
-          } else {
-            // selected exists -> attempt the move from selected to cursor
-            const from = squareIndexToCoords(state.selected);
-            const to = squareIndexToCoords(state.cursor);
-            const move = state.chess.move({ from, to, promotion: "q" });
-            if (!move) {
-              // invalid move
-              state.selected = -1;
-              await updateMessage("❌ Invalid move. Selection cleared.");
-              try { await btn.followUp({ content: "❌ That move is illegal.", ephemeral: true }); } catch {}
-              return;
-            }
-
-            // successful move
-            state.lastMoveSAN = move.san;
-            state.selected = -1;
-            // switch player automatically by chess.js turn state
-            state.currentPlayerId = state.chess.turn() === "w" ? state.whiteId : state.blackId;
-
-            // check game end states
-            if (state.chess.isCheckmate()) {
-              collector.stop("checkmate");
-              await sent.edit({
-                embeds: [new EmbedBuilder().setTitle("🏆 Checkmate!").setDescription(renderBoard(state.chess)).addFields({ name: "Winner", value: `<@${btn.user.id}>` }).setColor("Gold")],
-                components: []
-              });
-              return;
-            }
-            if (state.chess.isDraw() || state.chess.isStalemate() || state.chess.isInsufficientMaterial()) {
-              collector.stop("draw");
-              await sent.edit({
-                embeds: [new EmbedBuilder().setTitle("🤝 Draw").setDescription(renderBoard(state.chess)).setColor("Grey")],
-                components: []
-              });
-              return;
-            }
-
-            // update message with new board
-            await updateMessage(`Move: ${state.lastMoveSAN}`);
-            return;
-          }
-        }
-
-        if (btn.customId === "undo") {
-          if (state.chess.history().length === 0) {
-            try { await btn.followUp({ content: "❌ Nothing to undo.", ephemeral: true }); } catch {}
-            return;
-          }
-          const undone = state.chess.undo();
-          state.currentPlayerId = state.chess.turn() === "w" ? state.whiteId : state.blackId;
-          state.selected = -1;
-          await updateMessage(`Undone: ${undone ? undone.san : "?"}`);
-          return;
-        }
-
-        if (btn.customId === "confirm") {
-          // confirm is redundant here, but keep for workflows where manual confirm desired
-          await btn.followUp({ content: "✅ Confirm pressed.", ephemeral: true });
-          return;
-        }
-
-        if (btn.customId === "cancel") {
-          collector.stop("cancel");
-          await sent.edit({ content: "❌ Game cancelled.", components: [] }).catch(() => {});
-          return;
-        }
-
-      } catch (err) {
-        console.error("Chess collect error:", err);
+      if (btn.customId === "cancel") {
+        collector.stop("cancel");
+        await btn.update({ content: "Game cancelled.", components: [] });
+        return;
       }
+
+      // first click: piece selection
+      if (!game.selected) {
+        const square = btn.customId.replace("move_", "");
+        const piece = game.chess.get(square);
+        if (!piece || piece.color !== turnColor)
+          return btn.reply({ content: "Select one of your pieces.", ephemeral: true });
+
+        const validMoves = game.chess.moves({ square, verbose: true });
+        if (validMoves.length === 0)
+          return btn.reply({ content: "No valid moves for that piece.", ephemeral: true });
+
+        game.selected = square;
+        await btn.update({ content: `Select move for **${square}**`, components: moveButtons(validMoves) });
+        return;
+      }
+
+      // second click: destination
+      const to = btn.customId.replace("move_", "");
+      const from = game.selected;
+      const move = game.chess.move({ from, to, promotion: "q" });
+
+      if (!move) return btn.reply({ content: "Invalid move.", ephemeral: true });
+
+      game.selected = null;
+      game.turn = userId === game.white ? game.black : game.white;
+
+      const buf = await renderBoard(game.chess);
+      const attachment = new AttachmentBuilder(buf, { name: "board.png" });
+      const embed = new EmbedBuilder()
+        .setTitle("♟️ Chess Game")
+        .setDescription(
+          `**White:** <@${game.white}>\n**Black:** <@${game.black}>\n**Turn:** <@${game.turn}>`
+        )
+        .setImage("attachment://board.png")
+        .setColor("Blue");
+
+      if (game.chess.isCheckmate()) {
+        collector.stop("checkmate");
+        embed.setTitle("🏆 Checkmate!").setDescription(`<@${btn.user.id}> wins!`);
+        return btn.update({ embeds: [embed], files: [attachment], components: [] });
+      }
+
+      if (game.chess.isDraw()) {
+        collector.stop("draw");
+        embed.setTitle("🤝 Draw Game");
+        return btn.update({ embeds: [embed], files: [attachment], components: [] });
+      }
+
+      await btn.update({ embeds: [embed], files: [attachment], components: [] });
     });
 
     collector.on("end", async (_, reason) => {
-      activeGames.delete(sent.id);
-      // if ended by inactivity
       if (reason === "time") {
-        try {
-          await sent.edit({ content: "⏰ Game ended due to inactivity.", components: [] }).catch(() => {});
-        } catch {}
+        await msg.edit({ content: "⏰ Game ended due to inactivity.", components: [] }).catch(() => {});
       }
+      games.delete(msg.id);
     });
-
-    // return command finished
-    return;
   },
 };
