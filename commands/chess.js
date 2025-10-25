@@ -14,7 +14,7 @@ const fs = require("fs");
 const games = new Map();
 
 // =============================
-// 🧩 Render the Chess Board
+// 🧩 Render Chess Board
 // =============================
 async function renderBoard(chess) {
   const tileSize = 80;
@@ -68,7 +68,6 @@ function moveButtons(moves) {
     rows.push(row);
   }
 
-  // Add cancel button
   rows.push(
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -81,16 +80,16 @@ function moveButtons(moves) {
 }
 
 // =============================
-// ♟️ Main Command
+// ♟️ Chess Command
 // =============================
 module.exports = {
   name: "chess",
-  description: "Play chess with another user (visual board + valid moves).",
+  description: "Play chess with another user (slash + prefix supported).",
   data: new SlashCommandBuilder()
     .setName("chess")
     .setDescription("Play chess with another user")
-    .addUserOption((o) =>
-      o.setName("opponent").setDescription("Your opponent").setRequired(true)
+    .addUserOption((opt) =>
+      opt.setName("opponent").setDescription("Choose your opponent").setRequired(true)
     ),
 
   async execute({ client, interaction, message, args, isPrefix, safeReply }) {
@@ -106,12 +105,13 @@ module.exports = {
         ? safeReply(opt)
         : interaction.reply(opt);
 
-    if (!opponent) return reply({ content: "❌ Mention an opponent." });
-    if (opponent.bot) return reply({ content: "❌ You can’t play against bots." });
+    if (!opponent)
+      return reply({ content: "❌ Please mention or provide a valid opponent!" });
+    if (opponent.bot) return reply({ content: "🤖 You can’t play against bots." });
     if (opponent.id === author.id)
-      return reply({ content: "❌ You can’t play yourself." });
+      return reply({ content: "🚫 You can’t play against yourself!" });
 
-    // Initialize game state
+    // Game setup
     const chess = new Chess();
     const state = {
       white: author.id,
@@ -121,7 +121,7 @@ module.exports = {
       selectedSquare: null,
     };
 
-    // Create initial board image
+    // Render first board
     const buf = await renderBoard(chess);
     const attachment = new AttachmentBuilder(buf, { name: "board.png" });
     const embed = new EmbedBuilder()
@@ -130,7 +130,7 @@ module.exports = {
       .setImage("attachment://board.png")
       .setColor("Blue");
 
-    const row = new ActionRowBuilder().addComponents(
+    const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("select")
         .setLabel("🎯 Select Piece")
@@ -141,60 +141,57 @@ module.exports = {
         .setStyle(ButtonStyle.Danger)
     );
 
-    const sent = await reply({
-      embeds: [embed],
-      files: [attachment],
-      components: [row],
-    });
-
+    const sent = await reply({ embeds: [embed], files: [attachment], components: [buttons] });
     const msg = isPrefix ? sent : await interaction.fetchReply();
     games.set(msg.id, state);
 
-    // Collector for 5 minutes
-    const collector = msg.createMessageComponentCollector({ time: 300_000 });
+    // Collector setup
+    const collector = msg.createMessageComponentCollector({ time: 300000 });
 
     collector.on("collect", async (btn) => {
-      try {
-        await btn.deferUpdate(); // prevent “interaction failed”
-      } catch {}
       const userId = btn.user.id;
       const game = games.get(msg.id);
       if (!game) return;
 
+      const btnSafeReply = async (opts) => {
+        try {
+          if (btn.replied) return await btn.followUp({ ...opts, ephemeral: true }).catch(() => {});
+          if (btn.deferred) return await btn.editReply(opts).catch(() => {});
+          return await btn.reply({ ...opts, ephemeral: true }).catch(() => {});
+        } catch (e) {
+          console.error("Button safe reply failed:", e);
+        }
+      };
+
       const turnColor = game.chess.turn();
       const expectedPlayer = turnColor === "w" ? game.white : game.black;
-      if (userId !== expectedPlayer)
-        return btn.followUp({ content: "❌ Not your turn!", ephemeral: true });
 
-      // Handle Resign
+      if (userId !== expectedPlayer)
+        return btnSafeReply({ content: "❌ It's not your turn!" });
+
+      // Resign
       if (btn.customId === "resign") {
         collector.stop("resign");
-        return msg.edit({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("🏳️ Resigned!")
-              .setDescription(
-                `<@${userId}> resigned. <@${
-                  expectedPlayer === game.white ? game.black : game.white
-                }> wins!`
-              )
-              .setColor("Red"),
-          ],
-          components: [],
-        });
+        const embed = new EmbedBuilder()
+          .setTitle("🏳️ Resigned!")
+          .setDescription(
+            `<@${userId}> resigned. <@${
+              expectedPlayer === game.white ? game.black : game.white
+            }> wins!`
+          )
+          .setColor("Red");
+        return msg.edit({ embeds: [embed], components: [] });
       }
 
-      // Select a piece
+      // Select piece
       if (btn.customId === "select") {
-        await btn.followUp({
-          content:
-            "Type the square (like `e2`) of the piece you want to move in chat.",
-          ephemeral: true,
+        await btnSafeReply({
+          content: "Type the square (like `e2`) of the piece you want to move in chat.",
         });
 
         const filter = (m) => m.author.id === userId;
         const collected = await btn.channel
-          .awaitMessages({ filter, max: 1, time: 30_000 })
+          .awaitMessages({ filter, max: 1, time: 30000 })
           .catch(() => null);
         const squareMsg = collected?.first();
         if (!squareMsg) return;
@@ -202,36 +199,27 @@ module.exports = {
         const square = squareMsg.content.trim().toLowerCase();
         const piece = game.chess.get(square);
         if (!piece || piece.color !== turnColor)
-          return btn.followUp({
-            content: "❌ Invalid piece selection.",
-            ephemeral: true,
-          });
+          return btnSafeReply({ content: "❌ Invalid piece selection." });
 
         const validMoves = game.chess.moves({ square, verbose: true });
         if (validMoves.length === 0)
-          return btn.followUp({
-            content: "No valid moves for that piece.",
-            ephemeral: true,
-          });
+          return btnSafeReply({ content: "No valid moves for that piece." });
 
         game.selectedSquare = square;
-        return btn.followUp({
+        return btnSafeReply({
           content: `Select a move for **${square}**`,
           components: moveButtons(validMoves),
-          ephemeral: true,
         });
       }
 
-      // Handle moving a piece
+      // Move handler
       if (btn.customId.startsWith("move_")) {
         const to = btn.customId.replace("move_", "");
         const from = game.selectedSquare;
-        if (!from)
-          return btn.followUp({ content: "No piece selected.", ephemeral: true });
+        if (!from) return btnSafeReply({ content: "No piece selected." });
 
         const move = game.chess.move({ from, to, promotion: "q" });
-        if (!move)
-          return btn.followUp({ content: "❌ Invalid move.", ephemeral: true });
+        if (!move) return btnSafeReply({ content: "❌ Invalid move." });
 
         game.selectedSquare = null;
         game.turn = userId === game.white ? game.black : game.white;
@@ -248,46 +236,25 @@ module.exports = {
 
         if (game.chess.isCheckmate()) {
           collector.stop("checkmate");
-          embed
-            .setTitle("🏆 Checkmate!")
-            .setDescription(`<@${btn.user.id}> wins!`);
-          return msg.edit({
-            embeds: [embed],
-            files: [attachment],
-            components: [],
-          });
+          embed.setTitle("🏆 Checkmate!").setDescription(`<@${btn.user.id}> wins!`);
+          return msg.edit({ embeds: [embed], files: [attachment], components: [] });
         }
 
         if (game.chess.isDraw()) {
           collector.stop("draw");
           embed.setTitle("🤝 Draw Game");
-          return msg.edit({
-            embeds: [embed],
-            files: [attachment],
-            components: [],
-          });
+          return msg.edit({ embeds: [embed], files: [attachment], components: [] });
         }
 
         await msg.edit({
           embeds: [embed],
           files: [attachment],
-          components: [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder()
-                .setCustomId("select")
-                .setLabel("🎯 Select Piece")
-                .setStyle(ButtonStyle.Success),
-              new ButtonBuilder()
-                .setCustomId("resign")
-                .setLabel("🏳️ Resign")
-                .setStyle(ButtonStyle.Danger)
-            ),
-          ],
+          components: [buttons],
         });
       }
 
       if (btn.customId === "cancel") {
-        await btn.followUp({ content: "Selection cancelled.", ephemeral: true });
+        await btnSafeReply({ content: "❌ Selection cancelled." });
       }
     });
 
