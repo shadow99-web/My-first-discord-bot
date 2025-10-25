@@ -68,15 +68,28 @@ module.exports = (client, blockHelpers) => {
 
       // ---------- Buttons ----------
       if (interaction.isButton()) {
-        try {
-          if (interaction.customId === "ticket_close_button") await handleTicketClose(interaction, safeReply);
-        } catch (err) {
-          console.error("❌ Button interaction error:", err);
-          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
-        }
-        return;
-      }
+  try {
+    const id = interaction.customId;
 
+    // 🎟️ Ticket system
+    if (id === "ticket_close_button") {
+      await handleTicketClose(interaction, safeReply);
+      return;
+    }
+
+    // ♟️ Chess game buttons
+    const chess = client.commands.get("chess");
+    if (chess && ["select", "resign", "cancel"].some((x) => id.startsWith(x)) || id.startsWith("move_")) {
+      await chess.handleButton?.(interaction, client);
+      return;
+    }
+
+  } catch (err) {
+    console.error("❌ Button interaction error:", err);
+    await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+  }
+  return;
+      }
       // ---------- Select Menus ----------
       if (interaction.isStringSelectMenu()) {
         try {
