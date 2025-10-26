@@ -1,5 +1,5 @@
 const { AttachmentBuilder, EmbedBuilder } = require("discord.js");
-const canvacord = require("canvacord"); // make sure this matches your package.json
+const { WelcomeLeave }= require("canvacord"); // make sure this matches your package.json
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
