@@ -1,5 +1,5 @@
 const { AttachmentBuilder, EmbedBuilder } = require("discord.js");
-const canvacord = require("canvacord"); // Use the main object
+const { Welcome } = require("canvacord"); // ✅ import Welcome directly
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
@@ -16,21 +16,23 @@ module.exports = (client) => {
       const channel = member.guild.channels.cache.get(settings.channelId);
       if (!channel) return;
 
-      const avatar = member.user.displayAvatarURL({ extension: "png", size: 256 }) || "https://cdn.discordapp.com/embed/avatars/0.png";
+      const avatar = member.user.displayAvatarURL({ extension: "png", size: 256 });
       const background = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
 
-      // Create welcome card using canvacord.Welcome()
-      const buffer = await canvacord.Welcome()
+      // ✅ Use the new Welcome() constructor directly
+      const card = new Welcome()
         .setUsername(member.user.username)
         .setDiscriminator(member.user.discriminator)
         .setAvatar(avatar)
-        .setColor("username-box", "#5865F2")
-        .setColor("discriminator-box", "#5865F2")
+        .setBackground(background)
+        .setColor("title", "#5865F2")
+        .setColor("username-box", "#23272A")
+        .setColor("discriminator-box", "#2C2F33")
         .setColor("message-box", "#2C2F33")
         .setColor("border", "#5865F2")
-        .setBackground("IMAGE", background)
-        .setText("Welcome to the server!") // optional overlay text
-        .build();
+        .setText("message", "Welcome to the server!");
+
+      const buffer = await card.build(); // ✅ Build the image
 
       const attachment = new AttachmentBuilder(buffer, { name: "WelcomeCard.png" });
       await channel.send({ content: `🎉 Welcome ${member}!`, files: [attachment] });
@@ -38,6 +40,8 @@ module.exports = (client) => {
     } catch (err) {
       console.error("❌ Welcome card error:", err);
     }
+
+   
 
     // =================== 👋 Greet System ===================
     try {
