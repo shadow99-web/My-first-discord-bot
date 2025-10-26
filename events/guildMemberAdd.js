@@ -1,5 +1,5 @@
 const { AttachmentBuilder, EmbedBuilder } = require("discord.js");
-const canvacard = require("canvacard");
+const canvacord = require("canvacord"); // make sure this matches your package.json
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
@@ -8,7 +8,7 @@ module.exports = (client) => {
   client.on("guildMemberAdd", async (member) => {
     const guildId = member.guild.id;
 
-    // =================== 🌟 Welcome Card ===================
+    // ===== Welcome Card =====
     try {
       const settings = await WelcomeSettings.findOne({ guildId });
       if (!settings || !settings.channelId) return;
@@ -16,56 +16,53 @@ module.exports = (client) => {
       const channel = member.guild.channels.cache.get(settings.channelId);
       if (!channel) return;
 
-      // Avatar & Background
       const avatar = member.user.displayAvatarURL({ extension: "png", size: 256 }) || "https://cdn.discordapp.com/embed/avatars/0.png";
       const background = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
 
-      // Build the card
-      const welcomer = new canvacard.WelcomeLeave()
+      // canvacord WelcomeLeave
+      const welcomer = new canvacord.WelcomeLeave()
         .setAvatar(avatar)
-        .setBackground('IMAGE', background)
-        .setTitle(`Welcome ${member.user.username}!`, '#FFFFFF')
-        .setSubtitle(`to ${member.guild.name}`, '#FFFFFF')
+        .setBackground("IMAGE", background)
+        .setTitle(`Welcome ${member.user.username}!`, "#FFFFFF")
+        .setSubtitle(`to ${member.guild.name}`, "#FFFFFF")
         .setOpacityOverlay(0.5)
-        .setColorCircle('#FFFFFF')
-        .setColorOverlay('#5865F2')
-        .setTypeOverlay('ROUNDED');
+        .setColorCircle("#FFFFFF")
+        .setColorOverlay("#5865F2")
+        .setTypeOverlay("ROUNDED");
 
       const data = await welcomer.build("Cascadia Code PL, Noto Color Emoji");
       const attachment = new AttachmentBuilder(data, { name: "WelcomeCard.png" });
-
       await channel.send({ content: `🎉 Welcome ${member}!`, files: [attachment] });
 
     } catch (err) {
       console.error("❌ Welcome card error:", err);
     }
 
-    // =================== 👋 Greet System ===================
+    // ===== Greet System =====
     try {
       const greet = await getGreet(guildId);
       const channelId = (await getChannel(guildId)) || member.guild.systemChannelId;
       if (greet && channelId) {
-        const channel = member.guild.channels.cache.get(channelId);
-        if (!channel) return;
+        const greetChannel = member.guild.channels.cache.get(channelId);
+        if (!greetChannel) return;
 
         let text = greet.text || "";
-        text = text
-          .replace(/{user}/gi, member.toString())
-          .replace(/{server}/gi, member.guild.name || "This Server")
-          .replace(/{count}/gi, member.guild.memberCount.toString());
+        text = text.replace(/{user}/gi, member.toString())
+                   .replace(/{server}/gi, member.guild.name || "This Server")
+                   .replace(/{count}/gi, member.guild.memberCount.toString());
 
         const embed = new EmbedBuilder()
           .setColor("Blue")
           .setDescription(text || "👋 Welcome!")
           .setFooter({ text: `Added by ${greet.author || "Bot"}` });
 
-        await channel.send({ embeds: [embed], files: greet.attachment ? [greet.attachment] : [] });
+        await greetChannel.send({ embeds: [embed], files: greet.attachment ? [greet.attachment] : [] });
       }
     } catch (err) {
       console.error("❌ Failed to send greet:", err);
     }
 
-    // =================== 🤖 Autorole System ===================
+    // ===== Autorole =====
     try {
       const guildConfig = await getAutoroleConfig(guildId);
       if (!guildConfig) return;
