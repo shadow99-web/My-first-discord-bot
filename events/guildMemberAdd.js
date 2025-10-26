@@ -1,15 +1,15 @@
 const { AttachmentBuilder, EmbedBuilder } = require("discord.js");
-const { Welcome } = require("canvacord-cards");
+const { Welcome } = require("canvacord");
+const WelcomeSettings = require("../models/WelcomeSettings.js");
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
-const WelcomeSettings = require("../models/WelcomeSettings.js");
 
 module.exports = (client) => {
   client.on("guildMemberAdd", async (member) => {
     const guildId = member.guild.id;
 
-    // =================== 🌟 Welcome Card ===================
     try {
+      // ===== 🌟 Welcome Card =====
       const settings = await WelcomeSettings.findOne({ guildId });
       if (!settings || !settings.channelId) return;
 
@@ -19,37 +19,29 @@ module.exports = (client) => {
       const avatar = member.user.displayAvatarURL({ extension: "png", size: 256 });
       const background = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
 
-      // ✅ New canvacord-cards syntax
       const card = new Welcome()
-        .setAvatar(avatar)
         .setUsername(member.user.username)
         .setDiscriminator(member.user.discriminator)
-        .setGuildName(member.guild.name)
         .setMemberCount(member.guild.memberCount.toString())
-        .setBackground(background)
-        .setMainText("Welcome to the server!")
-        .setTheme("dark");
+        .setAvatar(avatar)
+        .setBackground("IMAGE", background)
+        .setColor("username-box", "#5865F2")
+        .setColor("discriminator-box", "#5865F2")
+        .setColor("message-box", "#23272A")
+        .setColor("title", "#FFFFFF")
+        .setText("title", "Welcome")
+        .setText("message", `to ${member.guild.name}!`);
 
       const image = await card.build();
-      const attachment = new AttachmentBuilder(image, { name: "WelcomeCard.png" });
+      const attachment = new AttachmentBuilder(image, { name: "welcome.png" });
 
-      await channel.send({ content: `🎉 Welcome ${member}!`, files: [attachment] });
+      await channel.send({
+        content: `🎉 Welcome ${member}!`,
+        files: [attachment]
+      });
     } catch (err) {
       console.error("❌ Welcome card error:", err);
-
-      // Fallback to text message if image fails
-      try {
-        const settings = await WelcomeSettings.findOne({ guildId });
-        if (settings?.channelId) {
-          const channel = member.guild.channels.cache.get(settings.channelId);
-          if (channel) {
-            await channel.send(`🌸 Welcome ${member} to **${member.guild.name}**!`);
-          }
-        }
-      } catch {}
     }
-
-   
 
     // =================== 👋 Greet System ===================
     try {
