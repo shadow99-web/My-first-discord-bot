@@ -4,6 +4,12 @@ const WelcomeSettings = require("../models/WelcomeSettings.js");
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
 
+// ✅ Helper: validate URL
+const isValidUrl = (url) => {
+  try { new URL(url); return true; } 
+  catch { return false; }
+};
+
 module.exports = (client) => {
   client.on("guildMemberAdd", async (member) => {
     const guildId = member.guild.id;
@@ -17,21 +23,22 @@ module.exports = (client) => {
       if (!channel) return;
 
       const avatar = member.user.displayAvatarURL({ format: "png", size: 256 });
-      const background = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
+      const background = isValidUrl(settings.background)
+        ? settings.background
+        : "https://i.imgur.com/3ZUrjUP.jpeg";
 
-      // ✅ Correct for canvacord@5.4.8
       const card = new canvacord.Welcomer()
         .setUsername(member.user.username)
         .setDiscriminator(member.user.discriminator)
         .setMemberCount(member.guild.memberCount)
         .setGuildName(member.guild.name)
         .setAvatar(avatar)
-        .setBackground("IMAGE", background)
+        .setBackground(background) // ✅ validated URL
         .setColor("title", "#ffffff")
         .setColor("username-box", "#5865F2")
         .setColor("message-box", "#2C2F33")
-        .setText("message", `Welcome to ${member.guild.name}`)
         .setText("title", "WELCOME!")
+        .setText("message", `to ${member.guild.name}!`)
         .setText("member-count", `You're member #${member.guild.memberCount}`);
 
       const buffer = await card.build();
@@ -42,9 +49,11 @@ module.exports = (client) => {
         files: [attachment],
       });
 
+      console.log(`✅ Welcome card sent for ${member.user.tag}`);
     } catch (err) {
       console.error("❌ Welcome card error:", err);
     }
+
 
     // =================== 👋 Greet System ===================
     try {
