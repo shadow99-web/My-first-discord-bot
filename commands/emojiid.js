@@ -1,8 +1,4 @@
-const { 
-  SlashCommandBuilder, 
-  EmbedBuilder, 
-  parseEmoji 
-} = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, parseEmoji, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,64 +15,67 @@ module.exports = {
 
   async execute(context) {
     const { isPrefix, message, interaction, args } = context;
+    let guild = message?.guild || interaction?.guild;
 
     // Unified input extraction
     const input = isPrefix 
       ? args[0] 
       : interaction.options.getString("emoji");
     
+    const errorReply = (text) => 
+      isPrefix 
+        ? message.reply({ content: text }).catch(() => {}) 
+        : interaction.reply({ content: text, ephemeral: true }).catch(() => {});
+
     if (!input) {
-      const replyText = "❌ Please provide an emoji or emoji name.";
-      return isPrefix 
-        ? message.reply(replyText) 
-        : interaction.reply({ content: replyText, ephemeral: true });
+      return errorReply("❌ Please provide an emoji or emoji name.");
     }
 
-    // Try parsing with Discord.js built-in function
-    const parsed = parseEmoji(input);
-
+    // Try to find or parse emoji
     let emojiData = null;
+    let parsed = parseEmoji(input);
 
-    // ✅ Case 1: Parsed valid custom emoji like <:name:id>
-    if (parsed?.id) {
-      emojiData = {
-        id: parsed.id,
-        name: parsed.name,
-        animated: parsed.animated ?? false
-      };
-    }
-
-    // ✅ Case 2: User gave a :name: input, so try finding by name
-    else if (input.startsWith(":") && input.endsWith(":")) {
-      const name = input.replace(/:/g, "");
-      const found = message?.guild?.emojis?.cache.find(e => e.name.toLowerCase() === name.toLowerCase());
-
+    // 1. Guild emoji by name (for :name: style or plain name)
+    if (
+      guild &&
+      (
+        (input.startsWith(":") && input.endsWith(":")) ||
+        (!parsed.id && input.length <= 32) // likely a name, Discord emoji names max 32 chars
+      )
+    ) {
+      // Remove colons if present
+      const normalized = input.replace(/:/g, "");
+      const found = guild.emojis.cache.find(e => e.name.toLowerCase() === normalized.toLowerCase());
       if (found) {
         emojiData = {
           id: found.id,
           name: found.name,
-          animated: found.animated
+          animated: found.animated,
         };
+        parsed = { id: found.id, name: found.name, animated: found.animated };
       }
     }
 
-    // ✅ Case 3: Regular unicode emoji (😎)
-    else if (!parsed?.id) {
-      const replyText = "❌ This appears to be a standard Unicode emoji — it doesn’t have an ID.";
-      return isPrefix 
-        ? message.reply(replyText) 
-        : interaction.reply({ content: replyText, ephemeral: true });
+    // 2. Custom emoji string e.g. <:name:id> or <a:name:id>
+    if (!emojiData && parsed?.id) {
+      emojiData = {
+        id: parsed.id,
+        name: parsed.name,
+        animated: parsed.animated ?? false,
+      };
     }
 
-    // 🧩 Invalid or unknown
+    // 3. Unicode emoji (no ID)
+    if (!emojiData && input && !parsed?.id) {
+      return errorReply("❌ This appears to be a standard Unicode emoji — it doesn’t have an ID.");
+    }
+
+    // Not found
     if (!emojiData) {
-      const replyText = "❌ Could not find that emoji. Make sure it’s a valid server or Discord emoji.";
-      return isPrefix 
-        ? message.reply(replyText) 
-        : interaction.reply({ content: replyText, ephemeral: true });
+      return errorReply("❌ Could not find that emoji. Make sure it’s a valid custom emoji name, emoji object, or in this server.");
     }
 
-    // ✅ Construct embed with all details
+    // Construct embed with all details
     const emojiURL = `https://cdn.discordapp.com/emojis/${emojiData.id}.${emojiData.animated ? "gif" : "png"}?v=1`;
     const emojiFormat = `<${emojiData.animated ? "a" : ""}:${emojiData.name}:${emojiData.id}>`;
 
@@ -95,8 +94,10 @@ module.exports = {
       .setFooter({ text: "Fetched via hybrid emojiid command" })
       .setTimestamp();
 
-    return isPrefix
-      ? message.reply({ embeds: [embed] })
-      : interaction.reply({ embeds: [embed] });
+    if (isPrefix) {
+      return message.reply({ embeds: [embed] }).catch(() => {});
+    } else {
+      return interaction.reply({ embeds: [embed] }).catch(() => {});
+    }
   }
 };
