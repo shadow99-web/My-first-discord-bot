@@ -1,4 +1,8 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { 
+  SlashCommandBuilder, 
+  PermissionFlagsBits, 
+  MessageFlags 
+} = require("discord.js");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
 
 module.exports = {
@@ -33,7 +37,10 @@ module.exports = {
   usage: "!setwelcome channel #channel [background]",
 
   // -------- PREFIX COMMAND EXECUTION --------
-  async execute({ message, args }) {
+  async execute(ctx) {
+    const message = ctx.message;
+    const args = ctx.args;
+
     if (!message?.guild) {
       return message.reply("❌ This command can only be used inside a server.");
     }
@@ -66,7 +73,6 @@ module.exports = {
       return message.reply("🧹 Welcome system has been reset.");
     }
 
-    // If no args
     return message.reply("❓ Usage: `!setwelcome channel #channel [background]`");
   },
 
@@ -75,14 +81,14 @@ module.exports = {
     if (!interaction.inGuild()) {
       return interaction.reply({
         content: "❌ This command can only be used in a server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral, // Replaces deprecated 'ephemeral'
       });
     }
 
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({
         content: "🚫 You need **Manage Server** permission to use this command.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -100,7 +106,6 @@ module.exports = {
 
       return interaction.reply({
         content: `✅ Welcome system set to ${channel} ${bg ? `with background: ${bg}` : ""}`,
-        ephemeral: false,
       });
     }
 
@@ -108,7 +113,6 @@ module.exports = {
       await WelcomeSettings.findOneAndDelete({ guildId: interaction.guild.id });
       return interaction.reply({
         content: "🧹 Welcome system has been reset.",
-        ephemeral: false,
       });
     }
   },
