@@ -7,9 +7,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
-const { RankCardBuilder, Font } = require("canvacord");
-Font.loadDefault(); // Needed to avoid blank text
-
+const canvacord = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
 
@@ -43,17 +41,20 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
       userData.xp -= nextLevelXP
 
       // 🏆 Create rank card
-      const rankCard = new RankCardBuilder()
+      
+
+// ...later in your leveling system
+const rankCard = new canvacord.Rank()
   .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
-  .setCurrentXP(userData.xp)         // XP after deducting for new level
+  .setCurrentXP(userData.xp)
   .setRequiredXP(nextLevelXP)
   .setLevel(userData.level)
-  .setUsername(`${message.author.username}#${message.author.discriminator}`) // Combines username and discriminator
+  .setUsername(message.author.username)
+  .setDiscriminator(message.author.discriminator)
   .setBackground("COLOR", "#F2F3F5");
 
-// .setProgressBar() is not available in v6+
 const rankImage = await rankCard.build();
-
+      
       // 🔍 Find rank-up channel or fallback to current one
       const rankChannelData = await RankChannel.findOne({ guildId });
       const targetChannel = rankChannelData
