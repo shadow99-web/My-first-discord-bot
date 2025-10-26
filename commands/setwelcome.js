@@ -1,12 +1,18 @@
 const { 
   SlashCommandBuilder, 
   PermissionFlagsBits, 
-  MessageFlags 
+  MessageFlags, 
+  EmbedBuilder 
 } = require("discord.js");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
 
 module.exports = {
-  // -------- SLASH COMMAND STRUCTURE --------
+  // ---------- Command Info ----------
+  name: "setwelcome",
+  description: "Setup or reset the welcome card system (prefix + slash supported)",
+  usage: "!setwelcome channel #channel [background]",
+
+  // ---------- Slash Command Structure ----------
   data: new SlashCommandBuilder()
     .setName("setwelcome")
     .setDescription("Setup or reset the welcome card system")
@@ -31,89 +37,87 @@ module.exports = {
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-  // -------- HYBRID SUPPORT METADATA --------
-  name: "setwelcome",
-  description: "Setup or reset the welcome card system (prefix + slash supported)",
-  usage: "!setwelcome channel #channel [background]",
+  // ---------- Unified Execute (for both Slash and Prefix) ----------
+  async execute({ client, interaction, message, args, isPrefix, safeReply }) {
+    try {
+      const guild = interaction?.guild || message?.guild;
 
-  // -------- PREFIX COMMAND EXECUTION --------
-  async execute(ctx) {
-    const message = ctx.message;
-    const args = ctx.args;
+      if (!guild) {
+        const reply = "❌ This command can only be used inside a server.";
+        return isPrefix ? message.reply(reply) : interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
+      }
 
-    if (!message?.guild) {
-      return message.reply("❌ This command can only be used inside a server.");
-    }
+      const member = interaction?.member || message?.member;
+      if (!member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        const reply = "🚫 You need **Manage Server** permission to use this command.";
+        return isPrefix ? message.reply(reply) : interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
+      }
 
-    if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return message.reply("🚫 You need **Manage Server** permission to use this command.");
-    }
+      // Detect mode: prefix sub or slash sub
+      let sub;
+      if (isPrefix) {
+        sub = args[0];
+      } else {
+        sub = interaction.options.getSubcommand();
+      }
 
-    const sub = args[0];
+      // Handle 'channel' subcommand
+      if (sub === "channel") {
+        let channel, bg;
+        if (isPrefix) {
+          channel = message.mentions.channels.first();
+          bg = args[2] || null;
+          if (!channel) return message.reply("❌ Please mention a valid channel.");
+        } else {
+          channel = interaction.options.getChannel("channel");
+          bg = interaction.options.getString("background");
+        }
 
-    if (sub === "channel") {
-      const channel = message.mentions.channels.first();
-      const bg = args[2] || null;
+        await WelcomeSettings.findOneAndUpdate(
+          { guildId: guild.id },
+          { channelId: channel.id, background: bg },
+          { upsert: true, new: true }
+        );
 
-      if (!channel) return message.reply("❌ Please mention a valid channel.");
+        const embed = new EmbedBuilder()
+          .setColor("Green")
+          .setTitle("✅ Welcome System Updated")
+          .setDescription(
+            `Welcome cards will now be sent in ${channel}${bg ? `
+  Background: ${bg}` : ""}`
+          );
 
-      await WelcomeSettings.findOneAndUpdate(
-        { guildId: message.guild.id },
-        { channelId: channel.id, background: bg },
-        { upsert: true, new: true }
-      );
+        if (isPrefix) return message.reply({ embeds: [embed] });
+        return interaction.reply({ embeds: [embed] });
+      }
 
-      return message.reply(
-        `✅ Welcome system set to ${channel} ${bg ? `with background: ${bg}` : ""}`
-      );
-    }
+      // Handle 'reset' subcommand
+      if (sub === "reset") {
+        await WelcomeSettings.findOneAndDelete({ guildId: guild.id });
 
-    if (sub === "reset") {
-      await WelcomeSettings.findOneAndDelete({ guildId: message.guild.id });
-      return message.reply("🧹 Welcome system has been reset.");
-    }
+        const embed = new EmbedBuilder()
+          .setColor("Orange")
+          .setTitle("🧹 Welcome System Reset")
+          .setDescription("The welcome system has been reset for this server.");
 
-    return message.reply("❓ Usage: `!setwelcome channel #channel [background]`");
-  },
+        if (isPrefix) return message.reply({ embeds: [embed] });
+        return interaction.reply({ embeds: [embed] });
+      }
 
-  // -------- SLASH COMMAND EXECUTION --------
-  async runSlash(interaction) {
-    if (!interaction.inGuild()) {
-      return interaction.reply({
-        content: "❌ This command can only be used in a server.",
-        flags: MessageFlags.Ephemeral, // Replaces deprecated 'ephemeral'
-      });
-    }
-
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({
-        content: "🚫 You need **Manage Server** permission to use this command.",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    const sub = interaction.options.getSubcommand();
-
-    if (sub === "channel") {
-      const channel = interaction.options.getChannel("channel");
-      const bg = interaction.options.getString("background");
-
-      await WelcomeSettings.findOneAndUpdate(
-        { guildId: interaction.guild.id },
-        { channelId: channel.id, background: bg },
-        { upsert: true, new: true }
-      );
-
-      return interaction.reply({
-        content: `✅ Welcome system set to ${channel} ${bg ? `with background: ${bg}` : ""}`,
-      });
-    }
-
-    if (sub === "reset") {
-      await WelcomeSettings.findOneAndDelete({ guildId: interaction.guild.id });
-      return interaction.reply({
-        content: "🧹 Welcome system has been reset.",
-      });
+      // Invalid usage
+      if (isPrefix) {
+        return message.reply("❓ Usage: `!setwelcome channel #channel [background]`");
+      } else {
+        return interaction.reply({
+          content: "⚠️ Invalid subcommand. Use `/setwelcome channel` or `/setwelcome reset`.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error in setwelcome:", error);
+      const reply = "⚠️ Something went wrong while updating the welcome system.";
+      if (isPrefix) return message.reply(reply);
+      return interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
     }
   },
 };
