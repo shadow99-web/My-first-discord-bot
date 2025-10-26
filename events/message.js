@@ -50,7 +50,7 @@ const rankCard = new canvacord.Rank()
   .setRequiredXP(nextLevelXP)
   .setLevel(userData.level)
   .setUsername(message.author.username)
-  .setDiscriminator(message.author.discriminator)
+  .setDiscriminator(message.author.discriminator||"0000")
   .setBackground("COLOR", "#F2F3F5");
 
 const rankImage = await rankCard.build();
