@@ -12,26 +12,42 @@ module.exports = (client) => {
     // ========== 🌟 Modern Welcome Card System ==========
     try {
       const settings = await WelcomeSettings.findOne({ guildId });
-      if (settings) {
+      if (settings && settings.channelId) {
         const channel = member.guild.channels.cache.get(settings.channelId);
         if (channel) {
-          const bgUrl =
-            settings.background ||
-            "https://i.imgur.com/3ZUrjUP.jpeg"; // default background
+          // ✅ FIX 1: Ensure background is always a valid string
+          const bgUrl = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
+          
           const canvas = createCanvas(1000, 400);
           const ctx = canvas.getContext("2d");
 
-          const background = await loadImage(bgUrl);
+          // ✅ FIX 2: Add error handling for image loading
+          let background;
+          try {
+            background = await loadImage(bgUrl);
+          } catch (err) {
+            console.warn(`❌ Failed to load background: ${bgUrl}, using default`);
+            background = await loadImage("https://i.imgur.com/3ZUrjUP.jpeg");
+          }
+          
           ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
 
           // Overlay glow
           ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Avatar circle
-          const avatar = await loadImage(
-            member.user.displayAvatarURL({ extension: "png", size: 256 })
-          );
+          // Avatar circle with error handling
+          let avatar;
+          try {
+            avatar = await loadImage(
+              member.user.displayAvatarURL({ extension: "png", size: 256 })
+            );
+          } catch (err) {
+            console.warn(`❌ Failed to load avatar for ${member.user.tag}`);
+            // Use default Discord avatar
+            avatar = await loadImage("https://cdn.discordapp.com/embed/avatars/0.png");
+          }
+
           ctx.save();
           ctx.beginPath();
           ctx.arc(200, 200, 100, 0, Math.PI * 2);
@@ -39,6 +55,10 @@ module.exports = (client) => {
           ctx.clip();
           ctx.drawImage(avatar, 100, 100, 200, 200);
           ctx.restore();
+
+          // ✅ FIX 3: Ensure username is valid string
+          const username = member.user.username || member.user.displayName || "Unknown User";
+          const guildName = member.guild.name || "Server";
 
           // Text with glow
           ctx.font = "bold 55px Sans";
@@ -49,12 +69,12 @@ module.exports = (client) => {
 
           ctx.font = "bold 45px Sans";
           ctx.shadowBlur = 25;
-          ctx.fillText(member.user.username, 360, 250);
+          ctx.fillText(username, 360, 250);
 
           ctx.font = "30px Sans";
           ctx.shadowBlur = 0;
           ctx.fillStyle = "#d0d0d0";
-          ctx.fillText(`to ${member.guild.name}!`, 360, 310);
+          ctx.fillText(`to ${guildName}!`, 360, 310);
 
           const attachment = new AttachmentBuilder(canvas.toBuffer(), {
             name: "welcome.png",
@@ -73,8 +93,7 @@ module.exports = (client) => {
     // ========== 👋 Greet System (Embed/Text) ==========
     try {
       const greet = await getGreet(guildId);
-      const channelId =
-        (await getChannel(guildId)) || member.guild.systemChannelId;
+      const channelId = (await getChannel(guildId)) || member.guild.systemChannelId;
 
       if (greet && channelId) {
         const channel = member.guild.channels.cache.get(channelId);
@@ -102,18 +121,21 @@ module.exports = (client) => {
 
     // ========== 🤖 Autorole System ==========
     try {
+      // ✅ FIX 4: Handle the autorole function properly
       const guildConfig = await getAutoroleConfig(guildId);
       if (!guildConfig) return;
 
-      const roleIds = member.user.bot
-        ? guildConfig.bots
-        : guildConfig.humans;
+      const roleIds = member.user.bot ? guildConfig.bots : guildConfig.humans;
       if (!roleIds || roleIds.length === 0) return;
 
       const applied = [];
       for (const roleId of roleIds) {
         const role = member.guild.roles.cache.get(roleId);
-        if (!role) continue;
+        if (!role) {
+          console.warn(`❌ Role ${roleId} not found in guild ${member.guild.name}`);
+          continue;
+        }
+
         try {
           await member.roles.add(roleId, "Autorole: assigned on join");
           applied.push(`<@&${roleId}>`);
@@ -124,19 +146,23 @@ module.exports = (client) => {
         }
       }
 
+      // Send DM notification if roles were applied
       if (applied.length > 0) {
-        const blueHeart = "<a:blue_heart:1414309560231002194>";
-        const dmEmbed = new EmbedBuilder()
-          .setColor("Blue")
-          .setTitle(`Welcome to ${member.guild.name}!`)
-          .setDescription(
-            `${blueHeart} You have been given the following role(s):\n${applied.join(
-              ", "
-            )}`
-          )
-          .setTimestamp();
+        try {
+          const blueHeart = "<a:blue_heart:1414309560231002194>";
+          const dmEmbed = new EmbedBuilder()
+            .setColor("Blue")
+            .setTitle(`Welcome to ${member.guild.name}!`)
+            .setDescription(
+              `${blueHeart} You have been given the following role(s):
+${applied.join(", ")}`
+            )
+            .setTimestamp();
 
-        member.send({ embeds: [dmEmbed] }).catch(() => {});
+          await member.send({ embeds: [dmEmbed] });
+        } catch (dmErr) {
+          console.warn(`❌ Could not DM ${member.user.tag}: ${dmErr.message}`);
+        }
       }
     } catch (err) {
       console.error("❌ Failed to assign autorole:", err);
