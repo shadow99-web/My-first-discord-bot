@@ -15,36 +15,38 @@ module.exports = (client) => {
       if (settings && settings.channelId) {
         const channel = member.guild.channels.cache.get(settings.channelId);
         if (channel) {
-          // ✅ FIX 1: Ensure background is always a valid string
-          const bgUrl = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
+          // --- Guarantee a valid background URL string
+          let bgUrl =
+            typeof settings.background === "string" && settings.background.trim()
+              ? settings.background
+              : "https://i.imgur.com/3ZUrjUP.jpeg";
           
-          const canvas = createCanvas(1000, 400);
-          const ctx = canvas.getContext("2d");
-
-          // ✅ FIX 2: Add error handling for image loading
           let background;
           try {
             background = await loadImage(bgUrl);
           } catch (err) {
-            console.warn(`❌ Failed to load background: ${bgUrl}, using default`);
-            background = await loadImage("https://i.imgur.com/3ZUrjUP.jpeg");
+            // fallback if settings.background is broken
+            bgUrl = "https://i.imgur.com/3ZUrjUP.jpeg";
+            background = await loadImage(bgUrl);
           }
-          
+
+          const canvas = createCanvas(1000, 400);
+          const ctx = canvas.getContext("2d");
           ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
 
           // Overlay glow
           ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Avatar circle with error handling
+          // --- Guarantee a valid avatar URL string
+          let avatarURL = member?.user?.displayAvatarURL?.({ extension: "png", size: 256 });
+          if (typeof avatarURL !== "string" || avatarURL.length === 0) {
+            avatarURL = "https://cdn.discordapp.com/embed/avatars/0.png";
+          }
           let avatar;
           try {
-            avatar = await loadImage(
-              member.user.displayAvatarURL({ extension: "png", size: 256 })
-            );
+            avatar = await loadImage(avatarURL);
           } catch (err) {
-            console.warn(`❌ Failed to load avatar for ${member.user.tag}`);
-            // Use default Discord avatar
             avatar = await loadImage("https://cdn.discordapp.com/embed/avatars/0.png");
           }
 
@@ -56,11 +58,17 @@ module.exports = (client) => {
           ctx.drawImage(avatar, 100, 100, 200, 200);
           ctx.restore();
 
-          // ✅ FIX 3: Ensure username is valid string
-          const username = member.user.username || member.user.displayName || "Unknown User";
-          const guildName = member.guild.name || "Server";
+          // --- Always ensure non-empty strings for user and guild names
+          const username =
+            typeof member?.user?.username === "string" && member.user.username.trim()
+              ? member.user.username
+              : "New Member";
+          const guildName =
+            typeof member?.guild?.name === "string" && member.guild.name.trim()
+              ? member.guild.name
+              : "This Server";
 
-          // Text with glow
+          // --- All fillText inputs guaranteed as safe strings
           ctx.font = "bold 55px Sans";
           ctx.fillStyle = "#ffffff";
           ctx.shadowColor = "#00ffff";
@@ -90,7 +98,7 @@ module.exports = (client) => {
       console.error("❌ Welcome card error:", err);
     }
 
-    // ========== 👋 Greet System (Embed/Text) ==========
+    // === 👋 Greet System (Embed/Text) ===
     try {
       const greet = await getGreet(guildId);
       const channelId = (await getChannel(guildId)) || member.guild.systemChannelId;
@@ -101,7 +109,7 @@ module.exports = (client) => {
           let text = greet.text || "";
           text = text
             .replace(/{user}/gi, member.toString())
-            .replace(/{server}/gi, member.guild.name)
+            .replace(/{server}/gi, member.guild.name || "This Server")
             .replace(/{count}/gi, member.guild.memberCount.toString());
 
           const embed = new EmbedBuilder()
@@ -119,9 +127,8 @@ module.exports = (client) => {
       console.error("❌ Failed to send greet:", err);
     }
 
-    // ========== 🤖 Autorole System ==========
+    // === 🤖 Autorole System ===
     try {
-      // ✅ FIX 4: Handle the autorole function properly
       const guildConfig = await getAutoroleConfig(guildId);
       if (!guildConfig) return;
 
@@ -131,28 +138,22 @@ module.exports = (client) => {
       const applied = [];
       for (const roleId of roleIds) {
         const role = member.guild.roles.cache.get(roleId);
-        if (!role) {
-          console.warn(`❌ Role ${roleId} not found in guild ${member.guild.name}`);
-          continue;
-        }
+        if (!role) continue;
 
         try {
           await member.roles.add(roleId, "Autorole: assigned on join");
           applied.push(`<@&${roleId}>`);
         } catch (err) {
-          console.warn(
-            `❌ Failed to add role ${roleId} to ${member.user.tag}: ${err.message}`
-          );
+          console.warn(`❌ Failed to add role ${roleId} to ${member.user.tag}: ${err.message}`);
         }
       }
 
-      // Send DM notification if roles were applied
       if (applied.length > 0) {
         try {
           const blueHeart = "<a:blue_heart:1414309560231002194>";
           const dmEmbed = new EmbedBuilder()
             .setColor("Blue")
-            .setTitle(`Welcome to ${member.guild.name}!`)
+            .setTitle(`Welcome to ${member.guild.name || "our server"}!`)
             .setDescription(
               `${blueHeart} You have been given the following role(s):
 ${applied.join(", ")}`
