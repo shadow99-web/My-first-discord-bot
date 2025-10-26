@@ -20,7 +20,7 @@ module.exports = (client) => {
       const background = settings.background || "https://i.imgur.com/3ZUrjUP.jpeg";
 
       // canvacord WelcomeLeave
-      const welcomer = new canvacord.WelcomeLeave()
+      const welcomer = new WelcomeLeave()
         .setAvatar(avatar)
         .setBackground("IMAGE", background)
         .setTitle(`Welcome ${member.user.username}!`, "#FFFFFF")
@@ -32,7 +32,7 @@ module.exports = (client) => {
 
       const data = await welcomer.build("Cascadia Code PL, Noto Color Emoji");
       const attachment = new AttachmentBuilder(data, { name: "WelcomeCard.png" });
-      await channel.send({ content: `🎉 Welcome ${member}!`, files: [attachment] });
+      await channel.send({ content: `♥ Welcome ${member}!`, files: [attachment] });
 
     } catch (err) {
       console.error("❌ Welcome card error:", err);
