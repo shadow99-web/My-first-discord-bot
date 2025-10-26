@@ -3,7 +3,7 @@ const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
-const { createCanvas, loadImage } = require("canvas");
+const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 module.exports = (client) => {
   client.on("guildMemberAdd", async (member) => {
