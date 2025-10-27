@@ -56,7 +56,7 @@ const rank = new canvacord.Rank()
   .setRank(0) // optional, if you have leaderboard system
   .setCurrentXP(userData.xp)
   .setRequiredXP(nextLevelXP)
-  .setProgressBar({ fill: "#00FFFF", background: "#CCCCCC" })
+  .setProgressBar("#00FFFF")
   .setUsername(message.author.username)
   .setDiscriminator(message.author.discriminator || "0000")
 
