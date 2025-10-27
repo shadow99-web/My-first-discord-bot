@@ -41,40 +41,39 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
       userData.xp -= nextLevelXP
 
       // 🏆 Create rank card
-      // 🔍 Find rank-up channel or fallback to current one
-      const rankChannelData = await RankChannel.findOne({ guildId });
-      const background =
+const rankChannelData = await RankChannel.findOne({ guildId });
+const background =
   (rankChannelData && rankChannelData.background)
     ? rankChannelData.background
-    : "https://cdn.discordapp.com/attachments/placeholder/default.png";
+    : "color:#F2F3F5"; // fallback background
 
-// ...later in your leveling system
 const rank = new canvacord.Rank()
-  
   .setAvatar(message.author.displayAvatarURL({ extension: "png" }))
   .setLevel(userData.level)
-  .setRank(0) // optional, if you have leaderboard system
+  .setRank(0) // optional if you don’t have leaderboard
   .setCurrentXP(userData.xp)
   .setRequiredXP(nextLevelXP)
-  .setProgressBar("#00FFFF")
+  .setProgressBar("#00FFFF") // must be a string, not object
   .setUsername(message.author.username)
-  .setDiscriminator(message.author.discriminator || "0000")
+  .setDiscriminator(message.author.discriminator || "0000");
 
-
+// ✅ handle background
 if (background.startsWith("http")) rank.setBackground("IMAGE", background);
 else if (background.startsWith("color")) rank.setBackground("COLOR", background.split(":")[1]);
-const rankImage = await rankCard.build({ format: "png" });
-      
-      
-      const targetChannel = rankChannelData
-        ? message.guild.channels.cache.get(rankChannelData.channelId) || message.channel
-        : message.channel;
 
-      await targetChannel.send({
-        content: `🌈 ${message.author} leveled up to **Level ${userData.level}**!`,
-        files: [{ attachment: rankImage, name: "rank-card.png" }],
-      }).catch(() => {});
+// ✅ build card image
+const rankImage = await rank.build({ format: "png" });
 
+// ✅ choose target channel
+const targetChannel = rankChannelData
+  ? message.guild.channels.cache.get(rankChannelData.channelId) || message.channel
+  : message.channel;
+
+await targetChannel.send({
+  content: `🌈 ${message.author} leveled up to **Level ${userData.level}**!`,
+  files: [{ attachment: rankImage, name: "rank-card.png" }],
+}).catch(() => {});
+    
       // ✅ Role reward
       const reward = await LevelReward.findOne({ guildId, level: userData.level });
       if (reward) {
