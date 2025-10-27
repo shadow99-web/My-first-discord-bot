@@ -7,10 +7,11 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
-const { builders } = require("canvacord");
-const { RankCardBuilder } = builders;
+const { RankCardBuilder, Font } = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
+
+Font.loadDefault();
 
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
@@ -59,7 +60,7 @@ const rankCard = new RankCardBuilder()
   .setRequiredXP(nextLevelXP)
   .setProgressBar({ fill: "#00FFFF", background: "#CCCCCC" })
   .setUsername(message.author.username)
-  .setDiscriminator(message.author.discriminator ?? "0000")
+  .setDiscriminator(message.author.discriminator || "0000")
 
 
 if (background.startsWith("http"))
