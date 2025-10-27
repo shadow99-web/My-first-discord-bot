@@ -7,11 +7,9 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
-const { RankCardBuilder, Font } = require("canvacord");
+const { RankCardBuilder } = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
-
-Font.loadDefault();
 
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
