@@ -60,7 +60,7 @@ module.exports = {
           }`
         );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], ephemeral: false });
     }
 
     if (sub === "reset") {
