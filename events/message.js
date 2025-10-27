@@ -41,7 +41,12 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
       userData.xp -= nextLevelXP
 
       // 🏆 Create rank card
-      
+      // 🔍 Find rank-up channel or fallback to current one
+      const rankChannelData = await RankChannel.findOne({ guildId });
+      const background =
+  (rankChannelData && rankChannelData.background)
+    ? rankChannelData.background
+    : "color:#F2F3F5";
 
 // ...later in your leveling system
 const rankCard = new RankCardBuilder()
@@ -54,12 +59,16 @@ const rankCard = new RankCardBuilder()
   .setProgressBar({ fill: "#00FFFF", background: "#CCCCCC" })
   .setUsername(message.author.username)
   .setDiscriminator(message.author.discriminator || "0000")
-  .setBackground("color", "#F2F3F5");
+
+
+if (background.startsWith("http"))
+  rankCard.setBackground("image", background);
+else if (background.startsWith("color"))
+  rankCard.setBackground("color", background.split(":")[1]);
 
 const rankImage = await rankCard.build({ format: "png" });
       
-      // 🔍 Find rank-up channel or fallback to current one
-      const rankChannelData = await RankChannel.findOne({ guildId });
+      
       const targetChannel = rankChannelData
         ? message.guild.channels.cache.get(rankChannelData.channelId) || message.channel
         : message.channel;
