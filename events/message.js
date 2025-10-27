@@ -50,7 +50,7 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
 
 // ...later in your leveling system
 const rank = new canvacord.Rank()
-  .setDisplayName(message.author.username)
+  
   .setAvatar(message.author.displayAvatarURL({ extension: "png" }))
   .setLevel(userData.level)
   .setRank(0) // optional, if you have leaderboard system
