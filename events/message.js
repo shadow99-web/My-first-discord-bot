@@ -7,8 +7,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
-const { RankCardBuilder, Font } = require("canvacord");
-Font.loadDefault();
+const canvacord = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
 
@@ -47,10 +46,10 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
       const background =
   (rankChannelData && rankChannelData.background)
     ? rankChannelData.background
-    : "color:#F2F3F5";
+    : "https://cdn.discordapp.com/attachments/placeholder/default.png";
 
 // ...later in your leveling system
-const rankCard = new RankCardBuilder()
+const rank = new canvacord.Rank()
   .setDisplayName(message.author.username)
   .setAvatar(message.author.displayAvatarURL({ extension: "png" }))
   .setLevel(userData.level)
@@ -62,11 +61,8 @@ const rankCard = new RankCardBuilder()
   .setDiscriminator(message.author.discriminator || "0000")
 
 
-if (background.startsWith("http"))
-  rankCard.setBackground("image", background);
-else if (background.startsWith("color"))
-  rankCard.setBackground("color", background.split(":")[1]);
-
+if (background.startsWith("http")) rank.setBackground("IMAGE", background);
+else if (background.startsWith("color")) rank.setBackground("COLOR", background.split(":")[1]);
 const rankImage = await rankCard.build({ format: "png" });
       
       
