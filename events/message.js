@@ -41,30 +41,40 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
       userData.xp -= nextLevelXP
 
       // 🏆 Create rank card
+// … inside your “if (user leveled up)” block …
+
 const rankChannelData = await RankChannel.findOne({ guildId });
 const background =
   (rankChannelData && rankChannelData.background)
     ? rankChannelData.background
-    : "color:#F2F3F5"; // fallback background
+    : "color:#F2F3F5";
+
+// Provide safe fallback for username + discriminator
+const safeUsername = message.author.username || "Unknown";
+const safeDiscriminator =
+  typeof message.author.discriminator === "string" &&
+  /^[0-9]{4}$/.test(message.author.discriminator)
+    ? message.author.discriminator
+    : "0000";
 
 const rank = new canvacord.Rank()
-  .setAvatar(message.author.displayAvatarURL({ extension: "png" }))
+  .setAvatar(message.author.displayAvatarURL({ extension: "png", size: 256 }))
+  .setUsername(safeUsername)
+  .setDiscriminator(safeDiscriminator)
   .setLevel(userData.level)
-  .setRank(0) // optional if you don’t have leaderboard
   .setCurrentXP(userData.xp)
   .setRequiredXP(nextLevelXP)
-  .setProgressBar("#00FFFF") // must be a string, not object
-  .setUsername(message.author.username)
-  .setDiscriminator(message.author.discriminator || "0000");
+  .setRank(0) // if no leaderboard position
+  .setProgressBar("#00FFFF");  // string only
 
-// ✅ handle background
-if (background.startsWith("http")) rank.setBackground("IMAGE", background);
-else if (background.startsWith("color")) rank.setBackground("COLOR", background.split(":")[1]);
+if (background.startsWith("http")) {
+  rank.setBackground("IMAGE", background);
+} else if (background.startsWith("color")) {
+  rank.setBackground("COLOR", background.split(":")[1]);
+}
 
-// ✅ build card image
 const rankImage = await rank.build({ format: "png" });
 
-// ✅ choose target channel
 const targetChannel = rankChannelData
   ? message.guild.channels.cache.get(rankChannelData.channelId) || message.channel
   : message.channel;
@@ -73,7 +83,7 @@ await targetChannel.send({
   content: `🌈 ${message.author} leveled up to **Level ${userData.level}**!`,
   files: [{ attachment: rankImage, name: "rank-card.png" }],
 }).catch(() => {});
-    
+      
       // ✅ Role reward
       const reward = await LevelReward.findOne({ guildId, level: userData.level });
       if (reward) {
