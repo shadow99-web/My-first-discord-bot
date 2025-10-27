@@ -7,7 +7,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
-const canvacord = require("canvacord");
+const { RankCardBuilder } = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
 
@@ -44,16 +44,19 @@ if (rankSettings && rankSettings.enabled === false) return; // Stop if disabled
       
 
 // ...later in your leveling system
-const rankCard = new canvacord.Rank()
-  .setAvatar(message.author.displayAvatarURL({ format: "png", size: 256 }))
+const rankCard = new RankCardBuilder()
+  .setDisplayName(message.author.username)
+  .setAvatar(message.author.displayAvatarURL({ extension: "png" }))
+  .setLevel(userData.level)
+  .setRank(0) // optional, if you have leaderboard system
   .setCurrentXP(userData.xp)
   .setRequiredXP(nextLevelXP)
-  .setLevel(userData.level)
+  .setProgressBar({ fill: "#00FFFF", background: "#CCCCCC" })
   .setUsername(message.author.username)
   .setDiscriminator(message.author.discriminator || "0000")
-  .setBackground("COLOR", "#F2F3F5");
+  .setBackground("color", "#F2F3F5");
 
-const rankImage = await rankCard.build();
+const rankImage = await rankCard.build({ format: "png" });
       
       // 🔍 Find rank-up channel or fallback to current one
       const rankChannelData = await RankChannel.findOne({ guildId });
