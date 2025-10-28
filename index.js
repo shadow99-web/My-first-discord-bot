@@ -149,6 +149,7 @@ safeRequireEvent("./events/modLogEvents", client);
 safeRequireEvent("./events/voiceStateUpdate", client);
 safeRequireEvent("./events/antinukeHandler", client);
 safeRequireEvent("./events/reactionRole.js", client);
+safeRequireEvent("./events/activityRestore.js", client);
 // ====================
 // 🚀 Deploy commands and login safely
 async function deployCommandsAndLogin() {
