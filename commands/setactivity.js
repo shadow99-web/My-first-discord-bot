@@ -35,8 +35,10 @@ module.exports = {
   description: "Set or update the bot's activity (developer only)",
   usage: "!setactivity <type> <text>",
 
-  // Prefix command
-  async execute({ message, args, client }) {
+  // -------------------------
+  // 💬 Prefix Command
+  // -------------------------
+  async execute(message, args, client) {
     if (!DEV_IDS.includes(message.author.id))
       return message.reply("🚫 Only the bot developer can use this command!");
 
@@ -52,42 +54,53 @@ module.exports = {
     if (!activityType)
       return message.reply("❌ Invalid type. Choose: playing, listening, watching, competing.");
 
-    // ✅ Set activity live
-    client.user.setActivity(text, { type: activityType });
+    try {
+      await client.user.setActivity(text, { type: activityType });
+      await ActivitySettings.findOneAndUpdate(
+        { botId: client.user.id },
+        { type, text },
+        { upsert: true }
+      );
 
-    // 💾 Save to MongoDB
-    await ActivitySettings.findOneAndUpdate(
-      { botId: client.user.id },
-      { type, text },
-      { upsert: true }
-    );
-
-    message.reply(`✅ Bot activity set to **${type} ${text}**`);
+      message.reply(`✅ Bot activity set to **${type} ${text}**`);
+    } catch (err) {
+      console.error("❌ Error setting activity:", err);
+      message.reply("⚠️ Failed to set activity. Check logs.");
+    }
   },
 
-  // Slash command
+  // -------------------------
+  // 🧩 Slash Command
+  // -------------------------
   async runSlash(interaction, client) {
     if (!DEV_IDS.includes(interaction.user.id))
       return interaction.reply({
         content: "🚫 Only the bot developer can use this command!",
-        ephemeral: true,
+        ephemeral: false,
       });
 
     const type = interaction.options.getString("type");
     const text = interaction.options.getString("text");
-
     const activityType = activityMap[type];
-    await client.user.setActivity(text, { type: activityType });
 
-    await ActivitySettings.findOneAndUpdate(
-      { botId: client.user.id },
-      { type, text },
-      { upsert: true }
-    );
+    try {
+      await client.user.setActivity(text, { type: activityType });
+      await ActivitySettings.findOneAndUpdate(
+        { botId: client.user.id },
+        { type, text },
+        { upsert: true }
+      );
 
-    await interaction.reply({
-      content: `✅ Bot activity set to **${type} ${text}**`,
-      ephemeral: true,
-    });
+      await interaction.reply({
+        content: `✅ Bot activity set to **${type} ${text}**`,
+        ephemeral: true,
+      });
+    } catch (err) {
+      console.error("❌ Error setting activity:", err);
+      await interaction.reply({
+        content: "⚠️ Failed to set activity. Check console for errors.",
+        ephemeral: false,
+      });
+    }
   },
 };
