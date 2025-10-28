@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ActivityType } = require("discord.js");
 const ActivitySettings = require("../models/ActivitySettings.js");
 
 // 👑 Developer IDs — replace with yours
-const DEV_IDS = ["YOUR_DISCORD_ID_HERE"];
+const DEV_IDS = ["1378954077462986772"];
 
 const activityMap = {
   playing: ActivityType.Playing,
