@@ -112,8 +112,8 @@ module.exports = {
         const nickname = member?.nickname || "None";
 
         // ✅ Status & Activities
-        let status = "Unavailable (user not in this server)";
-        let activities = "Unavailable";
+        let status = "🤞🏻Unavailable";
+        let activities = "🌈Unavailable";
         if (member?.presence) {
             status = member.presence.status === "online" ? "🟢 Online"
                 : member.presence.status === "idle" ? "🌙 Idle"
