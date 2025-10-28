@@ -76,7 +76,7 @@ module.exports = {
     if (!DEV_IDS.includes(interaction.user.id))
       return interaction.reply({
         content: "🚫 Only the bot developer can use this command!",
-        ephemeral: false,
+        ephemeral: true,
       });
 
     const type = interaction.options.getString("type");
@@ -99,7 +99,7 @@ module.exports = {
       console.error("❌ Error setting activity:", err);
       await interaction.reply({
         content: "⚠️ Failed to set activity. Check console for errors.",
-        ephemeral: false,
+        ephemeral: true,
       });
     }
   },
