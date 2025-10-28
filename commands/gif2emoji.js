@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
-const fetch = require("node-fetch");
 const fs = require("fs");
 const { exec } = require("child_process");
 const ffmpeg = require("fluent-ffmpeg");
