@@ -5,23 +5,55 @@ const blueHeart = "<a:blue_heart:1414309560231002194>";
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("userinfo")
-        .setDescription("Get detailed information about a user")
+        .setDescription("Get detailed information about a user (even outside this server)")
         .addUserOption(opt =>
             opt.setName("target")
                 .setDescription("Select a user")
+        )
+        .addStringOption(opt =>
+            opt.setName("userid")
+                .setDescription("Enter a user ID if they’re not in this server")
         ),
 
-    name: "userinfo", // prefix support
+    name: "userinfo",
     aliases: ["whois", "uinfo", "ui"],
 
-    async execute({ interaction, message, client }) {
-        const target = interaction
-            ? interaction.options.getUser("target") || interaction.user
-            : message.mentions.users.first() || message.author;
+    async execute({ interaction, message, client, args }) {
+        const isPrefix = !!message;
+        let user = null;
 
-        const member = interaction
-            ? await interaction.guild.members.fetch(target.id).catch(() => null)
-            : message.guild.members.cache.get(target.id);
+        // 🧠 Input extraction
+        let input;
+        if (interaction) {
+            input = interaction.options.getUser("target") || interaction.options.getString("userid");
+        } else {
+            input = message.mentions.users.first() || args[0];
+        }
+
+        // ✅ Fetch user from input
+        try {
+            if (!input) {
+                user = interaction ? interaction.user : message.author;
+            } else if (typeof input === "object" && input.id) {
+                user = await client.users.fetch(input.id, { force: true });
+            } else if (/^\d{17,19}$/.test(input)) {
+                // Raw user ID
+                user = await client.users.fetch(input, { force: true });
+            } else {
+                user = interaction ? interaction.user : message.author;
+            }
+        } catch {
+            return isPrefix
+                ? message.reply("❌ Unable to find that user. Make sure the ID is valid.")
+                : interaction.reply({ content: "❌ Unable to find that user. Make sure the ID is valid.", ephemeral: true });
+        }
+
+        // 🧩 Try to fetch guild member (if in same server)
+        let member = null;
+        const guild = interaction?.guild || message?.guild;
+        if (guild) {
+            member = await guild.members.fetch(user.id).catch(() => null);
+        }
 
         // ✅ Badge mapping
         const badgeMap = {
@@ -39,21 +71,21 @@ module.exports = {
 
         let badges = "None";
         try {
-            const flags = await target.fetchFlags();
+            const flags = await user.fetchFlags();
             badges = flags.toArray().map(f => badgeMap[f] || f).join(" ") || "None";
         } catch {
             badges = "Unknown";
         }
 
-        // ✅ Roles
+        // ✅ Roles (only if in server)
         const roles = member
-            ? member.roles.cache.filter(r => r.id !== member.guild.id).map(r => r.toString()).join(", ") || "None"
-            : "Unknown";
+            ? member.roles.cache.filter(r => r.id !== guild.id).map(r => r.toString()).join(", ") || "None"
+            : "User not in this server";
 
-        const highestRole = member ? member.roles.highest.toString() : "Unknown";
+        const highestRole = member ? member.roles.highest.toString() : "N/A";
 
-        // ✅ Permissions
-        let permissions = "Unknown";
+        // ✅ Permissions (only if in server)
+        let permissions = "Unavailable (user not in this server)";
         if (member) {
             const perms = [];
             if (member.permissions.has(PermissionsBitField.Flags.Administrator)) perms.push("🛠️ Administrator");
@@ -65,55 +97,48 @@ module.exports = {
         }
 
         // ✅ Timestamps
-        const createdAt = `<t:${Math.floor(target.createdTimestamp / 1000)}:R>`;
-        const joinedAt = member?.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : "Unknown";
+        const createdAt = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
+        const joinedAt = member?.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : "Not in this server";
 
         // ✅ Boosting
         const boostingSince = member?.premiumSince
             ? `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:R>`
             : "Not boosting";
 
-        // ✅ Avatar + Banner
-        const avatarURL = target.displayAvatarURL({ size: 1024, dynamic: true });
-        const banner = await client.users.fetch(target.id, { force: true })
-            .then(u => u.bannerURL({ size: 1024, dynamic: true }))
-            .catch(() => null);
-
-        // ✅ Server avatar
+        // ✅ Avatars
+        const avatarURL = user.displayAvatarURL({ size: 1024, dynamic: true });
+        const banner = user.bannerURL({ size: 1024, dynamic: true });
         const serverAvatar = member?.displayAvatarURL({ size: 1024, dynamic: true }) || null;
-
-        // ✅ Nickname
         const nickname = member?.nickname || "None";
 
         // ✅ Status & Activities
-        let status = "Unknown";
+        let status = "Unavailable (user not in this server)";
+        let activities = "Unavailable";
         if (member?.presence) {
             status = member.presence.status === "online" ? "🟢 Online"
                 : member.presence.status === "idle" ? "🌙 Idle"
                 : member.presence.status === "dnd" ? "⛔ Do Not Disturb"
                 : "⚫ Offline";
+            activities = member.presence.activities.map(a => `${a.type}: ${a.name}`).join("\n") || "None";
         }
-
-        const activities = member?.presence?.activities.map(a => `${a.type}: ${a.name}`).join("\n") || "None";
 
         // ✅ Embed
         const embed = new EmbedBuilder()
-            .setAuthor({ name: `${target.tag}`, iconURL: avatarURL })
+            .setAuthor({ name: `${user.tag}`, iconURL: avatarURL })
             .setColor("Blue")
-            .setThumbnail(avatarURL)
+            .setThumbnail(serverAvatar || avatarURL)
             .setDescription(`${blueHeart} **User Information**`)
             .addFields(
-                { name: "🪪 Basic Info", value: `> **Username:** ${target.username}\n> **Global Name:** ${target.globalName || "None"}\n> **ID:** ${target.id}\n> **Nickname:** ${nickname}\n> **Bot?:** ${target.bot ? "✅ Yes" : "❌ No"}` },
+                { name: "🪪 Basic Info", value: `> **Username:** ${user.username}\n> **Global Name:** ${user.globalName || "None"}\n> **ID:** ${user.id}\n> **Nickname:** ${nickname}\n> **Bot?:** ${user.bot ? "✅ Yes" : "❌ No"}` },
                 { name: "🏅 Badges", value: badges, inline: false },
                 { name: "📅 Timestamps", value: `> **Created:** ${createdAt}\n> **Joined:** ${joinedAt}`, inline: false },
                 { name: "🚀 Server Info", value: `> **Highest Role:** ${highestRole}\n> **All Roles:** ${roles}\n> **Boosting Since:** ${boostingSince}`, inline: false },
                 { name: "🔒 Permissions", value: permissions, inline: false },
                 { name: "🟢 Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
             )
-            .setFooter({ text: `Requested by ${interaction?.user.tag || message.author.tag}` })
+            .setFooter({ text: `Requested by ${interaction?.user?.tag || message.author.tag}` })
             .setTimestamp();
 
-        if (serverAvatar && serverAvatar !== avatarURL) embed.setThumbnail(serverAvatar);
         if (banner) embed.setImage(banner);
 
         // ✅ Reply
