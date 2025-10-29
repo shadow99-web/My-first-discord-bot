@@ -4,7 +4,11 @@ const { exec } = require("child_process");
 const ffmpeg = require("fluent-ffmpeg");
 const path = require("path");
 
-const TENOR_KEY = process.env.TENOR_CLIENT_KEY; // 🔑 REQUIRED
+// ✅ Works on all Node 18+ environments (Render, Replit, etc.)
+const fetch = global.fetch || ((...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args)));
+
+// ✅ Load Tenor API key (REQUIRED)
+const TENOR_KEY = process.env.TENOR_API_KEY || process.env.TENOR_CLIENT_KEY;
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -22,16 +26,23 @@ module.exports = {
     const guild = isInteraction ? interaction.guild : message.guild;
     const query = isInteraction ? interaction.options.getString("query") : message.content.split(" ").slice(1).join(" ");
 
+    // 🧩 Check Tenor key
     if (!TENOR_KEY) {
-      return (isInteraction ? interaction.reply : message.reply)(`❌ Missing **Tenor Client Key** in environment.`);
+      return (isInteraction ? interaction.reply : message.reply)(
+        "❌ Missing **TENOR_API_KEY** in environment variables."
+      );
     }
 
     if (!query) {
-      return (isInteraction ? interaction.reply : message.reply)(`❌ Please provide a search term.`);
+      return (isInteraction ? interaction.reply : message.reply)(
+        "❌ Please provide a search term."
+      );
     }
 
     if (!guild?.members.me?.permissions.has("ManageGuildExpressions")) {
-      return (isInteraction ? interaction.reply : message.reply)(`❌ I need **Manage Emojis & Stickers** permission.`);
+      return (isInteraction ? interaction.reply : message.reply)(
+        "❌ I need **Manage Emojis & Stickers** permission."
+      );
     }
 
     const replyFn = async (content, opts = {}) => {
@@ -41,8 +52,10 @@ module.exports = {
 
     await replyFn(`🔍 Searching Tenor for **${query}**...`);
 
+    // 🧠 Fetch from Tenor
     const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${TENOR_KEY}&limit=5&media_filter=gif`);
     const data = await res.json();
+
     if (!data.results?.length) return replyFn(`❌ No GIFs found for "${query}".`);
 
     const gifs = data.results.map(r => ({
@@ -50,7 +63,7 @@ module.exports = {
       title: r.content_description || "Untitled",
     }));
 
-    // 🎨 Select menu
+    // 🎨 Build menu
     const select = new StringSelectMenuBuilder()
       .setCustomId("gif_select")
       .setPlaceholder("Select a GIF to save as emoji")
@@ -69,11 +82,8 @@ module.exports = {
 
     const reply = await replyFn({ embeds: [embed], components: [row] });
 
-    // Wait for selection
-    const collector = reply.createMessageComponentCollector({
-      time: 30000,
-      max: 1,
-    });
+    // 🕐 Wait for user selection
+    const collector = reply.createMessageComponentCollector({ time: 30000, max: 1 });
 
     collector.on("collect", async (i) => {
       if (i.user.id !== (isInteraction ? interaction.user.id : message.author.id))
@@ -83,8 +93,12 @@ module.exports = {
 
       const gifUrl = i.values[0];
       const name = query.replace(/\s+/g, "_").toLowerCase();
-      const input = path.join(__dirname, `../../temp/${name}.gif`);
-      const output = path.join(__dirname, `../../temp/${name}_compressed.gif`);
+      const tempDir = path.join(__dirname, "../../temp");
+
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+      const input = path.join(tempDir, `${name}.gif`);
+      const output = path.join(tempDir, `${name}_compressed.gif`);
 
       const response = await fetch(gifUrl);
       const buffer = Buffer.from(await response.arrayBuffer());
@@ -103,7 +117,7 @@ module.exports = {
         await compressWithGifsicle();
         compressed = fs.readFileSync(output);
       } catch (e) {
-        // fallback to ffmpeg
+        // 🎞️ fallback: ffmpeg
         await new Promise((resolve, reject) => {
           ffmpeg(input)
             .outputOptions(["-vf", "scale=256:-1:flags=lanczos,fps=15"])
@@ -117,7 +131,7 @@ module.exports = {
       const sizeKB = compressed.length / 1024;
 
       if (sizeKB > 256) {
-        await i.editReply(`❌ Even after compression, the file is **${sizeKB.toFixed(1)} KB**, too large to upload.`);
+        await i.editReply(`❌ Even after compression, file size is **${sizeKB.toFixed(1)} KB**, too large to upload.`);
         fs.unlinkSync(input);
         fs.unlinkSync(output);
         return;
