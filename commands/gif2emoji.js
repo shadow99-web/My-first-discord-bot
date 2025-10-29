@@ -4,10 +4,10 @@ const { exec } = require("child_process");
 const ffmpeg = require("fluent-ffmpeg");
 const path = require("path");
 
-// ✅ Works on all Node 18+ environments (Render, Replit, etc.)
+// ✅ Works on all Node 18+ environments
 const fetch = global.fetch || ((...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args)));
 
-// ✅ Load Tenor API key (REQUIRED)
+// ✅ Tenor API key (REQUIRED)
 const TENOR_KEY = process.env.TENOR_API_KEY || process.env.TENOR_CLIENT_KEY;
 
 module.exports = {
@@ -45,9 +45,19 @@ module.exports = {
       );
     }
 
+    // 🧠 Defer first to avoid "already replied"
+    if (isInteraction && !interaction.deferred && !interaction.replied)
+      await interaction.deferReply();
+
     const replyFn = async (content, opts = {}) => {
-      if (isInteraction) return interaction.reply({ content, ...opts });
-      else return message.reply({ content, ...opts });
+      if (isInteraction) {
+        if (interaction.replied || interaction.deferred)
+          return interaction.followUp({ content, ...opts });
+        else
+          return interaction.reply({ content, ...opts });
+      } else {
+        return message.reply({ content, ...opts });
+      }
     };
 
     await replyFn(`🔍 Searching Tenor for **${query}**...`);
@@ -63,7 +73,7 @@ module.exports = {
       title: r.content_description || "Untitled",
     }));
 
-    // 🎨 Build menu
+    // 🎨 Menu
     const select = new StringSelectMenuBuilder()
       .setCustomId("gif_select")
       .setPlaceholder("Select a GIF to save as emoji")
@@ -82,7 +92,7 @@ module.exports = {
 
     const reply = await replyFn({ embeds: [embed], components: [row] });
 
-    // 🕐 Wait for user selection
+    // 🕐 Collect user selection
     const collector = reply.createMessageComponentCollector({ time: 30000, max: 1 });
 
     collector.on("collect", async (i) => {
@@ -94,7 +104,6 @@ module.exports = {
       const gifUrl = i.values[0];
       const name = query.replace(/\s+/g, "_").toLowerCase();
       const tempDir = path.join(__dirname, "../../temp");
-
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
       const input = path.join(tempDir, `${name}.gif`);
@@ -116,8 +125,8 @@ module.exports = {
       try {
         await compressWithGifsicle();
         compressed = fs.readFileSync(output);
-      } catch (e) {
-        // 🎞️ fallback: ffmpeg
+      } catch {
+        // 🎞️ Fallback: ffmpeg
         await new Promise((resolve, reject) => {
           ffmpeg(input)
             .outputOptions(["-vf", "scale=256:-1:flags=lanczos,fps=15"])
