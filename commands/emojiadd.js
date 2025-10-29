@@ -47,10 +47,16 @@ module.exports = {
       let index = 0;
 
       // Helper: get full image URL
-      const getUrl = (emoji) =>
-        emoji.url?.startsWith("http")
-          ? emoji.url
-          : `https://emoji.gg/assets/emoji/${emoji.image || emoji.filename}`;
+     const getUrl = (emoji) => {
+  const possible = emoji.url || emoji.image || emoji.filename;
+  if (!possible) return null;
+
+  // If already a valid full URL (e.g., starts with http or cdn)
+  if (/^https?:\/\//.test(possible)) return possible;
+
+  // Otherwise, build the proper base path
+  return `https://emoji.gg/assets/emoji/${possible.replace(/^\/+/, "")}`;
+};
 
       // Embed builder
       const getEmbed = () =>
