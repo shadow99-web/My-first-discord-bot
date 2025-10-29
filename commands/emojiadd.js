@@ -31,11 +31,10 @@ module.exports = {
     }
 
     try {
-      // 🧠 Fetch from Emoji.gg public API
       const resp = await axios.get("https://emoji.gg/api/");
       const allEmojis = resp.data;
 
-      // 🔍 Filter by query
+      // Filter emojis by query
       const results = allEmojis
         .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
         .slice(0, 10);
@@ -47,15 +46,21 @@ module.exports = {
 
       let index = 0;
 
-      // 🎨 Embed
+      // Helper: get full image URL
+      const getUrl = (emoji) =>
+        emoji.url?.startsWith("http")
+          ? emoji.url
+          : `https://emoji.gg/assets/emoji/${emoji.image || emoji.filename}`;
+
+      // Embed builder
       const getEmbed = () =>
         new EmbedBuilder()
           .setTitle(`😄 Emoji Search: ${query}`)
-          .setImage(results[index].url)
+          .setImage(getUrl(results[index]))
           .setFooter({ text: `Result ${index + 1}/${results.length}` })
           .setColor("Blurple");
 
-      // 🔘 Buttons
+      // Buttons
       const getButtons = () =>
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
@@ -80,13 +85,14 @@ module.exports = {
         if (btn.customId === "next") index = (index + 1) % results.length;
         else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
 
-        // 💾 Save emoji
+        // Save emoji
         else if (btn.customId === "save_emoji") {
           await btn.deferReply({ ephemeral: true }).catch(() => {});
           try {
-            const response = await axios.get(results[index].url, { responseType: "arraybuffer" });
+            const emojiUrl = getUrl(results[index]);
+            const response = await axios.get(emojiUrl, { responseType: "arraybuffer" });
             const buffer = Buffer.from(response.data);
-            const name = results[index].slug || `emoji_${index + 1}`;
+            const name = results[index].slug || results[index].title.replace(/\s+/g, "_");
 
             const emoji = await btn.guild.emojis.create({
               attachment: buffer,
@@ -105,7 +111,7 @@ module.exports = {
           return;
         }
 
-        // 🖼️ Update embed safely
+        // Update embed safely
         if (["next", "prev"].includes(btn.customId)) {
           if (!btn.deferred && !btn.replied)
             await btn.deferUpdate().catch(() => {});
