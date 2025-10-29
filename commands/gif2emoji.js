@@ -2,183 +2,147 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
-  StringSelectMenuBuilder
+  ButtonBuilder,
+  ButtonStyle,
 } = require("discord.js");
+const axios = require("axios");
 const fs = require("fs");
-const { exec } = require("child_process");
-const ffmpeg = require("fluent-ffmpeg");
 const path = require("path");
-
-// ✅ Works on all Node 18+ environments
-const fetch = global.fetch || ((...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args)));
-
-const TENOR_KEY = process.env.TENOR_API_KEY || process.env.TENOR_CLIENT_KEY;
+const { exec } = require("child_process");
 
 module.exports = {
+  name: "gif2emoji",
+  description: "Search Tenor GIFs and save one as an animated emoji",
   data: new SlashCommandBuilder()
     .setName("gif2emoji")
-    .setDescription("Search Tenor GIFs and save one as an animated emoji")
-    .addStringOption(opt =>
-      opt.setName("query").setDescription("Search term").setRequired(true)
+    .setDescription("Search and save a GIF as an animated emoji")
+    .addStringOption((option) =>
+      option
+        .setName("query")
+        .setDescription("Enter the GIF search term")
+        .setRequired(true)
     ),
 
-  name: "gif2emoji",
-  aliases: ["g2e", "gifemoji"],
-
-  async execute({ interaction, message, client }) {
-    const isInteraction = !!interaction;
-    const guild = isInteraction ? interaction.guild : message.guild;
-    const query = isInteraction
-      ? interaction.options.getString("query")
-      : message.content.split(" ").slice(1).join(" ");
-
-    if (!TENOR_KEY)
-      return (isInteraction ? interaction.reply : message.reply)(
-        "❌ Missing **TENOR_API_KEY** in environment variables."
-      );
-
-    if (!query)
-      return (isInteraction ? interaction.reply : message.reply)(
-        "❌ Please provide a search term."
-      );
-
-    if (!guild?.members.me?.permissions.has("ManageGuildExpressions"))
-      return (isInteraction ? interaction.reply : message.reply)(
-        "❌ I need **Manage Emojis & Stickers** permission."
-      );
-
-    // ✅ SAFER reply system
-    const safeReply = async (content, opts = {}) => {
-      const payload =
-        typeof content === "string"
-          ? { content, ...opts }
-          : { content: "", ...content };
-
-      if (isInteraction) {
-        if (interaction.deferred || interaction.replied)
-          return interaction.followUp(payload);
-        else return interaction.reply(payload);
-      } else return message.reply(payload);
-    };
-
-    // 🕒 Defer immediately to avoid "Unknown interaction"
-    if (isInteraction && !interaction.deferred && !interaction.replied)
+  async execute({ client, interaction, message, args, isPrefix }) {
+    let query;
+    if (isPrefix) {
+      if (!args.length) return message.reply("⚠️ Usage: `!gif2emoji <search term>`");
+      query = args.join(" ");
+    } else {
+      query = interaction.options.getString("query");
       await interaction.deferReply();
+    }
 
-    await safeReply(`🔍 Searching Tenor for **${query}**...`);
+    try {
+      const tenorKey = process.env.TENOR_API_KEY;
+      const tenorClientKey = process.env.TENOR_CLIENT_KEY;
+      if (!tenorKey || !tenorClientKey) {
+        const msg = "❌ Missing TENOR API keys.";
+        return isPrefix ? message.reply(msg) : interaction.editReply(msg);
+      }
 
-    // 🎬 Fetch Tenor results
-    const res = await fetch(
-      `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
+      // 🎬 Fetch Tenor GIFs
+      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
         query
-      )}&key=${TENOR_KEY}&limit=5&media_filter=gif`
-    );
-    const data = await res.json();
-    if (!data.results?.length)
-      return safeReply(`❌ No GIFs found for "${query}".`);
+      )}&key=${tenorKey}&client_key=${tenorClientKey}&limit=10&media_filter=gif`;
 
-    const gifs = data.results.map(r => ({
-      url: r.media_formats.gif.url,
-      title: r.content_description || "Untitled"
-    }));
+      const resp = await axios.get(url);
+      const results = resp.data.results;
+      if (!results || results.length === 0)
+        return isPrefix
+          ? message.reply(`⚠️ No GIFs found for **${query}**`)
+          : interaction.editReply(`⚠️ No GIFs found for **${query}**`);
 
-    // 🎨 Select Menu
-    const select = new StringSelectMenuBuilder()
-      .setCustomId("gif_select")
-      .setPlaceholder("Select a GIF to save as emoji")
-      .addOptions(
-        gifs.map(g => ({
-          label: g.title.slice(0, 25),
-          value: g.url
-        }))
-      );
+      let index = 0;
 
-    const row = new ActionRowBuilder().addComponents(select);
+      const getEmbed = () =>
+        new EmbedBuilder()
+          .setTitle(`🎞️ GIF Search: ${query}`)
+          .setImage(results[index].media_formats.gif.url)
+          .setFooter({ text: `Result ${index + 1}/${results.length}` })
+          .setColor("Blurple");
 
-    const embed = new EmbedBuilder()
-      .setTitle("Select a GIF to save as animated emoji")
-      .setDescription(`Query: **${query}**`)
-      .setColor("Blurple")
-      .setFooter({ text: "Powered by Tenor API" });
-
-    // Replace first reply with menu
-    const replyMsg = await interaction.editReply({
-      content: "",
-      embeds: [embed],
-      components: [row]
-    });
-
-    // 🕐 Collector
-    const collector = replyMsg.createMessageComponentCollector({
-      time: 30000,
-      max: 1
-    });
-
-    collector.on("collect", async i => {
-      if (i.user.id !== interaction.user.id)
-        return i.reply({ content: "❌ This menu isn’t for you.", flags: 64 }); // ephemeral replacement
-
-      await i.deferReply();
-
-      const gifUrl = i.values[0];
-      const name = query.replace(/\s+/g, "_").toLowerCase();
-      const tempDir = path.join(__dirname, "../../temp");
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
-
-      const input = path.join(tempDir, `${name}.gif`);
-      const output = path.join(tempDir, `${name}_compressed.gif`);
-
-      const response = await fetch(gifUrl);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      fs.writeFileSync(input, buffer);
-
-      // 🧠 Compress
-      const compressWithGifsicle = () =>
-        new Promise((resolve, reject) => {
-          exec(
-            `gifsicle --optimize=3 --colors 128 --resize-width 256 "${input}" -o "${output}"`,
-            err => (err ? reject(err) : resolve())
-          );
-        });
-
-      let compressed;
-      try {
-        await compressWithGifsicle();
-        compressed = fs.readFileSync(output);
-      } catch {
-        await new Promise((resolve, reject) => {
-          ffmpeg(input)
-            .outputOptions(["-vf", "scale=256:-1:flags=lanczos,fps=15"])
-            .save(output)
-            .on("end", resolve)
-            .on("error", reject);
-        });
-        compressed = fs.readFileSync(output);
-      }
-
-      const sizeKB = compressed.length / 1024;
-      if (sizeKB > 256) {
-        await i.editReply(
-          `❌ Even after compression, file is **${sizeKB.toFixed(
-            1
-          )} KB**, too large.`
+      const getButtons = () =>
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId("next").setLabel("▶️").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("save_emoji")
+            .setLabel("💾 Save as Emoji")
+            .setStyle(ButtonStyle.Success)
         );
-        fs.unlinkSync(input);
-        fs.unlinkSync(output);
-        return;
-      }
 
-      try {
-        const emoji = await guild.emojis.create({ attachment: compressed, name });
-        await i.editReply(`✅ Uploaded as animated emoji: ${emoji.toString()}`);
-      } catch (err) {
-        console.error(err);
-        await i.editReply(`❌ Failed to upload emoji: ${err.message}`);
-      }
+      const sent = isPrefix
+        ? await message.reply({ embeds: [getEmbed()], components: [getButtons()] })
+        : await interaction.editReply({ embeds: [getEmbed()], components: [getButtons()] });
 
-      fs.unlinkSync(input);
-      fs.unlinkSync(output);
-    });
-  }
+      const collector = sent.createMessageComponentCollector({ time: 60_000 });
+
+      collector.on("collect", async (btn) => {
+        const userId = isPrefix ? message.author.id : interaction.user.id;
+        if (btn.user.id !== userId)
+          return btn.reply({ content: "⛔ That’s not your menu!", ephemeral: true });
+
+        const currentGif = results[index].media_formats.gif.url;
+
+        // 🔁 Navigation
+        if (btn.customId === "next") index = (index + 1) % results.length;
+        else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
+
+        // 💾 Save as animated emoji
+        else if (btn.customId === "save_emoji") {
+          const tempGif = path.join(__dirname, `temp_${Date.now()}.gif`);
+          const compressedGif = path.join(__dirname, `compressed_${Date.now()}.gif`);
+
+          try {
+            // Download GIF
+            const response = await axios.get(currentGif, { responseType: "arraybuffer" });
+            fs.writeFileSync(tempGif, Buffer.from(response.data, "binary"));
+
+            // Compress GIF to fit Discord limits (256KB)
+            await new Promise((resolve, reject) => {
+              exec(
+                `gifsicle --lossy=80 -O3 ${tempGif} -o ${compressedGif}`,
+                (err) => (err ? reject(err) : resolve())
+              );
+            });
+
+            const buffer = fs.readFileSync(compressedGif);
+            const name = `tenor_${index + 1}`;
+
+            const emoji = await btn.guild.emojis.create({
+              attachment: buffer,
+              name,
+            });
+
+            await btn.reply({
+              content: `✅ Added as animated emoji: <a:${emoji.name}:${emoji.id}>`,
+              ephemeral: true,
+            });
+          } catch (e) {
+            console.error("Error saving emoji:", e);
+            await btn.reply({
+              content:
+                "❌ Failed to save — check bot permissions or file too large (>256 KB).",
+              ephemeral: true,
+            });
+          } finally {
+            // Cleanup
+            [tempGif, compressedGif].forEach((f) => fs.existsSync(f) && fs.unlinkSync(f));
+          }
+        }
+
+        if (["next", "prev"].includes(btn.customId)) {
+          await btn.update({ embeds: [getEmbed()], components: [getButtons()] });
+        }
+      });
+
+      collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
+    } catch (err) {
+      console.error("gif2emoji command error:", err);
+      const msg = "❌ Failed to fetch or save GIF.";
+      if (isPrefix) message.reply(msg).catch(() => {});
+      else interaction.editReply(msg).catch(() => {});
+    }
+  },
 };
