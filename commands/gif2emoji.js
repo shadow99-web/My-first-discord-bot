@@ -13,7 +13,6 @@ const path = require("path");
 const fetch = global.fetch || ((...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args)));
 
-// ✅ Load Tenor API key (REQUIRED)
 const TENOR_KEY = process.env.TENOR_API_KEY || process.env.TENOR_CLIENT_KEY;
 
 module.exports = {
@@ -34,60 +33,57 @@ module.exports = {
       ? interaction.options.getString("query")
       : message.content.split(" ").slice(1).join(" ");
 
-    // 🧩 Check Tenor key
-    if (!TENOR_KEY) {
+    if (!TENOR_KEY)
       return (isInteraction ? interaction.reply : message.reply)(
         "❌ Missing **TENOR_API_KEY** in environment variables."
       );
-    }
 
-    if (!query) {
+    if (!query)
       return (isInteraction ? interaction.reply : message.reply)(
         "❌ Please provide a search term."
       );
-    }
 
-    if (!guild?.members.me?.permissions.has("ManageGuildExpressions")) {
+    if (!guild?.members.me?.permissions.has("ManageGuildExpressions"))
       return (isInteraction ? interaction.reply : message.reply)(
         "❌ I need **Manage Emojis & Stickers** permission."
       );
-    }
 
-    // ✅ Safe reply handler (prevents double reply & content errors)
-    const replyFn = async (content, opts = {}) => {
+    // ✅ SAFER reply system
+    const safeReply = async (content, opts = {}) => {
       const payload =
         typeof content === "string"
           ? { content, ...opts }
           : { content: "", ...content };
 
       if (isInteraction) {
-        if (interaction.replied || interaction.deferred)
+        if (interaction.deferred || interaction.replied)
           return interaction.followUp(payload);
         else return interaction.reply(payload);
-      } else {
-        return message.reply(payload);
-      }
+      } else return message.reply(payload);
     };
 
-    await replyFn(`🔍 Searching Tenor for **${query}**...`);
+    // 🕒 Defer immediately to avoid "Unknown interaction"
+    if (isInteraction && !interaction.deferred && !interaction.replied)
+      await interaction.deferReply();
 
-    // 🧠 Fetch from Tenor
+    await safeReply(`🔍 Searching Tenor for **${query}**...`);
+
+    // 🎬 Fetch Tenor results
     const res = await fetch(
       `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
         query
       )}&key=${TENOR_KEY}&limit=5&media_filter=gif`
     );
     const data = await res.json();
-
     if (!data.results?.length)
-      return replyFn(`❌ No GIFs found for "${query}".`);
+      return safeReply(`❌ No GIFs found for "${query}".`);
 
     const gifs = data.results.map(r => ({
       url: r.media_formats.gif.url,
       title: r.content_description || "Untitled"
     }));
 
-    // 🎨 Build menu
+    // 🎨 Select Menu
     const select = new StringSelectMenuBuilder()
       .setCustomId("gif_select")
       .setPlaceholder("Select a GIF to save as emoji")
@@ -106,24 +102,28 @@ module.exports = {
       .setColor("Blurple")
       .setFooter({ text: "Powered by Tenor API" });
 
-    const replyMsg = await replyFn({ embeds: [embed], components: [row] });
+    // Replace first reply with menu
+    const replyMsg = await interaction.editReply({
+      content: "",
+      embeds: [embed],
+      components: [row]
+    });
 
-    // 🕐 Wait for user selection
+    // 🕐 Collector
     const collector = replyMsg.createMessageComponentCollector({
       time: 30000,
       max: 1
     });
 
     collector.on("collect", async i => {
-      if (i.user.id !== (isInteraction ? interaction.user.id : message.author.id))
-        return i.reply({ content: "❌ This menu isn’t for you.", ephemeral: true });
+      if (i.user.id !== interaction.user.id)
+        return i.reply({ content: "❌ This menu isn’t for you.", flags: 64 }); // ephemeral replacement
 
       await i.deferReply();
 
       const gifUrl = i.values[0];
       const name = query.replace(/\s+/g, "_").toLowerCase();
       const tempDir = path.join(__dirname, "../../temp");
-
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
       const input = path.join(tempDir, `${name}.gif`);
@@ -133,15 +133,12 @@ module.exports = {
       const buffer = Buffer.from(await response.arrayBuffer());
       fs.writeFileSync(input, buffer);
 
-      // 🧠 Step 1: Try gifsicle compression
+      // 🧠 Compress
       const compressWithGifsicle = () =>
         new Promise((resolve, reject) => {
           exec(
             `gifsicle --optimize=3 --colors 128 --resize-width 256 "${input}" -o "${output}"`,
-            err => {
-              if (err) return reject(err);
-              resolve();
-            }
+            err => (err ? reject(err) : resolve())
           );
         });
 
@@ -149,8 +146,7 @@ module.exports = {
       try {
         await compressWithGifsicle();
         compressed = fs.readFileSync(output);
-      } catch (e) {
-        // 🎞️ fallback: ffmpeg
+      } catch {
         await new Promise((resolve, reject) => {
           ffmpeg(input)
             .outputOptions(["-vf", "scale=256:-1:flags=lanczos,fps=15"])
@@ -162,12 +158,11 @@ module.exports = {
       }
 
       const sizeKB = compressed.length / 1024;
-
       if (sizeKB > 256) {
         await i.editReply(
-          `❌ Even after compression, file size is **${sizeKB.toFixed(
+          `❌ Even after compression, file is **${sizeKB.toFixed(
             1
-          )} KB**, too large to upload.`
+          )} KB**, too large.`
         );
         fs.unlinkSync(input);
         fs.unlinkSync(output);
