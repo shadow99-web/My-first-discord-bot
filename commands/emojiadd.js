@@ -6,27 +6,24 @@ const {
   ButtonStyle,
 } = require("discord.js");
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const { exec } = require("child_process");
 
 module.exports = {
-  name: "gif2emoji",
-  description: "Search Tenor GIFs and save one as an animated emoji",
+  name: "emojiadd",
+  description: "Search emojis from Emoji.gg and add one to your server",
   data: new SlashCommandBuilder()
-    .setName("gif2emoji")
-    .setDescription("Search and save a GIF as an animated emoji")
+    .setName("emojiadd")
+    .setDescription("Search and add an emoji from Emoji.gg to your server")
     .addStringOption((option) =>
       option
         .setName("query")
-        .setDescription("Enter the GIF search term")
+        .setDescription("Enter the emoji search term")
         .setRequired(true)
     ),
 
   async execute({ client, interaction, message, args, isPrefix }) {
     let query;
     if (isPrefix) {
-      if (!args.length) return message.reply("⚠️ Usage: `!gif2emoji <search term>`");
+      if (!args.length) return message.reply("⚠️ Usage: `!emojiadd <search term>`");
       query = args.join(" ");
     } else {
       query = interaction.options.getString("query");
@@ -34,40 +31,38 @@ module.exports = {
     }
 
     try {
-      const tenorKey = process.env.TENOR_API_KEY;
-      const tenorClientKey = process.env.TENOR_CLIENT_KEY;
-      if (!tenorKey || !tenorClientKey) {
-        const msg = "❌ Missing TENOR API keys.";
-        return isPrefix ? message.reply(msg) : interaction.editReply(msg);
-      }
+      // 🧠 Fetch from Emoji.gg public API
+      const resp = await axios.get("https://emoji.gg/api/");
+      const allEmojis = resp.data;
 
-      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
-        query
-      )}&key=${tenorKey}&client_key=${tenorClientKey}&limit=10&media_filter=gif`;
+      // 🔍 Filter by query
+      const results = allEmojis
+        .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 10);
 
-      const resp = await axios.get(url);
-      const results = resp.data.results;
-      if (!results || results.length === 0)
+      if (!results.length)
         return isPrefix
-          ? message.reply(`⚠️ No GIFs found for **${query}**`)
-          : interaction.editReply(`⚠️ No GIFs found for **${query}**`);
+          ? message.reply(`⚠️ No emojis found for **${query}**`)
+          : interaction.editReply(`⚠️ No emojis found for **${query}**`);
 
       let index = 0;
 
+      // 🎨 Embed
       const getEmbed = () =>
         new EmbedBuilder()
-          .setTitle(`🎞️ GIF Search: ${query}`)
-          .setImage(results[index].media_formats.gif.url)
+          .setTitle(`😄 Emoji Search: ${query}`)
+          .setImage(results[index].url)
           .setFooter({ text: `Result ${index + 1}/${results.length}` })
           .setColor("Blurple");
 
+      // 🔘 Buttons
       const getButtons = () =>
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
           new ButtonBuilder().setCustomId("next").setLabel("▶️").setStyle(ButtonStyle.Secondary),
           new ButtonBuilder()
             .setCustomId("save_emoji")
-            .setLabel("💾 Save as Emoji")
+            .setLabel("💾 Add Emoji")
             .setStyle(ButtonStyle.Success)
         );
 
@@ -82,31 +77,16 @@ module.exports = {
         if (btn.user.id !== userId)
           return btn.reply({ content: "⛔ That’s not your menu!", ephemeral: true });
 
-        const currentGif = results[index].media_formats.gif.url;
-
-        // 🔁 Navigation buttons
         if (btn.customId === "next") index = (index + 1) % results.length;
         else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
 
-        // 💾 Save as animated emoji
+        // 💾 Save emoji
         else if (btn.customId === "save_emoji") {
-          await btn.deferReply({ ephemeral: true }).catch(() => {}); // ✅ Prevent Unknown Interaction
-          const tempGif = path.join(__dirname, `temp_${Date.now()}.gif`);
-          const compressedGif = path.join(__dirname, `compressed_${Date.now()}.gif`);
-
+          await btn.deferReply({ ephemeral: true }).catch(() => {});
           try {
-            const response = await axios.get(currentGif, { responseType: "arraybuffer" });
-            fs.writeFileSync(tempGif, Buffer.from(response.data, "binary"));
-
-            await new Promise((resolve, reject) => {
-              exec(
-                `gifsicle --lossy=80 -O3 ${tempGif} -o ${compressedGif}`,
-                (err) => (err ? reject(err) : resolve())
-              );
-            });
-
-            const buffer = fs.readFileSync(compressedGif);
-            const name = `tenor_${index + 1}`;
+            const response = await axios.get(results[index].url, { responseType: "arraybuffer" });
+            const buffer = Buffer.from(response.data);
+            const name = results[index].slug || `emoji_${index + 1}`;
 
             const emoji = await btn.guild.emojis.create({
               attachment: buffer,
@@ -114,16 +94,13 @@ module.exports = {
             });
 
             await btn.followUp({
-              content: `✅ Added as animated emoji: <a:${emoji.name}:${emoji.id}>`,
+              content: `✅ Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`,
             });
           } catch (e) {
             console.error("Error saving emoji:", e);
             await btn.followUp({
-              content:
-                "❌ Failed to save — check bot permissions or file too large (>256 KB).",
+              content: "❌ Failed to save — check bot permissions or emoji slot limits.",
             });
-          } finally {
-            [tempGif, compressedGif].forEach((f) => fs.existsSync(f) && fs.unlinkSync(f));
           }
           return;
         }
@@ -138,8 +115,8 @@ module.exports = {
 
       collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
     } catch (err) {
-      console.error("gif2emoji command error:", err);
-      const msg = "❌ Failed to fetch or save GIF.";
+      console.error("emojiadd command error:", err);
+      const msg = "❌ Failed to fetch or save emoji.";
       if (isPrefix) message.reply(msg).catch(() => {});
       else interaction.editReply(msg).catch(() => {});
     }
