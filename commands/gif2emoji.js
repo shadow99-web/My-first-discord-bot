@@ -41,7 +41,6 @@ module.exports = {
         return isPrefix ? message.reply(msg) : interaction.editReply(msg);
       }
 
-      // 🎬 Fetch Tenor GIFs
       const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(
         query
       )}&key=${tenorKey}&client_key=${tenorClientKey}&limit=10&media_filter=gif`;
@@ -85,21 +84,20 @@ module.exports = {
 
         const currentGif = results[index].media_formats.gif.url;
 
-        // 🔁 Navigation
+        // 🔁 Navigation buttons
         if (btn.customId === "next") index = (index + 1) % results.length;
         else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
 
         // 💾 Save as animated emoji
         else if (btn.customId === "save_emoji") {
+          await btn.deferReply({ ephemeral: true }).catch(() => {}); // ✅ Prevent Unknown Interaction
           const tempGif = path.join(__dirname, `temp_${Date.now()}.gif`);
           const compressedGif = path.join(__dirname, `compressed_${Date.now()}.gif`);
 
           try {
-            // Download GIF
             const response = await axios.get(currentGif, { responseType: "arraybuffer" });
             fs.writeFileSync(tempGif, Buffer.from(response.data, "binary"));
 
-            // Compress GIF to fit Discord limits (256KB)
             await new Promise((resolve, reject) => {
               exec(
                 `gifsicle --lossy=80 -O3 ${tempGif} -o ${compressedGif}`,
@@ -115,25 +113,26 @@ module.exports = {
               name,
             });
 
-            await btn.reply({
+            await btn.followUp({
               content: `✅ Added as animated emoji: <a:${emoji.name}:${emoji.id}>`,
-              ephemeral: true,
             });
           } catch (e) {
             console.error("Error saving emoji:", e);
-            await btn.reply({
+            await btn.followUp({
               content:
                 "❌ Failed to save — check bot permissions or file too large (>256 KB).",
-              ephemeral: true,
             });
           } finally {
-            // Cleanup
             [tempGif, compressedGif].forEach((f) => fs.existsSync(f) && fs.unlinkSync(f));
           }
+          return;
         }
 
+        // 🖼️ Update embed safely
         if (["next", "prev"].includes(btn.customId)) {
-          await btn.update({ embeds: [getEmbed()], components: [getButtons()] });
+          if (!btn.deferred && !btn.replied)
+            await btn.deferUpdate().catch(() => {});
+          await btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
         }
       });
 
