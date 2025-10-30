@@ -212,3 +212,5 @@ try {
   console.error("❌ Prefix Command Error:", err);
   await message.reply("⚠️ Something went wrong executing this prefix command.").catch(() => {});
 }
+  });
+};
