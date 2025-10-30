@@ -171,45 +171,44 @@ try {
     }
 
     // ---------- Prefix Commands ----------
-    const prefixes = getPrefixes();
-    const guildPrefix = prefixes[guildId] || defaultPrefix;
-    if (!message.content.startsWith(guildPrefix)) return;
+try {
+  // Always safe – prevents undefined errors
+  const prefixes = getPrefixes?.() || {};
+  const guildPrefix = prefixes[message.guild.id] || defaultPrefix || "!";
 
-    const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
+  // Ignore messages without prefix
+  if (!message.content.startsWith(guildPrefix)) return;
 
-    const command = client.commands.get(commandName);
-    if (!command) return;
+  // Slice command + args
+  const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
+  const commandName = args.shift()?.toLowerCase();
+  if (!commandName) return;
 
-    
-    // ---------- Block Check ----------
-    if (blockHelpers?.isBlocked && blockHelpers.isBlocked(guildId, message.author.id, commandName)) {
-      return message.reply("🚫 You are blocked from using this command.");
-    }
+  // Fetch command
+  const command = client.commands.get(commandName);
+  if (!command) return;
 
-    // ---------- Ticket Prefix Command ----------
-    if (commandName === "ticket") {
-      await sendTicketPanel(message.channel);
-      return message.reply("✅ Ticket panel sent!");
-    }
+  // Optional: Block system check
+  if (
+    blockHelpers?.isBlocked &&
+    blockHelpers.isBlocked(message.guild.id, message.author.id, commandName)
+  ) {
+    return message.reply("🚫 You are blocked from using this command.");
+  }
 
-    // ---------- Execute Prefix Command ----------
-    try {
-      if (typeof command.execute === "function") {
-        // ✅ Unified format (same as interaction.js)
-        await command.execute({
-          client,
-          message,
-          interaction: null,
-          args,
-          isPrefix: true,
-        });
-      } else {
-        message.reply("❌ This command cannot be used with a prefix.").catch(() => {});
-      }
-    } catch (err) {
-      console.error(`❌ Prefix command execution failed: ${commandName}`, err);
-      message.reply("❌ Something went wrong executing this command.").catch(() => {});
-    }
-  });
-};
+  // Execute command
+  if (typeof command.execute === "function") {
+    await command.execute({
+      client,
+      message,
+      interaction: null,
+      args,
+      isPrefix: true,
+    });
+  } else {
+    await message.reply("❌ This command cannot be used with a prefix.").catch(() => {});
+  }
+} catch (err) {
+  console.error("❌ Prefix Command Error:", err);
+  await message.reply("⚠️ Something went wrong executing this prefix command.").catch(() => {});
+}
