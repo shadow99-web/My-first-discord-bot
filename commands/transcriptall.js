@@ -9,10 +9,12 @@ const { createTranscript } = require("discord-html-transcripts");
 const fs = require("fs");
 const path = require("path");
 const archiver = require("archiver");
+const https = require("https");
+const FormData = require("form-data");
 
 module.exports = {
   name: "transcriptall",
-  description: "📜 Generate transcripts for all text channels (zipped)",
+  description: "📜 Generate transcripts for all text channels (zipped, auto-upload if too big)",
   usage: "transcriptall",
   data: new SlashCommandBuilder()
     .setName("transcriptall")
@@ -29,42 +31,42 @@ module.exports = {
       else return message.reply(msg);
     }
 
-    // Notify start
+    // 🕐 Notify start
     const statusMsg = await (message
-      ? message.reply("🕐 Generating transcripts for all channels... this may take a while.")
+      ? message.reply("🕐 Generating transcripts for all text channels... please wait.")
       : interaction.reply({
-          content: "🕐 Generating transcripts for all channels... please wait.",
+          content: "🕐 Generating transcripts for all text channels... please wait.",
           ephemeral: true,
           fetchReply: true,
         }));
 
     try {
-      const transcriptDir = path.join(__dirname, "..", "transcripts");
-      if (!fs.existsSync(transcriptDir)) fs.mkdirSync(transcriptDir);
+      const baseDir = path.join(__dirname, "..", "transcripts");
+      if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir);
+
+      const guildDir = path.join(baseDir, `${guild.id}`);
+      if (!fs.existsSync(guildDir)) fs.mkdirSync(guildDir);
 
       const textChannels = guild.channels.cache.filter(
         (ch) => ch.type === ChannelType.GuildText
       );
 
       let count = 0;
+
       for (const [id, channel] of textChannels) {
         try {
-          const filePath = path.join(transcriptDir, `${channel.name}.html`);
+          const safeName = channel.name.replace(/[^a-z0-9_-]/gi, "_");
+          const filePath = path.join(guildDir, `${safeName}.html`);
 
-          const transcriptFile = await createTranscript(channel, {
-            limit: 1000, // cap for performance, adjust if needed
-            returnBuffer: false,
-            fileName: `${channel.name}.html`,
+          const transcript = await createTranscript(channel, {
+            limit: 1000,
+            returnBuffer: true,
+            fileName: `${safeName}.html`,
             poweredBy: false,
             saveImages: true,
           });
 
-          if (transcriptFile?.attachment?.attachment) {
-            const stream = fs.createWriteStream(filePath);
-            stream.write(transcriptFile.attachment.attachment);
-            stream.end();
-          }
-
+          fs.writeFileSync(filePath, transcript.attachment);
           console.log(`✅ Created transcript for #${channel.name}`);
           count++;
         } catch (err) {
@@ -73,41 +75,68 @@ module.exports = {
       }
 
       if (count === 0) {
-        return statusMsg.edit("⚠️ No valid transcripts could be created!");
+        const msg = "⚠️ No valid transcripts could be created!";
+        if (interaction) return interaction.followUp({ content: msg, ephemeral: true });
+        else return message.reply(msg);
       }
 
-      // Zip everything
-      const zipPath = path.join(transcriptDir, `${guild.name}-transcripts.zip`);
+      // ✅ Zip all transcripts
+      const zipPath = path.join(baseDir, `${guild.name.replace(/[^a-z0-9_-]/gi, "_")}-transcripts.zip`);
       const output = fs.createWriteStream(zipPath);
       const archive = archiver("zip", { zlib: { level: 9 } });
 
       archive.pipe(output);
-      archive.directory(transcriptDir, false);
+      archive.directory(guildDir, false);
       await archive.finalize();
+      await new Promise((resolve) => output.on("close", resolve));
 
-      const attachment = new AttachmentBuilder(zipPath, {
-        name: `${guild.name}-transcripts.zip`,
-      });
+      const zipSize = fs.statSync(zipPath).size / (1024 * 1024);
 
       const embed = new EmbedBuilder()
         .setColor("Aqua")
         .setTitle("📦 Server Transcripts Generated")
-        .setDescription(
-          `🗂️ **${count} transcript(s)** created for ${guild.name}.\n👤 Requested by: ${user}`
-        )
+        .setDescription(`🗂️ **${count} transcript(s)** generated for ${guild.name}\n👤 Requested by: ${user}`)
         .setTimestamp();
 
-      if (message)
-        await message.channel.send({ embeds: [embed], files: [attachment] });
-      else
-        await interaction.followUp({ embeds: [embed], files: [attachment] });
+      // ✅ Handle big file upload
+      if (zipSize > 25) {
+        embed.addFields({
+          name: "⚠️ File too large for Discord",
+          value: "Uploading to external host (transfer.sh)...",
+        });
+
+        if (interaction) await interaction.followUp({ embeds: [embed] });
+        else await message.channel.send({ embeds: [embed] });
+
+        const uploadUrl = await uploadToTransfer(zipPath);
+
+        embed.addFields({
+          name: "✅ Download Link",
+          value: `[Click to download](${uploadUrl})`,
+        });
+
+        if (interaction)
+          await interaction.followUp({ embeds: [embed] });
+        else
+          await message.channel.send({ embeds: [embed] });
+      } else {
+        const attachment = new AttachmentBuilder(zipPath, {
+          name: `${guild.name}-transcripts.zip`,
+        });
+
+        if (interaction)
+          await interaction.followUp({ embeds: [embed], files: [attachment] });
+        else
+          await message.channel.send({ embeds: [embed], files: [attachment] });
+      }
 
       await statusMsg.delete().catch(() => {});
 
-      // cleanup old files after send
+      // 🧹 Cleanup
       setTimeout(() => {
-        fs.rmSync(transcriptDir, { recursive: true, force: true });
-      }, 15000);
+        fs.rmSync(guildDir, { recursive: true, force: true });
+        fs.unlinkSync(zipPath);
+      }, 20000);
     } catch (err) {
       console.error("❌ TranscriptAll Error:", err);
       const failMsg = "⚠️ Failed to generate all transcripts. Try again later.";
@@ -118,3 +147,29 @@ module.exports = {
     }
   },
 };
+
+// ✅ helper: upload to transfer.sh
+async function uploadToTransfer(filePath) {
+  return new Promise((resolve, reject) => {
+    const fileName = path.basename(filePath);
+    const form = new FormData();
+    form.append("file", fs.createReadStream(filePath));
+
+    const req = https.request(
+      {
+        method: "POST",
+        host: "transfer.sh",
+        path: `/${encodeURIComponent(fileName)}`,
+        headers: form.getHeaders(),
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => resolve(data.trim()));
+      }
+    );
+
+    req.on("error", reject);
+    form.pipe(req);
+  });
+    }
