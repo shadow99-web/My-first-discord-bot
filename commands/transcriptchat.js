@@ -1,149 +1,164 @@
+// commands/transcriptchat.js
 const {
   SlashCommandBuilder,
+  AttachmentBuilder,
   EmbedBuilder,
   ChannelType,
   PermissionFlagsBits,
 } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
+const path = require("path");
 const fs = require("fs");
 
 module.exports = {
   name: "transcriptchat",
-  description: "📜 Generate an HTML transcript of this channel (supports large servers)",
+  description: "📜 Generate an HTML transcript of this channel (works for large servers)",
   usage: "transcriptchat [#channel]",
-  options: [
-    {
-      name: "channel",
-      description: "Select a channel to generate transcript",
-      type: 7,
-      required: false,
-    },
-  ],
-
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
     .setDescription("📜 Generate an HTML transcript of this channel")
     .addChannelOption((opt) =>
-      opt
-        .setName("channel")
-        .setDescription("Select a text channel")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(false)
+      opt.setName("channel").setDescription("Select a text channel").addChannelTypes(ChannelType.GuildText).setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
+  // unified handler signature: ({ client, message, interaction, args, isPrefix })
   async execute({ client, message, interaction, args, isPrefix }) {
     const channel =
       (interaction && interaction.options.getChannel("channel")) ||
       (isPrefix && message.mentions.channels.first()) ||
-      (isPrefix && args.length
+      (isPrefix && args && args.length
         ? message.guild.channels.cache.get(args[0].replace(/[<#>]/g, ""))
         : null) ||
       (interaction ? interaction.channel : message.channel);
 
-    const user = message ? message.author : interaction.user;
-
     if (!channel || channel.type !== ChannelType.GuildText) {
       const msg = "⚠️ Please provide a valid text channel.";
-      if (interaction)
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
-      else return message.reply(msg).catch(() => {});
+      if (interaction) return interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
+      return message.reply(msg).catch(() => {});
     }
 
-    // 🕐 Notify start
-    if (interaction) await interaction.deferReply({ ephemeral: false }).catch(() => {});
-    const statusMsg =
-      interaction || (await message.reply("🕐 Generating transcript, please wait..."));
+    const requester = interaction ? interaction.user : message.author;
+
+    // Defer + notify
+    if (interaction) await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    else await message.reply("🕐 Generating transcript, please wait...").catch(() => {});
 
     try {
-      const fetchLimit = 100;
-      const chunkSize = 1000;
-      const maxMessages = 10000;
-      let beforeId = null;
-      let chunkIndex = 1;
-      let collectedMessages = [];
-      const uploadedLinks = [];
+      const chunkSize = 1000; // messages per HTML file (adjustable)
+      const fetchLimit = 100; // discord fetch limit
+      const maxMessages = 10000; // safety cap
+      let before = null;
+      let collected = [];
+      let part = 1;
+      const filesToSend = [];
 
-      while (collectedMessages.length < maxMessages) {
-        const fetched = await channel.messages.fetch({
-          limit: fetchLimit,
-          ...(beforeId && { before: beforeId }),
-        });
-        if (fetched.size === 0) break;
+      // ensure transcript-log channel
+      const logChannel = await ensureTranscriptLogChannel(channel.guild, client);
 
-        const messages = Array.from(fetched.values());
-        collectedMessages.push(...messages);
-        beforeId = messages[messages.length - 1].id;
+      // fetch loop
+      while (collected.length < maxMessages) {
+        const fetched = await channel.messages.fetch({ limit: fetchLimit, ...(before && { before }) });
+        if (!fetched || fetched.size === 0) break;
 
-        if (collectedMessages.length >= chunkSize) {
-          const filename = `${channel.name}-part-${chunkIndex}.html`;
-          const filePath = `./${filename}`;
+        const msgs = Array.from(fetched.values());
+        collected.push(...msgs);
+        before = msgs[msgs.length - 1].id;
 
-          const transcript = await createTranscript(channel, {
-            limit: collectedMessages.length,
-            returnBuffer: false,
-            fileName: filename,
-            saveImages: true,
+        if (collected.length >= chunkSize) {
+          // create a transcript for this chunk (use returnBuffer to receive HTML buffer)
+          const buffer = await createTranscript(channel, {
+            limit: collected.length,
+            returnBuffer: true,
+            fileName: `${channel.name}-part-${part}.html`,
             poweredBy: false,
+            saveImages: true,
           });
 
-          fs.renameSync(transcript.path, filePath);
-          const link = await uploadTo0x0(filePath);
-          uploadedLinks.push(`[Part ${chunkIndex}](${link})`);
+          if (buffer && buffer.attachment) {
+            const att = new AttachmentBuilder(buffer.attachment, { name: `${channel.name}-part-${part}.html` });
+            filesToSend.push({ attachment: att, name: `${channel.name}-part-${part}.html` });
+          }
 
-          console.log(`✅ Uploaded transcript part ${chunkIndex} to 0x0.st`);
-          fs.unlinkSync(filePath);
-          collectedMessages = [];
-          chunkIndex++;
+          part++;
+          collected = [];
         }
       }
 
       // leftover
-      if (collectedMessages.length > 0) {
-        const filename = `${channel.name}-part-${chunkIndex}.html`;
-        const filePath = `./${filename}`;
-
-        const transcript = await createTranscript(channel, {
-          limit: collectedMessages.length,
-          returnBuffer: false,
-          fileName: filename,
-          saveImages: true,
+      if (collected.length > 0) {
+        const buffer = await createTranscript(channel, {
+          limit: collected.length,
+          returnBuffer: true,
+          fileName: `${channel.name}-part-${part}.html`,
           poweredBy: false,
+          saveImages: true,
         });
 
-        fs.renameSync(transcript.path, filePath);
-        const link = await uploadTo0x0(filePath);
-        uploadedLinks.push(`[Part ${chunkIndex}](${link})`);
-        fs.unlinkSync(filePath);
+        if (buffer && buffer.attachment) {
+          const att = new AttachmentBuilder(buffer.attachment, { name: `${channel.name}-part-${part}.html` });
+          filesToSend.push({ attachment: att, name: `${channel.name}-part-${part}.html` });
+        }
       }
 
+      if (filesToSend.length === 0) {
+        const noFiles = "⚠️ No valid transcript files could be created.";
+        if (interaction) return interaction.editReply({ content: noFiles }).catch(() => {});
+        return message.reply(noFiles).catch(() => {});
+      }
+
+      // send to transcript-log (private)
       const embed = new EmbedBuilder()
-        .setColor("Aqua")
         .setTitle("📜 Transcript Generated")
-        .setDescription(
-          `🗂️ Transcript for ${channel}\n\n${uploadedLinks.join("\n")}\n\nRequested by: ${user}`
-        )
+        .setColor("Aqua")
+        .setDescription(`Transcript(s) for ${channel} — generated by ${requester}`)
         .setTimestamp();
 
-      if (interaction)
-        await interaction.editReply({ content: "", embeds: [embed] }).catch(() => {});
-      else await statusMsg.edit({ content: "", embeds: [embed] }).catch(() => {});
+      // send as separate messages (Discord may restrict number of attachments per message)
+      for (const fileObj of filesToSend) {
+        await logChannel.send({ embeds: [embed], files: [fileObj.attachment] }).catch((e) => {
+          console.error("Failed to upload transcript part:", e);
+        });
+      }
+
+      // confirm to requester
+      const confirm = `✅ Transcript uploaded to ${logChannel} (${filesToSend.length} file(s))`;
+      if (interaction) await interaction.editReply({ content: confirm }).catch(() => {});
+      else await message.reply(confirm).catch(() => {});
     } catch (err) {
-      console.error("❌ Transcript error:", err);
-      const failText = "⚠️ Failed to generate transcript. Please try again later.";
-      if (interaction)
-        await interaction.editReply({ content: failText, ephemeral: true }).catch(() => {});
-      else await message.reply(failText).catch(() => {});
+      console.error("❌ Transcriptchat error:", err);
+      const fail = "⚠️ Failed to generate transcript. Try again later.";
+      if (interaction) await interaction.editReply({ content: fail, ephemeral: true }).catch(() => {});
+      else await message.reply(fail).catch(() => {});
     }
   },
 };
 
-// 🔗 Upload helper for 0x0.st
-async function uploadTo0x0(filePath) {
-  const fileStream = fs.createReadStream(filePath);
-  const res = await fetch("https://0x0.st", {
-    method: "POST",
-    body: fileStream,
+// helper to ensure private transcript-log channel exists
+async function ensureTranscriptLogChannel(guild, client) {
+  const existing = guild.channels.cache.find((c) => c.name === "transcript-log" && c.type === ChannelType.GuildText);
+  if (existing) return existing;
+
+  // create private channel visible to administrators and bot
+  const perms = [
+    {
+      id: guild.roles.everyone,
+      deny: ["ViewChannel"],
+    },
+    {
+      id: guild.members.me.roles.highest, // bot
+      allow: ["ViewChannel", "SendMessages", "AttachFiles", "EmbedLinks"],
+    },
+  ];
+
+  // allow administrators
+  guild.roles.cache.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator)).forEach((r) => {
+    perms.push({ id: r.id, allow: ["ViewChannel", "SendMessages", "AttachFiles", "EmbedLinks"] });
   });
-  return res.text();
-                                     }
+
+  return await guild.channels.create({
+    name: "transcript-log",
+    type: ChannelType.GuildText,
+    permissionOverwrites: perms,
+  });
+            }
