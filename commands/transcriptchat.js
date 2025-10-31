@@ -161,4 +161,4 @@ async function ensureTranscriptLogChannel(guild, client) {
     type: ChannelType.GuildText,
     permissionOverwrites: perms,
   });
-            }
+}
