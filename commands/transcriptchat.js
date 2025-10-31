@@ -1,130 +1,133 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ChannelType,
-  PermissionFlagsBits,
-} = require("discord.js");
-const fs = require("fs");
-const path = require("path");
-const { createTranscript } = require("discord-html-transcripts");
+const { SlashCommandBuilder, AttachmentBuilder, PermissionFlagsBits } = require("discord.js");
+const discordTranscripts = require("discord-html-transcripts");
+const fs = require("fs-extra");
+const axios = require("axios");
 const FormData = require("form-data");
-const https = require("https");
-
-async function uploadToBashUpload(filePath) {
-  return new Promise((resolve, reject) => {
-    const fileName = path.basename(filePath);
-    const form = new FormData();
-    form.append("file", fs.createReadStream(filePath));
-
-    const req = https.request(
-      {
-        method: "POST",
-        host: "bashupload.com",
-        path: `/${encodeURIComponent(fileName)}`,
-        headers: form.getHeaders(),
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          const match = data.match(/https?:\/\/bashupload\.com\/[a-zA-Z0-9_-]+/);
-          if (match) resolve(match[0]);
-          else reject(new Error("Upload failed: No link returned"));
-        });
-      }
-    );
-
-    req.on("error", reject);
-    form.pipe(req);
-  });
-}
 
 module.exports = {
   name: "transcriptchat",
-  description: "📜 Generate an HTML transcript of this channel (small or large servers)",
+  description: "Generates a chat transcript (HTML format) for the channel.",
+  usage: "transcriptchat [#channel] [withImages|noImages]",
+
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
-    .setDescription("📜 Generate an HTML transcript of this channel")
-    .addChannelOption((opt) =>
-      opt
-        .setName("channel")
-        .setDescription("Select a text channel")
-        .addChannelTypes(ChannelType.GuildText)
+    .setDescription("Generate an HTML transcript of this or another channel.")
+    .addChannelOption(option =>
+      option.setName("channel")
+        .setDescription("The channel to generate transcript from")
         .setRequired(false)
     )
-    .addBooleanOption((opt) =>
-      opt
-        .setName("includeimages")
-        .setDescription("Include images in transcript? (default: false)")
+    .addStringOption(option =>
+      option.setName("images")
+        .setDescription("Include images in transcript? (yes/no)")
         .setRequired(false)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+        .addChoices(
+          { name: "Yes (Include Images)", value: "yes" },
+          { name: "No (Faster, No Images)", value: "no" }
+        )
+    ),
 
-  async execute({ client, interaction }) {
-    const channel =
-      interaction.options.getChannel("channel") || interaction.channel;
-    const includeImages = interaction.options.getBoolean("includeimages") || false;
-
-    if (channel.type !== ChannelType.GuildText) {
-      return interaction.reply({
-        content: "⚠️ Please select a valid text channel.",
-        ephemeral: true,
-      });
-    }
-
-    await interaction.deferReply({ ephemeral: false });
+  async execute(interactionOrMessage, client) {
+    const isSlash = !!interactionOrMessage.isChatInputCommand;
+    const interaction = isSlash ? interactionOrMessage : null;
+    const message = isSlash ? null : interactionOrMessage;
 
     try {
-      const filePath = path.join(
-        __dirname,
-        `${channel.name}-${Date.now()}.html`
-      );
+      const user = isSlash ? interaction.user : message.author;
+      const channel = isSlash
+        ? interaction.options?.getChannel("channel") || interaction.channel
+        : message.mentions.channels.first() || message.channel;
 
-      const transcript = await createTranscript(channel, {
-        limit: -1,
-        returnBuffer: false,
-        fileName: path.basename(filePath),
-        poweredBy: false,
-        saveImages: includeImages,
-      });
+      const includeImages = isSlash
+        ? interaction.options?.getString("images") || "yes"
+        : (message.content.includes("noImages") ? "no" : "yes");
 
-      const stats = fs.statSync(transcript);
-      const fileSize = stats.size / (1024 * 1024); // MB
+      const withImages = includeImages === "yes";
 
-      const embed = new EmbedBuilder()
-        .setColor("Aqua")
-        .setTitle("📜 Transcript Generated")
-        .setDescription(
-          `Channel: ${channel}\nRequested by: ${interaction.user}\nInclude Images: **${includeImages ? "Yes" : "No"}**`
-        )
-        .setTimestamp();
-
-      if (fileSize <= 25) {
-        await interaction.editReply({
-          embeds: [embed],
-          files: [transcript],
-        });
-      } else {
-        embed.addFields({
-          name: "⚠️ File too large for Discord",
-          value: "Uploading to bashupload.com...",
-        });
-        await interaction.editReply({ embeds: [embed] });
-
-        const uploadUrl = await uploadToBashUpload(transcript);
-        embed.addFields({
-          name: "✅ Download Link",
-          value: `[Click to download](${uploadUrl})`,
-        });
-
-        await interaction.editReply({ embeds: [embed] });
-        fs.unlinkSync(transcript);
+      if (!channel.isTextBased()) {
+        const msg = "❌ That channel isn’t text-based!";
+        return isSlash ? interaction.reply({ content: msg, ephemeral: true }) : message.reply(msg);
       }
-    } catch (err) {
-      console.error("❌ Transcript error:", err);
-      await interaction.editReply({
-        content: "⚠️ Failed to generate transcript. Please try again later.",
+
+      const progressMsg = isSlash
+        ? await interaction.reply({ content: "🕓 Creating transcript... [░░░░░░░░░░] 0%", fetchReply: true })
+        : await message.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
+
+      const fileName = `${channel.name.replace(/[^a-zA-Z0-9]/g, "_")}_transcript.html`;
+      const filePath = `./transcripts/${fileName}`;
+      await fs.ensureDir("./transcripts");
+
+      let progress = 0;
+      const updateProgress = async (percent) => {
+        progress = percent;
+        const barLength = 10;
+        const filled = Math.round((percent / 100) * barLength);
+        const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
+        if (isSlash) {
+          await interaction.editReply(`🕓 Creating transcript... [${bar}] ${percent}%`);
+        } else {
+          await progressMsg.edit(`🕓 Creating transcript... [${bar}] ${percent}%`);
+        }
+      };
+
+      await updateProgress(10);
+
+      // 📄 Generate transcript
+      const transcript = await discordTranscripts.createTranscript(channel, {
+        limit: -1,
+        returnType: "buffer",
+        fileName,
+        saveImages: withImages,
+        footerText: `Generated by ${user.tag} on ${new Date().toLocaleString()}`,
+        poweredBy: false,
       });
+
+      await updateProgress(60);
+
+      // Save locally
+      await fs.writeFile(filePath, transcript);
+      await updateProgress(80);
+
+      // 🌐 Upload to bashupload.com
+      const form = new FormData();
+      form.append("file", fs.createReadStream(filePath));
+      const upload = await axios.post("https://bashupload.com/", form, {
+        headers: form.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+
+      const downloadLink = upload.data.match(/https?:\/\/bashupload\.com\/[^\s]+/g)?.[0] || null;
+      await updateProgress(100);
+
+      if (downloadLink) {
+        const successMsg = `✅ Transcript created successfully!\n📁 [Click to download transcript](${downloadLink})`;
+        isSlash
+          ? await interaction.editReply(successMsg)
+          : await progressMsg.edit(successMsg);
+      } else {
+        const attachment = new AttachmentBuilder(filePath, { name: fileName });
+        const successMsg = "✅ Transcript created successfully (local file attached):";
+        isSlash
+          ? await interaction.editReply({ content: successMsg, files: [attachment] })
+          : await progressMsg.edit({ content: successMsg, files: [attachment] });
+      }
+
+      // 🧹 Clean up
+      setTimeout(() => {
+        fs.unlink(filePath).catch(() => {});
+      }, 60000);
+
+    } catch (error) {
+      console.error("TranscriptChat Error:", error);
+      const msg = "❌ Failed to create transcript. Please try again later.";
+      if (interactionOrMessage.reply) {
+        try {
+          await interactionOrMessage.reply(msg);
+        } catch {
+          await interactionOrMessage.followUp(msg);
+        }
+      }
     }
   },
 };
