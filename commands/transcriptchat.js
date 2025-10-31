@@ -6,20 +6,10 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
-const axios = require("axios");
-const fs = require("fs-extra");
+const fs = require("fs");
 const path = require("path");
-
-async function uploadToBashupload(filePath) {
-  const fileStream = fs.createReadStream(filePath);
-  const response = await axios.post("https://bashupload.com/", fileStream, {
-    headers: { "Content-Type": "application/octet-stream" },
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-  });
-  const match = response.data.match(/https?:\/\/bashupload\.com\/\S+/);
-  return match ? match[0] : null;
-}
+const https = require("https");
+const FormData = require("form-data");
 
 module.exports = {
   name: "transcriptchat",
@@ -37,7 +27,7 @@ module.exports = {
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
-  async execute({ client, interaction, message, args, isPrefix }) {
+  async execute({ client, message, interaction, args, isPrefix }) {
     const channel =
       (interaction && interaction.options.getChannel("channel")) ||
       (isPrefix && message.mentions.channels.first()) ||
@@ -55,96 +45,113 @@ module.exports = {
       else return message.reply(msg).catch(() => {});
     }
 
-    if (interaction) await interaction.deferReply({ ephemeral: false }).catch(() => {});
-
-    const tempDir = path.join(__dirname, "transcripts_temp");
-    await fs.ensureDir(tempDir);
-
-    const fetchLimit = 100;
-    const chunkSize = 1000;
-    const maxMessages = 10000;
-    let beforeId = null;
-    let chunkIndex = 1;
-    let collectedMessages = [];
-    const urls = [];
+    // 🕐 Notify start
+    const statusMsg = await (interaction
+      ? interaction.reply({
+          content: "🕐 Generating transcript... please wait.",
+          ephemeral: true,
+          fetchReply: true,
+        })
+      : message.reply("🕐 Generating transcript... please wait."));
 
     try {
-      while (collectedMessages.length < maxMessages) {
-        const fetched = await channel.messages.fetch({
-          limit: fetchLimit,
-          ...(beforeId && { before: beforeId }),
-        });
-        if (fetched.size === 0) break;
+      // 🗂️ Directory setup
+      const baseDir = path.join(__dirname, "..", "transcripts");
+      if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir);
+      const fileName = `${channel.name}-${Date.now()}.html`;
+      const filePath = path.join(baseDir, fileName);
 
-        const messages = Array.from(fetched.values());
-        collectedMessages.push(...messages);
-        beforeId = messages[messages.length - 1].id;
+      // 📜 Create transcript (with images)
+      const transcript = await createTranscript(channel, {
+        limit: -1,
+        returnBuffer: true,
+        fileName,
+        poweredBy: false,
+        saveImages: true,
+      });
 
-        if (collectedMessages.length >= chunkSize) {
-          const filePath = path.join(
-            tempDir,
-            `${channel.name}-part-${chunkIndex}.html`
-          );
-          const transcript = await createTranscript(channel, {
-            limit: collectedMessages.length,
-            fileName: path.basename(filePath),
-            saveImages: true,
-            returnBuffer: false,
-            poweredBy: false,
-          });
+      // Save locally first
+      fs.writeFileSync(filePath, transcript.attachment);
 
-          // Upload to bashupload
-          const url = await uploadToBashupload(transcript.attachment);
-          if (url) urls.push(`📄 [Part ${chunkIndex}](${url})`);
-          await fs.remove(transcript.attachment);
-          chunkIndex++;
-          collectedMessages = [];
-        }
-      }
-
-      // leftover
-      if (collectedMessages.length > 0) {
-        const filePath = path.join(tempDir, `${channel.name}-part-${chunkIndex}.html`);
-        const transcript = await createTranscript(channel, {
-          limit: collectedMessages.length,
-          fileName: path.basename(filePath),
-          saveImages: true,
-          returnBuffer: false,
-          poweredBy: false,
-        });
-
-        const url = await uploadToBashupload(transcript.attachment);
-        if (url) urls.push(`📄 [Part ${chunkIndex}](${url})`);
-        await fs.remove(transcript.attachment);
-      }
-
-      if (urls.length === 0) {
-        const noFilesMsg = "⚠️ No valid transcript files could be created.";
-        if (interaction)
-          return interaction.editReply({ content: noFilesMsg }).catch(() => {});
-        else return message.reply(noFilesMsg).catch(() => {});
-      }
+      // Check file size
+      const fileSizeMB = fs.statSync(filePath).size / (1024 * 1024);
 
       const embed = new EmbedBuilder()
         .setColor("Aqua")
         .setTitle("📜 Transcript Generated")
-        .setDescription(
-          `🗂️ **${urls.length} transcript part(s)** generated for ${channel}\n\n${urls.join(
-            "\n"
-          )}\n\nRequested by: ${user}`
-        )
+        .setDescription(`🗂️ Transcript for ${channel}\n👤 Requested by: ${user}`)
         .setTimestamp();
 
-      if (interaction) await interaction.editReply({ embeds: [embed] }).catch(() => {});
-      else await message.channel.send({ embeds: [embed] }).catch(() => {});
+      if (fileSizeMB > 24.5) {
+        // 🚀 Upload to bashupload if too large for Discord
+        embed.addFields({
+          name: "⚠️ File too large for Discord",
+          value: "Uploading to external host (bashupload.com)...",
+        });
+        if (interaction)
+          await interaction.followUp({ embeds: [embed] }).catch(() => {});
+        else await message.channel.send({ embeds: [embed] }).catch(() => {});
 
-      await fs.remove(tempDir);
+        const uploadUrl = await uploadToBashUpload(filePath);
+
+        embed.addFields({
+          name: "✅ Download Link",
+          value: `[Click to download your transcript](${uploadUrl})`,
+        });
+
+        if (interaction)
+          await interaction.followUp({ embeds: [embed] }).catch(() => {});
+        else await message.channel.send({ embeds: [embed] }).catch(() => {});
+      } else {
+        // 🧾 Send directly if small enough
+        const attachment = new AttachmentBuilder(filePath, { name: fileName });
+        if (interaction)
+          await interaction.followUp({ embeds: [embed], files: [attachment] }).catch(() => {});
+        else await message.channel.send({ embeds: [embed], files: [attachment] }).catch(() => {});
+      }
+
+      // 🧹 Cleanup after sending
+      setTimeout(() => {
+        fs.unlinkSync(filePath);
+      }, 30000);
+
+      await statusMsg.delete().catch(() => {});
     } catch (err) {
-      console.error("❌ Transcript error:", err);
-      const failText = "⚠️ Failed to generate transcript. Please try again later.";
+      console.error("❌ TranscriptChat Error:", err);
+      const failMsg = "⚠️ Failed to generate transcript. Please try again later.";
       if (interaction)
-        await interaction.editReply({ content: failText }).catch(() => {});
-      else await message.reply(failText).catch(() => {});
+        await interaction.followUp({ content: failMsg, ephemeral: true }).catch(() => {});
+      else await message.reply(failMsg).catch(() => {});
     }
   },
 };
+
+// ✅ helper: upload to bashupload.com
+async function uploadToBashUpload(filePath) {
+  return new Promise((resolve, reject) => {
+    const fileName = path.basename(filePath);
+    const form = new FormData();
+    form.append("file", fs.createReadStream(filePath));
+
+    const req = https.request(
+      {
+        method: "POST",
+        host: "bashupload.com",
+        path: `/${encodeURIComponent(fileName)}`,
+        headers: form.getHeaders(),
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          // Extract download URL from HTML response
+          const match = data.match(/https:\/\/bashupload\.com\/[a-zA-Z0-9_-]+/);
+          resolve(match ? match[0] : "Upload failed. Try again later.");
+        });
+      }
+    );
+
+    req.on("error", reject);
+    form.pipe(req);
+  });
+}
