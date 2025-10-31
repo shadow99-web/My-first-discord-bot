@@ -109,4 +109,4 @@ async function ensureTranscriptLogChannel(guild, client) {
 
 function sleep(ms) {
   return new Promise((res) => setTimeout(res, ms));
-  }
+}
