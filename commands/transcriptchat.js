@@ -1,8 +1,4 @@
-const {
-  SlashCommandBuilder,
-  AttachmentBuilder,
-  EmbedBuilder,
-} = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
 
 module.exports = {
@@ -18,15 +14,17 @@ module.exports = {
 
     if (!channel) return;
 
-    // Notify start
     const statusMsg = await (message
       ? message.reply("🔶 Generating transcript, please wait...")
-      : interaction.reply({ content: "🔶 Generating transcript, please wait...", fetchReply: true }));
+      : interaction.reply({
+          content: "🔶 Generating transcript, please wait...",
+          fetchReply: true,
+        }));
 
-    // Config
-    const fetchLimit = 100; // Discord API max
-    const chunkSize = 1000; // how many messages per HTML file
-    const maxMessages = 10000; // global cap
+    // === Config ===
+    const fetchLimit = 100; // Discord max fetch per call
+    const chunkSize = 1000; // How many messages per transcript
+    const maxMessages = 10000; // Global safety cap
     let beforeId = null;
     let chunkIndex = 1;
     let collectedMessages = [];
@@ -45,19 +43,19 @@ module.exports = {
         collectedMessages.push(...messages);
         beforeId = messages[messages.length - 1].id;
 
-        // Once we hit chunkSize, make a transcript file
+        // Make chunk transcript if needed
         if (collectedMessages.length >= chunkSize) {
-          const transcript = await createTranscript(channel, {
+          const transcriptBuffer = await createTranscript(channel, {
             limit: collectedMessages.length,
             returnBuffer: true,
             poweredBy: false,
             fileName: `${channel.name}-part-${chunkIndex}.html`,
           });
 
-          const file = new AttachmentBuilder(transcript, {
+          files.push({
+            attachment: transcriptBuffer,
             name: `${channel.name}-part-${chunkIndex}.html`,
           });
-          files.push(file);
 
           console.log(`✅ Created transcript part ${chunkIndex} (${collectedMessages.length} msgs)`);
 
@@ -66,30 +64,29 @@ module.exports = {
         }
       }
 
-      // If any remaining messages < chunkSize
+      // Remaining messages
       if (collectedMessages.length > 0) {
-        const transcript = await createTranscript(channel, {
+        const transcriptBuffer = await createTranscript(channel, {
           limit: collectedMessages.length,
           returnBuffer: true,
           poweredBy: false,
           fileName: `${channel.name}-part-${chunkIndex}.html`,
         });
 
-        const file = new AttachmentBuilder(transcript, {
+        files.push({
+          attachment: transcriptBuffer,
           name: `${channel.name}-part-${chunkIndex}.html`,
         });
-        files.push(file);
       }
 
-      if (files.length === 0) {
+      if (files.length === 0)
         return statusMsg.edit("⚠️ No messages found to transcript!");
-      }
 
       const embed = new EmbedBuilder()
         .setColor("Aqua")
         .setTitle("🌟 Transcript Generated")
         .setDescription(
-          `🔴 **${files.length} transcript file(s)** created for ${channel}.\nRequested by ${user}.`
+          `🗂️ **${files.length} transcript file(s)** created for ${channel}.\n👤 Requested by ${user}.`
         )
         .setTimestamp();
 
