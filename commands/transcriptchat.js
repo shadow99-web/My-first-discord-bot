@@ -1,15 +1,15 @@
 const {
   SlashCommandBuilder,
-  AttachmentBuilder,
   EmbedBuilder,
   ChannelType,
   PermissionFlagsBits,
 } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
+const fs = require("fs");
 
 module.exports = {
   name: "transcriptchat",
-  description: "📜 Generate an HTML transcript of this channel (works for large servers)",
+  description: "📜 Generate an HTML transcript of this channel (supports large servers)",
   usage: "transcriptchat [#channel]",
   options: [
     {
@@ -51,13 +51,9 @@ module.exports = {
     }
 
     // 🕐 Notify start
-    let statusMsg;
-    if (interaction) {
-      await interaction.deferReply({ ephemeral: true }).catch(() => {});
-      statusMsg = interaction;
-    } else {
-      statusMsg = await message.reply("🕐 Generating transcript, please wait...");
-    }
+    if (interaction) await interaction.deferReply({ ephemeral: false }).catch(() => {});
+    const statusMsg =
+      interaction || (await message.reply("🕐 Generating transcript, please wait..."));
 
     try {
       const fetchLimit = 100;
@@ -66,7 +62,7 @@ module.exports = {
       let beforeId = null;
       let chunkIndex = 1;
       let collectedMessages = [];
-      const files = [];
+      const uploadedLinks = [];
 
       while (collectedMessages.length < maxMessages) {
         const fetched = await channel.messages.fetch({
@@ -80,56 +76,58 @@ module.exports = {
         beforeId = messages[messages.length - 1].id;
 
         if (collectedMessages.length >= chunkSize) {
-          const transcriptFile = await createTranscript(channel, {
+          const filename = `${channel.name}-part-${chunkIndex}.html`;
+          const filePath = `./${filename}`;
+
+          const transcript = await createTranscript(channel, {
             limit: collectedMessages.length,
             returnBuffer: false,
-            fileName: `${channel.name}-part-${chunkIndex}.html`,
-            poweredBy: false,
+            fileName: filename,
             saveImages: true,
+            poweredBy: false,
           });
 
-          if (transcriptFile) files.push(transcriptFile);
+          fs.renameSync(transcript.path, filePath);
+          const link = await uploadTo0x0(filePath);
+          uploadedLinks.push(`[Part ${chunkIndex}](${link})`);
 
-          console.log(`✅ Created transcript part ${chunkIndex}`);
-          chunkIndex++;
+          console.log(`✅ Uploaded transcript part ${chunkIndex} to 0x0.st`);
+          fs.unlinkSync(filePath);
           collectedMessages = [];
+          chunkIndex++;
         }
       }
 
       // leftover
       if (collectedMessages.length > 0) {
-        const transcriptFile = await createTranscript(channel, {
+        const filename = `${channel.name}-part-${chunkIndex}.html`;
+        const filePath = `./${filename}`;
+
+        const transcript = await createTranscript(channel, {
           limit: collectedMessages.length,
           returnBuffer: false,
-          fileName: `${channel.name}-part-${chunkIndex}.html`,
-          poweredBy: false,
+          fileName: filename,
           saveImages: true,
+          poweredBy: false,
         });
 
-        if (transcriptFile) files.push(transcriptFile);
-      }
-
-      if (files.length === 0) {
-        const noFilesMsg = "⚠️ No valid transcript files could be created.";
-        if (interaction)
-          return interaction.editReply({ content: noFilesMsg }).catch(() => {});
-        else return message.reply(noFilesMsg).catch(() => {});
+        fs.renameSync(transcript.path, filePath);
+        const link = await uploadTo0x0(filePath);
+        uploadedLinks.push(`[Part ${chunkIndex}](${link})`);
+        fs.unlinkSync(filePath);
       }
 
       const embed = new EmbedBuilder()
         .setColor("Aqua")
         .setTitle("📜 Transcript Generated")
         .setDescription(
-          `🗂️ **${files.length} transcript file(s)** generated for ${channel}\nRequested by: ${user}`
+          `🗂️ Transcript for ${channel}\n\n${uploadedLinks.join("\n")}\n\nRequested by: ${user}`
         )
         .setTimestamp();
 
       if (interaction)
-        await interaction.editReply({ content: "", embeds: [embed], files }).catch(() => {});
-      else
-        await message.channel.send({ embeds: [embed], files }).catch(() => {});
-
-      if (message) await statusMsg.delete().catch(() => {});
+        await interaction.editReply({ content: "", embeds: [embed] }).catch(() => {});
+      else await statusMsg.edit({ content: "", embeds: [embed] }).catch(() => {});
     } catch (err) {
       console.error("❌ Transcript error:", err);
       const failText = "⚠️ Failed to generate transcript. Please try again later.";
@@ -139,3 +137,13 @@ module.exports = {
     }
   },
 };
+
+// 🔗 Upload helper for 0x0.st
+async function uploadTo0x0(filePath) {
+  const fileStream = fs.createReadStream(filePath);
+  const res = await fetch("https://0x0.st", {
+    method: "POST",
+    body: fileStream,
+  });
+  return res.text();
+                                     }
