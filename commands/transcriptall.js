@@ -1,112 +1,146 @@
-// commands/transcriptall.js
 const {
   SlashCommandBuilder,
-  PermissionFlagsBits,
-  ChannelType,
   EmbedBuilder,
-  AttachmentBuilder,
+  ChannelType,
+  PermissionFlagsBits,
 } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
-const fs = require("fs");
+const axios = require("axios");
+const fs = require("fs-extra");
 const path = require("path");
+
+// upload helper
+async function uploadToBashupload(filePath) {
+  const fileStream = fs.createReadStream(filePath);
+  const response = await axios.post("https://bashupload.com/", fileStream, {
+    headers: { "Content-Type": "application/octet-stream" },
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+  const match = response.data.match(/https?:\/\/bashupload\.com\/\S+/);
+  return match ? match[0] : null;
+}
 
 module.exports = {
   name: "transcriptall",
-  description: "📜 Generate transcripts for all text channels (HTML) and upload to transcript-log",
+  description: "📜 Generate HTML transcripts for all text channels in this server.",
+  usage: "transcriptall",
   data: new SlashCommandBuilder()
     .setName("transcriptall")
-    .setDescription("📜 Generate transcripts for all text channels in this server")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+    .setDescription("📜 Generate HTML transcripts for all text channels in this server.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-  async execute({ client, message, interaction }) {
+  async execute({ client, interaction, message, args, isPrefix }) {
     const guild = interaction ? interaction.guild : message.guild;
-    const requester = interaction ? interaction.user : message.author;
+    const user = message ? message.author : interaction.user;
 
     if (!guild) {
-      const errMsg = "⚠️ This command can only be used inside a server.";
-      if (interaction) return interaction.reply({ content: errMsg, ephemeral: true });
-      return message.reply(errMsg);
+      const msg = "⚠️ Command must be used inside a server.";
+      if (interaction)
+        return interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
+      else return message.reply(msg).catch(() => {});
     }
 
-    if (interaction) await interaction.deferReply({ ephemeral: true }).catch(() => {});
-    else await message.reply("🕐 Generating transcripts for all text channels... please wait.").catch(() => {});
+    if (interaction)
+      await interaction.deferReply({ ephemeral: false }).catch(() => {});
+    else await message.reply("🕐 Generating transcripts for all channels... Please wait.");
+
+    const tempDir = path.join(__dirname, "transcripts_temp_all");
+    await fs.ensureDir(tempDir);
+
+    const textChannels = guild.channels.cache.filter(
+      (ch) => ch.type === ChannelType.GuildText && ch.viewable
+    );
+
+    const fetchLimit = 100;
+    const chunkSize = 1000;
+    const maxMessages = 10000;
+    const results = [];
 
     try {
-      const logChannel = await ensureTranscriptLogChannel(guild, client);
-
-      const textChannels = guild.channels.cache.filter((c) => c.type === ChannelType.GuildText);
-      let created = 0;
-
       for (const [id, channel] of textChannels) {
-        try {
-          // create transcript for each channel (limit can be adjusted)
-          const buffer = await createTranscript(channel, {
-            limit: -1, // -1 usually means fetch all (library dependent)
-            returnBuffer: true,
-            fileName: `${channel.name}.html`,
-            poweredBy: false,
-            saveImages: true,
+        let beforeId = null;
+        let collectedMessages = [];
+        let chunkIndex = 1;
+
+        while (collectedMessages.length < maxMessages) {
+          const fetched = await channel.messages.fetch({
+            limit: fetchLimit,
+            ...(beforeId && { before: beforeId }),
           });
+          if (fetched.size === 0) break;
 
-          if (buffer && buffer.attachment) {
-            const att = new AttachmentBuilder(buffer.attachment, { name: `${channel.name}.html` });
-            const embed = new EmbedBuilder()
-              .setTitle(`📄 Transcript: #${channel.name}`)
-              .setDescription(`Transcript generated for ${channel} — requested by ${requester}`)
-              .setTimestamp()
-              .setColor("Aqua");
+          const messages = Array.from(fetched.values());
+          collectedMessages.push(...messages);
+          beforeId = messages[messages.length - 1].id;
 
-            await logChannel.send({ embeds: [embed], files: [att] }).catch((e) => {
-              console.warn(`Failed to send transcript for #${channel.name}:`, e?.message || e);
+          if (collectedMessages.length >= chunkSize) {
+            const filePath = path.join(
+              tempDir,
+              `${channel.name}-part-${chunkIndex}.html`
+            );
+            const transcript = await createTranscript(channel, {
+              limit: collectedMessages.length,
+              fileName: path.basename(filePath),
+              saveImages: true,
+              returnBuffer: false,
+              poweredBy: false,
             });
 
-            created++;
-            // small pause to avoid hitting rate limits
-            await sleep(250);
+            const url = await uploadToBashupload(transcript.attachment);
+            if (url) results.push(`📄 ${channel} — [Part ${chunkIndex}](${url})`);
+
+            await fs.remove(transcript.attachment);
+            chunkIndex++;
+            collectedMessages = [];
           }
-        } catch (e) {
-          console.warn(`⚠️ Skipping #${channel.name}:`, e?.message || e);
+        }
+
+        // leftover
+        if (collectedMessages.length > 0) {
+          const filePath = path.join(tempDir, `${channel.name}-part-${chunkIndex}.html`);
+          const transcript = await createTranscript(channel, {
+            limit: collectedMessages.length,
+            fileName: path.basename(filePath),
+            saveImages: true,
+            returnBuffer: false,
+            poweredBy: false,
+          });
+
+          const url = await uploadToBashupload(transcript.attachment);
+          if (url) results.push(`📄 ${channel} — [Part ${chunkIndex}](${url})`);
+          await fs.remove(transcript.attachment);
         }
       }
 
-      if (created === 0) {
-        const none = "⚠️ No valid transcripts could be created.";
-        if (interaction) return interaction.editReply({ content: none }).catch(() => {});
-        return message.reply(none).catch(() => {});
+      if (results.length === 0) {
+        const msg = "⚠️ No valid transcripts could be created.";
+        if (interaction)
+          return interaction.editReply({ content: msg }).catch(() => {});
+        else return message.reply(msg).catch(() => {});
       }
 
-      const done = `✅ Generated ${created} transcript(s) and uploaded to ${logChannel}`;
-      if (interaction) await interaction.editReply({ content: done }).catch(() => {});
-      else await message.reply(done).catch(() => {});
+      const embed = new EmbedBuilder()
+        .setColor("Aqua")
+        .setTitle("📜 All Channel Transcripts Generated")
+        .setDescription(
+          `🗂️ **${results.length} transcript parts** generated for ${textChannels.size} channel(s)\n\n${results.join(
+            "\n"
+          )}\n\nRequested by: ${user}`
+        )
+        .setTimestamp();
+
+      if (interaction)
+        await interaction.editReply({ embeds: [embed] }).catch(() => {});
+      else await message.channel.send({ embeds: [embed] }).catch(() => {});
+
+      await fs.remove(tempDir);
     } catch (err) {
       console.error("❌ TranscriptAll error:", err);
-      const fail = "⚠️ Failed to generate transcripts for the server. Try again later.";
-      if (interaction) await interaction.editReply({ content: fail, ephemeral: true }).catch(() => {});
-      else await message.reply(fail).catch(() => {});
+      const failText = "⚠️ Failed to generate transcripts. Please try again later.";
+      if (interaction)
+        await interaction.editReply({ content: failText }).catch(() => {});
+      else await message.reply(failText).catch(() => {});
     }
   },
 };
-
-async function ensureTranscriptLogChannel(guild, client) {
-  const existing = guild.channels.cache.find((c) => c.name === "transcript-log" && c.type === ChannelType.GuildText);
-  if (existing) return existing;
-
-  const perms = [
-    { id: guild.roles.everyone, deny: ["ViewChannel"] },
-    { id: guild.members.me.roles.highest, allow: ["ViewChannel", "SendMessages", "AttachFiles", "EmbedLinks"] },
-  ];
-
-  guild.roles.cache.filter((r) => r.permissions.has(PermissionFlagsBits.Administrator)).forEach((r) => {
-    perms.push({ id: r.id, allow: ["ViewChannel", "SendMessages", "AttachFiles", "EmbedLinks"] });
-  });
-
-  return await guild.channels.create({
-    name: "transcript-log",
-    type: ChannelType.GuildText,
-    permissionOverwrites: perms,
-  });
-}
-
-function sleep(ms) {
-  return new Promise((res) => setTimeout(res, ms));
-}
