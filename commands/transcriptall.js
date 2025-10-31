@@ -148,28 +148,31 @@ module.exports = {
   },
 };
 
-// ✅ helper: upload to transfer.sh
+// ✅ helper: upload to 0x0.st (Render-safe)
 async function uploadToTransfer(filePath) {
   return new Promise((resolve, reject) => {
-    const fileName = path.basename(filePath);
     const form = new FormData();
     form.append("file", fs.createReadStream(filePath));
 
     const req = https.request(
       {
         method: "POST",
-        host: "transfer.sh",
-        path: `/${encodeURIComponent(fileName)}`,
+        host: "0x0.st",
+        path: "/",
         headers: form.getHeaders(),
       },
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => resolve(data.trim()));
+        res.on("end", () => resolve(data.trim())); // returns direct link like https://0x0.st/abcd.zip
       }
     );
 
-    req.on("error", reject);
+    req.on("error", (err) => {
+      console.error("Upload error:", err);
+      reject(err);
+    });
+
     form.pipe(req);
   });
-    }
+}
