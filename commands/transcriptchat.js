@@ -2,133 +2,144 @@ const {
   SlashCommandBuilder,
   AttachmentBuilder,
   EmbedBuilder,
+  ChannelType,
+  PermissionFlagsBits,
 } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
 
 module.exports = {
   name: "transcriptchat",
-  description:
-    "Generate an HTML transcript of this channel (automatically splits for large chats)",
-  usage: "transcriptchat",
+  description: "📜 Generate an HTML transcript of this channel (works for all server sizes)",
+  usage: "transcriptchat [#channel]",
+  options: [
+    {
+      name: "channel",
+      description: "Select a channel to generate transcript",
+      type: 7,
+      required: false,
+    },
+  ],
+
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
-    .setDescription("Generate a full HTML transcript of the current chat"),
+    .setDescription("📜 Generate an HTML transcript of this channel")
+    .addChannelOption((opt) =>
+      opt
+        .setName("channel")
+        .setDescription("Select a text channel")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   async execute({ client, message, interaction, args, isPrefix }) {
-    const channel = message ? message.channel : interaction.channel;
+    const channel =
+      (interaction && interaction.options.getChannel("channel")) ||
+      (isPrefix && message.mentions.channels.first()) ||
+      (isPrefix && args.length
+        ? message.guild.channels.cache.get(args[0].replace(/[<#>]/g, ""))
+        : null) ||
+      (interaction ? interaction.channel : message.channel);
+
     const user = message ? message.author : interaction.user;
 
-    if (!channel) return;
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      const msg = "⚠️ Please provide a valid text channel.";
+      if (interaction)
+        return interaction.reply({ content: msg, ephemeral: true });
+      else return message.reply(msg);
+    }
 
-    // ⏳ Notify start
+    // 🕐 Notify start
     const statusMsg = await (message
-      ? message.reply("🔶 Generating transcript, please wait...")
+      ? message.reply("🕐 Generating transcript, please wait...")
       : interaction.reply({
-          content: "🔶 Generating transcript, please wait...",
+          content: "🕐 Generating transcript, please wait...",
+          ephemeral: true,
           fetchReply: true,
         }));
 
-    // ⚙️ Config (safe for free hosts like Render)
-    const FETCH_LIMIT = 100; // Discord max per request
-    const CHUNK_SIZE = 1000; // how many messages per transcript part
-    const MAX_MESSAGES = 3000; // safe upper cap for Render free plan
-    const files = [];
-    let allMessages = [];
-    let beforeId = null;
-    let chunkIndex = 1;
-
     try {
-      // 🔁 Fetch messages in batches
-      while (allMessages.length < MAX_MESSAGES) {
-        const fetched = await channel.messages
-          .fetch({
-            limit: FETCH_LIMIT,
-            ...(beforeId && { before: beforeId }),
-          })
-          .catch(() => null);
+      const fetchLimit = 100; // per request
+      const chunkSize = 1000; // messages per file
+      const maxMessages = 10000;
+      let beforeId = null;
+      let chunkIndex = 1;
+      let collectedMessages = [];
+      const files = [];
 
-        if (!fetched || fetched.size === 0) break;
+      while (collectedMessages.length < maxMessages) {
+        const fetched = await channel.messages.fetch({
+          limit: fetchLimit,
+          ...(beforeId && { before: beforeId }),
+        });
+        if (fetched.size === 0) break;
 
         const messages = Array.from(fetched.values());
-        allMessages.push(...messages);
-        beforeId = messages[messages.length - 1]?.id;
+        collectedMessages.push(...messages);
+        beforeId = messages[messages.length - 1].id;
 
-        // 🧩 If chunk full, make transcript now
-        if (allMessages.length >= CHUNK_SIZE) {
-          const transcriptBuffer = await createTranscript(channel, {
-            limit: allMessages.length,
-            returnBuffer: true,
-            poweredBy: false,
+        // if we hit chunk limit
+        if (collectedMessages.length >= chunkSize) {
+          const transcriptFile = await createTranscript(channel, {
+            limit: collectedMessages.length,
+            returnBuffer: false, // ✅ stream, not memory buffer
             fileName: `${channel.name}-part-${chunkIndex}.html`,
-          }).catch((e) => {
-            console.error("Transcript chunk failed:", e);
-            return null;
+            poweredBy: false,
+            saveImages: true,
           });
 
-          if (transcriptBuffer instanceof Buffer) {
-            const file = new AttachmentBuilder(transcriptBuffer, {
-              name: `${channel.name}-part-${chunkIndex}.html`,
-            });
-            files.push(file);
-            console.log(
-              `✅ Created transcript part ${chunkIndex} (${allMessages.length} msgs)`
-            );
-          }
+          if (transcriptFile)
+            files.push(transcriptFile);
 
-          // reset for next batch
+          console.log(`✅ Created transcript part ${chunkIndex}`);
           chunkIndex++;
-          allMessages = [];
+          collectedMessages = [];
         }
       }
 
-      // 🧩 Handle last remaining messages (< chunk size)
-      if (allMessages.length > 0) {
-        const transcriptBuffer = await createTranscript(channel, {
-          limit: allMessages.length,
-          returnBuffer: true,
-          poweredBy: false,
+      // leftover messages
+      if (collectedMessages.length > 0) {
+        const transcriptFile = await createTranscript(channel, {
+          limit: collectedMessages.length,
+          returnBuffer: false,
           fileName: `${channel.name}-part-${chunkIndex}.html`,
-        }).catch((e) => {
-          console.error("Final transcript part failed:", e);
-          return null;
+          poweredBy: false,
+          saveImages: true,
         });
 
-        if (transcriptBuffer instanceof Buffer) {
-          const file = new AttachmentBuilder(transcriptBuffer, {
-            name: `${channel.name}-part-${chunkIndex}.html`,
-          });
-          files.push(file);
-        }
+        if (transcriptFile)
+          files.push(transcriptFile);
       }
 
       if (files.length === 0) {
-        await statusMsg.edit("⚠️ No valid transcript files could be created!");
-        return;
+        if (interaction)
+          return interaction.followUp("⚠️ No valid transcript files could be created.");
+        else
+          return message.reply("⚠️ No valid transcript files could be created.");
       }
 
-      // 📦 Send final embed + files
       const embed = new EmbedBuilder()
         .setColor("Aqua")
         .setTitle("📜 Transcript Generated")
         .setDescription(
-          `🗂️ **${files.length} transcript file(s)** created for ${channel}.\nRequested by ${user}.`
+          `🗂️ **${files.length} transcript file(s)** generated for ${channel}\n Requested by: ${user}`
         )
         .setTimestamp();
 
-      if (message) {
+      if (message)
         await message.channel.send({ embeds: [embed], files });
-      } else {
+      else
         await interaction.followUp({ embeds: [embed], files });
-      }
 
       await statusMsg.delete().catch(() => {});
     } catch (err) {
-      console.error("❌ Transcript Error:", err);
-      const failText =
-        "⚠️ Failed to generate transcript. Please try again later.";
+      console.error("❌ Transcript error:", err);
+      const failText = "⚠️ Failed to generate transcript. Please try again later.";
       if (message)
         await message.reply(failText).catch(() => {});
-      else await interaction.followUp(failText).catch(() => {});
+      else
+        await interaction.followUp({ content: failText, ephemeral: true }).catch(() => {});
     }
   },
 };
