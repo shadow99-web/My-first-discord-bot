@@ -1,60 +1,86 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
-const fs = require("fs");
+// commands/transcriptall.js
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ChannelType,
+  EmbedBuilder,
+} = require("discord.js");
+const { createTranscript } = require("discord-html-transcripts");
+const { uploadTranscript } = require("../utils/transcriptUploader");
+const fs = require("fs-extra");
 const path = require("path");
-const axios = require("axios");
 
 module.exports = {
+  name: "transcriptall",
+  description: "📜 Generate transcripts for all text channels in this server (HTML)",
   data: new SlashCommandBuilder()
     .setName("transcriptall")
-    .setDescription("📜 Save all channels’ messages as transcripts (Admin only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription("📜 Generate transcripts for all text channels in this server")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
-  async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-    const guild = interaction.guild;
-    let zipName = `${guild.name.replace(/\s/g, "_")}_transcripts.zip`;
+  async execute({ client, message, interaction }) {
+    const guild = interaction ? interaction.guild : message.guild;
+    const user = interaction ? interaction.user : message.author;
 
-    const JSZip = require("jszip");
-    const zip = new JSZip();
-
-    for (const [id, channel] of guild.channels.cache) {
-      if (!channel.isTextBased()) continue;
-      try {
-        const messages = await channel.messages.fetch({ limit: 100 });
-        const sorted = messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-        let html = `<html><body><h3>#${channel.name}</h3><hr>`;
-        sorted.forEach(m => {
-          html += `<p><strong>${m.author.tag}</strong>: ${m.cleanContent}</p>`;
-        });
-        html += "</body></html>";
-        zip.file(`${channel.name}.html`, html);
-      } catch {}
+    if (!guild) {
+      const msg = "⚠️ This command can only be used inside a server.";
+      if (interaction) return interaction.reply({ content: msg, ephemeral: true });
+      else return message.reply(msg);
     }
 
-    const zipPath = path.join(__dirname, zipName);
-    const content = await zip.generateAsync({ type: "nodebuffer" });
-    fs.writeFileSync(zipPath, content);
-
-    const form = new FormData();
-    form.append("file", fs.createReadStream(zipPath));
+    // ask whether to include images - for slash we could use option but keep interactive
+    let includeImages = true;
+    if (interaction) {
+      await interaction.deferReply({ ephemeral: true }).catch(()=>{});
+      await interaction.editReply({ content: `🔍 Generating transcripts for all channels (images: ${includeImages})...` }).catch(()=>{});
+    } else {
+      const reply = await message.reply(`🔍 Generating transcripts for all channels (images: ${includeImages})...`);
+    }
 
     try {
-      const upload = await axios.post("http://us6.galactichosting.net:30028/upload", form, {
-        headers: form.getHeaders(),
-      });
+      const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
+      const results = [];
 
+      for (const [id, channel] of channels) {
+        try {
+          // create transcript (limit 1000 for performance)
+          const safeName = channel.name.replace(/[^a-z0-9_\-]/gi, "_").slice(0,64);
+          const bufferObj = await createTranscript(channel, {
+            limit: 1000,
+            returnBuffer: true,
+            fileName: `${safeName}.html`,
+            poweredBy: false,
+            saveImages: includeImages,
+          });
+
+          const buffer = bufferObj?.attachment || bufferObj;
+          if (!buffer) throw new Error("No buffer returned");
+
+          const upload = await uploadTranscript({ buffer, filename: `${safeName}.html` });
+          results.push({ channel: channel.name, success: upload.success, url: upload.fileUrl || null, error: upload.error || null });
+          // small delay
+          await new Promise(r => setTimeout(r, 500));
+        } catch (err) {
+          results.push({ channel: channel.name, success: false, url: null, error: err.message });
+        }
+      }
+
+      // build response
       const embed = new EmbedBuilder()
-        .setColor("Blue")
-        .setTitle("📁 All Transcripts Uploaded")
-        .addFields({ name: "Guild", value: guild.name })
-        .addFields({ name: "Link", value: `[Download ZIP](${upload.data.fileUrl})` });
+        .setTitle("📜 TranscriptAll Results")
+        .setColor("Aqua")
+        .setDescription(`Requested by ${user}`)
+        .setTimestamp();
 
-      await interaction.editReply({ embeds: [embed] });
+      const lines = results.map(r => r.success ? `• ${r.channel} — ✅ ${r.url}` : `• ${r.channel} — ❌ ${r.error}`).join("\n");
+      if (interaction) await interaction.followUp({ embeds: [embed], content: lines }).catch(()=>{});
+      else await message.channel.send({ embeds: [embed], content: lines }).catch(()=>{});
+
     } catch (err) {
-      console.error(err);
-      await interaction.editReply("❌ Failed to upload transcripts.");
+      console.error("❌ TranscriptAll Error:", err);
+      const fail = "⚠️ Failed to generate transcripts for all channels.";
+      if (interaction) await interaction.followUp({ content: fail, ephemeral: true }).catch(()=>{});
+      else await message.reply(fail).catch(()=>{});
     }
-
-    fs.unlinkSync(zipPath);
   },
 };
