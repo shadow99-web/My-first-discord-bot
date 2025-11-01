@@ -1,89 +1,57 @@
-const {
-  SlashCommandBuilder,
-  ChannelType,
-  PermissionFlagsBits,
-  EmbedBuilder,
-} = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
 const { uploadTranscript } = require("../utils/transcriptUploader");
+const { Readable } = require("stream");
 
 module.exports = {
   name: "transcriptchat",
-  description: "📜 Generate an HTML transcript of this channel",
-  usage: "transcriptchat [#channel]",
-  data: new SlashCommandBuilder()
-    .setName("transcriptchat")
-    .setDescription("📜 Generate an HTML transcript of this channel")
-    .addChannelOption((opt) =>
-      opt
-        .setName("channel")
-        .setDescription("Select a text channel")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(false)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
-
-  async execute({ interaction, message, isPrefix }) {
-    const isInteraction = !!interaction;
-    const channel =
-      (isInteraction
-        ? interaction.options.getChannel("channel")
-        : message.mentions.channels.first()) ||
-      (isInteraction ? interaction.channel : message.channel);
-
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      const msg = "⚠️ Please select a valid text channel.";
-      if (isInteraction)
-        return interaction.reply({ content: msg, ephemeral: true });
-      else return message.reply(msg);
-    }
-
-    // Defer for slash
-    if (isInteraction)
-      await interaction.reply({
-        content: "🕐 Generating transcript, please wait...",
-        ephemeral: true,
-      });
-    else await message.reply("🕐 Generating transcript, please wait...");
-
+  description: "Generate and upload a transcript of the current channel.",
+  async execute(interaction) {
     try {
-      const transcriptBuffer = await createTranscript(channel, {
-        limit: 1000,
+      // 🕓 Acknowledge the command
+      if (interaction.isChatInputCommand()) {
+        await interaction.deferReply({ flags: 64 }); // ephemeral
+      } else {
+        await interaction.reply("⏳ Generating transcript...");
+      }
+
+      const channel = interaction.channel;
+
+      // 🧾 Create the transcript
+      const transcript = await createTranscript(channel, {
+        limit: -1,
         returnBuffer: true,
         fileName: `${channel.name}.html`,
-        saveImages: true,
       });
 
-      const { success, fileUrl, error } = await uploadTranscript({
-        buffer: transcriptBuffer,
+      // Convert Buffer → Stream
+      const stream = Readable.from(transcript);
+
+      // 📤 Upload to hosting service
+      const uploadResult = await uploadTranscript({
+        buffer: stream,
         filename: `${channel.name}.html`,
       });
 
-      if (!success) throw new Error(error);
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error);
+      }
 
-      const embed = new EmbedBuilder()
-        .setTitle("📜 Transcript Created")
-        .setDescription(
-          `Transcript for ${channel} generated successfully.\n[📂 View Transcript](${fileUrl})`
-        )
-        .setColor("Green")
-        .setTimestamp();
+      const message = `✅ Transcript uploaded!\n🔗 ${uploadResult.fileUrl}`;
 
-      if (isInteraction)
-        await interaction.followUp({ embeds: [embed] });
-      else await message.channel.send({ embeds: [embed] });
+      if (interaction.isChatInputCommand()) {
+        await interaction.editReply({ content: message });
+      } else {
+        await interaction.channel.send(message);
+      }
 
-      // Auto delete after 30 mins
-      setTimeout(async () => {
-        try {
-          await fetch(`${fileUrl}`, { method: "DELETE" });
-        } catch {}
-      }, 30 * 60 * 1000);
     } catch (err) {
-      const failMsg = `❌ Failed to generate transcript: ${err.message}`;
-      if (isInteraction)
-        await interaction.followUp({ content: failMsg, ephemeral: true });
-      else await message.reply(failMsg);
+      console.error("❌ Failed to generate transcript:", err);
+      const errorMsg = `❌ Failed to generate transcript: ${err.message}`;
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: errorMsg });
+      } else {
+        await interaction.reply(errorMsg);
+      }
     }
   },
 };
