@@ -91,6 +91,7 @@ client.distube
 // 📦 Load Utilities
 const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
 const blockHelpers = require("./utils/block");
+const { uploadTranscript } = require("./utils/transcriptUploader");
 
 // ====================
 // 📂 Load Commands safely (slash + prefix)
