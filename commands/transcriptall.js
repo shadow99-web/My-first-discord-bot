@@ -1,4 +1,3 @@
-// commands/transcriptall.js
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -7,80 +6,82 @@ const {
 } = require("discord.js");
 const { createTranscript } = require("discord-html-transcripts");
 const { uploadTranscript } = require("../utils/transcriptUploader");
-const fs = require("fs-extra");
-const path = require("path");
 
 module.exports = {
   name: "transcriptall",
-  description: "📜 Generate transcripts for all text channels in this server (HTML)",
+  description: "📜 Generate transcripts for all text channels",
   data: new SlashCommandBuilder()
     .setName("transcriptall")
-    .setDescription("📜 Generate transcripts for all text channels in this server")
+    .setDescription("📜 Generate transcripts for all text channels")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
-  async execute({ client, message, interaction }) {
-    const guild = interaction ? interaction.guild : message.guild;
-    const user = interaction ? interaction.user : message.author;
+  async execute({ interaction, message }) {
+    const isInteraction = !!interaction;
+    const guild = isInteraction ? interaction.guild : message.guild;
 
-    if (!guild) {
-      const msg = "⚠️ This command can only be used inside a server.";
-      if (interaction) return interaction.reply({ content: msg, ephemeral: true });
-      else return message.reply(msg);
-    }
+    if (!guild)
+      return (isInteraction
+        ? interaction.reply("⚠️ Use this inside a server.")
+        : message.reply("⚠️ Use this inside a server."));
 
-    // ask whether to include images - for slash we could use option but keep interactive
-    let includeImages = true;
-    if (interaction) {
-      await interaction.deferReply({ ephemeral: true }).catch(()=>{});
-      await interaction.editReply({ content: `🔍 Generating transcripts for all channels (images: ${includeImages})...` }).catch(()=>{});
-    } else {
-      const reply = await message.reply(`🔍 Generating transcripts for all channels (images: ${includeImages})...`);
-    }
+    if (isInteraction)
+      await interaction.reply({
+        content: "🕐 Generating transcripts for all text channels...",
+        ephemeral: true,
+      });
+    else await message.reply("🕐 Generating transcripts for all text channels...");
 
-    try {
-      const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
-      const results = [];
+    const results = [];
+    for (const [, channel] of guild.channels.cache.filter(
+      (c) => c.type === ChannelType.GuildText
+    )) {
+      try {
+        const buffer = await createTranscript(channel, {
+          limit: 1000,
+          returnBuffer: true,
+          fileName: `${channel.name}.html`,
+        });
 
-      for (const [id, channel] of channels) {
-        try {
-          // create transcript (limit 1000 for performance)
-          const safeName = channel.name.replace(/[^a-z0-9_\-]/gi, "_").slice(0,64);
-          const bufferObj = await createTranscript(channel, {
-            limit: 1000,
-            returnBuffer: true,
-            fileName: `${safeName}.html`,
-            poweredBy: false,
-            saveImages: includeImages,
-          });
+        const { success, fileUrl, error } = await uploadTranscript({
+          buffer,
+          filename: `${channel.name}.html`,
+        });
 
-          const buffer = bufferObj?.attachment || bufferObj;
-          if (!buffer) throw new Error("No buffer returned");
-
-          const upload = await uploadTranscript({ buffer, filename: `${safeName}.html` });
-          results.push({ channel: channel.name, success: upload.success, url: upload.fileUrl || null, error: upload.error || null });
-          // small delay
-          await new Promise(r => setTimeout(r, 500));
-        } catch (err) {
-          results.push({ channel: channel.name, success: false, url: null, error: err.message });
-        }
+        results.push({
+          name: channel.name,
+          success,
+          url: fileUrl,
+          error,
+        });
+      } catch (err) {
+        results.push({ name: channel.name, success: false, error: err.message });
       }
-
-      // build response
-      const embed = new EmbedBuilder()
-        .setTitle("📜 TranscriptAll Results")
-        .setColor("Aqua")
-        .setDescription(`Requested by ${user}`)
-        .setTimestamp();
-
-      const lines = results.map(r => r.success ? `• ${r.channel} — ✅ ${r.url}` : `• ${r.channel} — ❌ ${r.error}`).join("\n");
-      if (interaction) await interaction.followUp({ embeds: [embed], content: lines }).catch(()=>{});
-      else await message.channel.send({ embeds: [embed], content: lines }).catch(()=>{});
-
-    } catch (err) {
-      console.error("❌ TranscriptAll Error:", err);
-      const fail = "⚠️ Failed to generate transcripts for all channels.";
-      if (interaction) await interaction.followUp({ content: fail, ephemeral: true }).catch(()=>{});
-      else await message.reply(fail).catch(()=>{});
     }
+
+    const lines = results
+      .map((r) =>
+        r.success
+          ? `✅ ${r.name} → [View](${r.url})`
+          : `❌ ${r.name} → ${r.error}`
+      )
+      .join("\n");
+
+    const embed = new EmbedBuilder()
+      .setTitle("📜 TranscriptAll Results")
+      .setDescription(lines)
+      .setColor("Blue")
+      .setTimestamp();
+
+    if (isInteraction) await interaction.followUp({ embeds: [embed] });
+    else await message.channel.send({ embeds: [embed] });
+
+    // Auto delete after 30 mins
+    setTimeout(async () => {
+      for (const r of results)
+        if (r.url)
+          try {
+            await fetch(r.url, { method: "DELETE" });
+          } catch {}
+    }, 30 * 60 * 1000);
   },
 };
