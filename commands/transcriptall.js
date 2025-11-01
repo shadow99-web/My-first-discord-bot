@@ -1,157 +1,182 @@
 const {
   SlashCommandBuilder,
-  EmbedBuilder,
   PermissionFlagsBits,
+  EmbedBuilder,
+  ChannelType,
 } = require("discord.js");
-const discordTranscripts = require("discord-html-transcripts");
-const fs = require("fs-extra");
+const { createTranscript } = require("discord-html-transcripts");
+const fs = require("fs");
+const path = require("path");
 const axios = require("axios");
 const FormData = require("form-data");
 
+const CHUNK_SIZE = 500; // messages per HTML part
+const FETCH_LIMIT = 100;
+const MAX_MESSAGES = 10000;
+
 module.exports = {
   name: "transcriptall",
-  description: "📜 Generate HTML transcripts for all text channels in the server.",
-  usage: "transcriptall [withImages|noImages]",
-
+  description: "📜 Create transcripts of ALL text channels (with uploads)",
   data: new SlashCommandBuilder()
     .setName("transcriptall")
-    .setDescription("Generate HTML transcripts for all text channels.")
-    .addStringOption(option =>
-      option.setName("images")
-        .setDescription("Include images in transcripts? (yes/no)")
-        .setRequired(false)
-        .addChoices(
-          { name: "Yes (Include Images)", value: "yes" },
-          { name: "No (Faster, No Images)", value: "no" }
-        )
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+    .setDescription("📜 Generate transcripts for all text channels and upload them")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-  async execute(interactionOrMessage, client) {
-    const isSlash = !!interactionOrMessage.isChatInputCommand;
-    const interaction = isSlash ? interactionOrMessage : null;
-    const message = isSlash ? null : interactionOrMessage;
+  async execute({ client, interaction, message, isPrefix }) {
+    const isInteraction = !!interaction;
+    const guild = isInteraction ? interaction.guild : message.guild;
 
-    try {
-      const guild = isSlash ? interaction.guild : message.guild;
-      const user = isSlash ? interaction.user : message.author;
+    if (!guild) {
+      const err = "⚠️ This command can only be used in a server.";
+      if (isInteraction) return interaction.reply({ content: err, ephemeral: true });
+      else return message.reply(err);
+    }
 
-      const includeImages = isSlash
-        ? interaction.options?.getString("images") || "yes"
-        : (message.content.includes("noImages") ? "no" : "yes");
+    if (isInteraction) await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    const status = isInteraction
+      ? await interaction.fetchReply()
+      : await message.reply("🕐 Starting transcripts for all channels...");
 
-      const withImages = includeImages === "yes";
+    const tempDir = path.join(__dirname, "..", "transcripts_all_temp");
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      const textChannels = guild.channels.cache.filter(c => c.isTextBased() && c.viewable);
-      if (!textChannels.size)
-        return isSlash
-          ? interaction.reply({ content: "❌ No text channels found!", ephemeral: true })
-          : message.reply("❌ No text channels found!");
+    const textChannels = guild.channels.cache.filter(
+      (ch) => ch.type === ChannelType.GuildText && ch.viewable
+    );
 
-      const progressMsg = isSlash
-        ? await interaction.reply({ content: `🕓 Generating transcripts for **${textChannels.size}** channels... [░░░░░░░░░░] 0%`, fetchReply: true })
-        : await message.reply(`🕓 Generating transcripts for **${textChannels.size}** channels... [░░░░░░░░░░] 0%`);
+    let summaryLines = [];
+    let totalChannels = textChannels.size;
+    let currentIndex = 1;
 
-      const folder = `./transcripts_all_${guild.id}`;
-      await fs.ensureDir(folder);
+    for (const [id, channel] of textChannels) {
+      const progressMsg = `📘 [${currentIndex}/${totalChannels}] Processing #${channel.name}...`;
+      if (isInteraction) await interaction.editReply({ content: progressMsg }).catch(() => {});
+      else if (status) await status.edit(progressMsg).catch(() => {});
 
-      let completed = 0;
-      const updateProgress = async () => {
-        const percent = Math.round((completed / textChannels.size) * 100);
-        const filled = Math.round(percent / 10);
-        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        const msg = `🕓 Generating transcripts... [${bar}] ${percent}% (${completed}/${textChannels.size})`;
-        if (isSlash) await interaction.editReply(msg);
-        else await progressMsg.edit(msg);
-      };
+      try {
+        let beforeId = null;
+        let totalFetched = 0;
+        let partIndex = 1;
 
-      const transcriptFiles = [];
+        while (totalFetched < MAX_MESSAGES) {
+          const messagesCollected = [];
 
-      for (const channel of textChannels.values()) {
-        try {
-          const fileName = `${channel.name.replace(/[^a-zA-Z0-9]/g, "_")}.html`;
-          const filePath = `${folder}/${fileName}`;
+          while (messagesCollected.length < CHUNK_SIZE && totalFetched < MAX_MESSAGES) {
+            const limit = Math.min(FETCH_LIMIT, CHUNK_SIZE - messagesCollected.length);
+            const fetched = await channel.messages.fetch({ limit, ...(beforeId && { before: beforeId }) });
+            if (!fetched.size) break;
 
-          const transcript = await discordTranscripts.createTranscript(channel, {
-            limit: -1,
-            returnType: "buffer",
+            const arr = Array.from(fetched.values());
+            messagesCollected.push(...arr);
+            beforeId = arr[arr.length - 1].id;
+            totalFetched += arr.length;
+          }
+
+          if (!messagesCollected.length) break;
+
+          const fileName = `${channel.name}-part-${partIndex}.html`;
+          const transcript = await createTranscript(channel, {
+            limit: messagesCollected.length,
+            returnBuffer: true,
             fileName,
-            saveImages: withImages,
-            footerText: `Generated from ${guild.name}`,
+            saveImages: true,
             poweredBy: false,
           });
 
-          await fs.writeFile(filePath, transcript);
-          transcriptFiles.push(filePath);
-        } catch (err) {
-          console.log(`⚠️ Failed transcript for ${channel.name}:`, err.message);
+          if (!transcript || !transcript.attachment) break;
+
+          const filePath = path.join(tempDir, fileName);
+          fs.writeFileSync(filePath, transcript.attachment);
+
+          // Upload
+          let uploadUrl;
+          try {
+            uploadUrl = await uploadTo0x0(filePath);
+          } catch {
+            try {
+              uploadUrl = await uploadToTransfer(filePath);
+            } catch {
+              uploadUrl = "FAILED";
+            }
+          }
+
+          summaryLines.push(`${channel.name} (part ${partIndex}): ${uploadUrl}`);
+          fs.unlinkSync(filePath);
+
+          partIndex++;
+          if (messagesCollected.length < CHUNK_SIZE) break; // done
         }
-
-        completed++;
-        await updateProgress();
+      } catch (err) {
+        summaryLines.push(`#${channel.name}: ERROR - ${err.message}`);
       }
 
-      if (!transcriptFiles.length)
-        return isSlash
-          ? interaction.editReply("⚠️ No transcripts could be created!")
-          : progressMsg.edit("⚠️ No transcripts could be created!");
-
-      // Zip everything
-      const zipPath = `./${guild.name.replace(/[^a-zA-Z0-9]/g, "_")}_transcripts.zip`;
-      const archiver = require("archiver");
-      const output = fs.createWriteStream(zipPath);
-      const archive = archiver("zip", { zlib: { level: 9 } });
-
-      archive.pipe(output);
-      for (const file of transcriptFiles) archive.file(file, { name: file.split("/").pop() });
-      await archive.finalize();
-
-      await updateProgress();
-
-      // Upload to bashupload.com
-      const form = new FormData();
-      form.append("file", fs.createReadStream(zipPath));
-      const upload = await axios.post("https://bashupload.com/", form, {
-        headers: form.getHeaders(),
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      });
-
-      const link = upload.data.match(/https?:\/\/bashupload\.com\/[^\s]+/g)?.[0] || null;
-
-      const embed = new EmbedBuilder()
-        .setColor("Aqua")
-        .setTitle("📜 Server Transcripts Ready")
-        .setDescription(link
-          ? `✅ All transcripts generated successfully!\n📁 [Click to download transcripts](${link})`
-          : "✅ All transcripts generated successfully! (See attached ZIP file)")
-        .setFooter({ text: `Requested by ${user.tag}` })
-        .setTimestamp();
-
-      if (link) {
-        isSlash
-          ? await interaction.editReply({ content: "", embeds: [embed] })
-          : await progressMsg.edit({ content: "", embeds: [embed] });
-      } else {
-        const attachment = new AttachmentBuilder(zipPath);
-        isSlash
-          ? await interaction.editReply({ embeds: [embed], files: [attachment] })
-          : await progressMsg.edit({ embeds: [embed], files: [attachment] });
-      }
-
-      // Cleanup
-      setTimeout(() => {
-        fs.remove(folder).catch(() => {});
-        fs.unlink(zipPath).catch(() => {});
-      }, 60000);
-
-    } catch (error) {
-      console.error("TranscriptAll Error:", error);
-      const msg = "❌ Failed to generate transcripts. Try again later.";
-      if (isSlash) {
-        if (interaction.deferred) await interaction.editReply(msg);
-        else await interaction.reply({ content: msg, ephemeral: true });
-      } else message.reply(msg);
+      currentIndex++;
     }
+
+    const summaryPath = path.join(tempDir, `Server_Transcripts_${guild.name}_${Date.now()}.txt`);
+    fs.writeFileSync(summaryPath, summaryLines.join("\n"), "utf8");
+
+    let summaryUrl;
+    try {
+      summaryUrl = await uploadTo0x0(summaryPath);
+    } catch {
+      try {
+        summaryUrl = await uploadToTransfer(summaryPath);
+      } catch {
+        summaryUrl = null;
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("📜 Server Transcript Summary")
+      .setDescription(
+        summaryUrl
+          ? `✅ All channel transcripts created.\n[📁 Download Summary File](${summaryUrl})`
+          : "✅ Transcripts generated, but failed to upload summary. Check logs."
+      )
+      .setColor("Green")
+      .setTimestamp();
+
+    if (isInteraction) {
+      await interaction.editReply({ content: "✅ Done!", embeds: [embed] });
+    } else {
+      await status.edit("✅ All transcripts done!");
+      await message.channel.send({ embeds: [embed] });
+    }
+
+    fs.unlinkSync(summaryPath);
   },
 };
+
+// --- Upload helpers ---
+async function uploadTo0x0(filePath) {
+  const form = new FormData();
+  form.append("file", fs.createReadStream(filePath));
+
+  const res = await axios.post("https://0x0.st", form, {
+    headers: form.getHeaders(),
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    timeout: 120000,
+  });
+
+  if (res.status >= 200 && res.status < 300 && typeof res.data === "string")
+    return res.data.trim();
+  throw new Error("0x0 upload failed");
+}
+
+async function uploadToTransfer(filePath) {
+  const form = new FormData();
+  form.append("file", fs.createReadStream(filePath));
+
+  const res = await axios.post(`https://transfer.sh/${path.basename(filePath)}`, form, {
+    headers: form.getHeaders(),
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    timeout: 120000,
+  });
+
+  if (res.status >= 200 && res.status < 300)
+    return typeof res.data === "string" ? res.data.trim() : res.data.url || "unknown";
+  throw new Error("transfer.sh upload failed");
+}
