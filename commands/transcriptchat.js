@@ -1,162 +1,131 @@
 const {
   SlashCommandBuilder,
-  PermissionFlagsBits,
-  ChannelType,
-  EmbedBuilder,
+  AttachmentBuilder,
+  PermissionFlagsBits
 } = require("discord.js");
-const { createTranscript } = require("discord-html-transcripts");
-const { uploadTranscript } = require("../utils/transcriptUploader");
-const { Readable } = require("stream");
-
-const CHUNK_SIZE = 1000;
-const MAX_MESSAGES = 10000;
+const discordTranscripts = require("discord-html-transcripts");
+const fs = require("fs-extra");
+const axios = require("axios");
+const FormData = require("form-data");
 
 module.exports = {
   name: "transcriptchat",
-  description: "📜 Generate and upload a transcript of the current channel (supports large channels)",
-  usage: "/transcriptchat [#channel]",
+  description: "Generates a chat transcript (HTML format) for the channel.",
+  usage: "transcriptchat [#channel] [withImages|noImages]",
+
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
-    .setDescription("📜 Generate and upload a transcript of the current channel (supports large channels)")
-    .addChannelOption(opt =>
-      opt
-        .setName("channel")
-        .setDescription("Select a text channel")
-        .addChannelTypes(ChannelType.GuildText)
+    .setDescription("Generate an HTML transcript of this or another channel.")
+    .addChannelOption(option =>
+      option.setName("channel")
+        .setDescription("The channel to generate transcript from")
         .setRequired(false)
     )
-    .addBooleanOption(opt =>
-      opt
-        .setName("images")
-        .setDescription("Include images and attachments?")
+    .addStringOption(option =>
+      option.setName("images")
+        .setDescription("Include images in transcript? (yes/no)")
         .setRequired(false)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+        .addChoices(
+          { name: "Yes (Include Images)", value: "yes" },
+          { name: "No (Faster, No Images)", value: "no" }
+        )
+    ),
 
-  async execute({ interaction, message, isPrefix }) {
-    const isSlash = !!interaction;
-    const user = isSlash ? interaction.user : message.author;
-
-    const targetChannel =
-      (isSlash && interaction.options.getChannel("channel")) ||
-      (isPrefix && message.mentions.channels.first()) ||
-      (isPrefix && message.channel) ||
-      (isSlash && interaction.channel);
-
-    const includeImages = isSlash
-      ? interaction.options.getBoolean("images") ?? true
-      : true;
-
-    if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-      const msg = "⚠️ Please provide a valid text channel.";
-      if (isSlash) return interaction.reply({ content: msg, flags: 64 });
-      else return message.reply(msg);
-    }
-
-    if (isSlash) {
-      await interaction.deferReply({ flags: 64 }).catch(() => {});
-      await interaction.editReply(
-        `⏳ Starting transcript for ${targetChannel} (images: ${includeImages ? "✅" : "❌"})...`
-      );
-    } else {
-      await message.reply(
-        `⏳ Starting transcript for ${targetChannel} (images: ${includeImages ? "✅" : "❌"})...`
-      );
-    }
-
-    let before = null;
-    let processed = 0;
-    let part = 1;
-    const results = [];
+  async execute(interactionOrMessage, client) {
+    const isSlash = !!interactionOrMessage.isChatInputCommand;
+    const interaction = isSlash ? interactionOrMessage : null;
+    const message = isSlash ? null : interactionOrMessage;
 
     try {
-      while (processed < MAX_MESSAGES) {
-        // Fetch messages manually to create partial transcripts
-        const fetched = await targetChannel.messages.fetch({
-          limit: CHUNK_SIZE,
-          before,
-        }).catch(() => null);
-        if (!fetched || fetched.size === 0) break;
+      const user = isSlash ? interaction.user : message.author;
+      const channel = isSlash
+        ? interaction.options?.getChannel("channel") || interaction.channel
+        : message.mentions.channels.first() || message.channel;
 
-        const messagesArr = Array.from(fetched.values()).reverse();
-        before = messagesArr[0].id;
-        processed += messagesArr.length;
+      const includeImages = isSlash
+        ? interaction.options?.getString("images") || "yes"
+        : (message.content.includes("noImages") ? "no" : "yes");
 
-        // Create a custom transcript for fetched messages
-        const buffer = await createTranscript(targetChannel, {
-          limit: -1, // we already have the message list
-          returnBuffer: true,
-          fileName: `${sanitize(targetChannel.name)}-part-${part}.html`,
-          saveImages: includeImages,
-          messages: messagesArr, // <—— this is crucial
-          poweredBy: false,
-        });
+      const withImages = includeImages === "yes";
 
-        const stream = Readable.from(buffer);
-        const upload = await uploadTranscript({
-          buffer: stream,
-          filename: `${sanitize(targetChannel.name)}-part-${part}.html`,
-        });
-
-        results.push({
-          part,
-          success: upload.success,
-          url: upload.fileUrl,
-          error: upload.error,
-          count: messagesArr.length,
-        });
-
-        const status = `📄 Processed ${processed} messages... (Part ${part}: ${
-          upload.success ? "✅" : "❌"
-        })`;
-        if (isSlash)
-          await interaction.editReply({ content: status });
-        else message.channel.send(status);
-
-        part++;
-        await new Promise((r) => setTimeout(r, 800));
+      if (!channel.isTextBased()) {
+        const msg = "❌ That channel isn’t text-based!";
+        return isSlash ? interaction.reply({ content: msg, ephemeral: true }) : message.reply(msg);
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle("📜 Transcript Summary")
-        .setColor("Aqua")
-        .setDescription(
-          `Channel: ${targetChannel}\nProcessed: ${processed} messages\nImages: ${
-            includeImages ? "✅" : "❌"
-          }`
-        )
-        .addFields(
-          { name: "Parts", value: `${results.length}`, inline: true },
-          { name: "Requested by", value: `${user}`, inline: true }
-        )
-        .setTimestamp();
+      const progressMsg = isSlash
+        ? await interaction.reply({ content: "🕓 Creating transcript... [░░░░░░░░░░] 0%", fetchReply: true })
+        : await message.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
 
-      const links = results
-        .map(
-          (r) =>
-            `• Part ${r.part}: ${r.count} msgs — ${
-              r.success ? `[View](${r.url})` : `❌ ${r.error}`
-            }`
-        )
-        .join("\n");
+      const fileName = `${channel.name.replace(/[^a-zA-Z0-9]/g, "_")}_transcript.html`;
+      const filePath = `./transcripts/${fileName}`;
+      await fs.ensureDir("./transcripts");
 
-      if (isSlash) {
-        await interaction.followUp({ embeds: [embed], content: links });
+      let progress = 0;
+      const updateProgress = async (percent) => {
+        progress = percent;
+        const barLength = 10;
+        const filled = Math.round((percent / 100) * barLength);
+        const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
+        if (isSlash) {
+          await interaction.editReply(`🕓 Creating transcript... [${bar}] ${percent}%`);
+        } else {
+          await progressMsg.edit(`🕓 Creating transcript... [${bar}] ${percent}%`);
+        }
+      };
+
+      await updateProgress(10);
+
+      // 📄 Generate transcript
+      const transcript = await discordTranscripts.createTranscript(channel, {
+        limit: -1,
+        returnType: "buffer",
+        fileName,
+        saveImages: withImages,
+        footerText: `Generated by ${user.tag} on ${new Date().toLocaleString()}`,
+        poweredBy: false,
+      });
+
+      await updateProgress(60);
+
+      // Save locally
+      await fs.writeFile(filePath, transcript);
+      await updateProgress(80);
+
+      // 🌐 Upload to your hosting server
+      const form = new FormData();
+      form.append("file", fs.createReadStream(filePath));
+
+      const upload = await axios.post("http://us6.galactichosting.net:30028/upload", form, {
+        headers: form.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+
+      const fileUrl = upload.data.fileUrl;
+      await updateProgress(100);
+
+      if (fileUrl) {
+        const successMsg = `✅ Transcript created successfully!\n🔗 [View Transcript](${fileUrl})\n🕒 (Auto-deletes in 30 minutes)`;
+        isSlash
+          ? await interaction.editReply(successMsg)
+          : await progressMsg.edit(successMsg);
       } else {
-        await message.channel.send({ embeds: [embed], content: links });
+        throw new Error("Upload failed – no file URL returned.");
       }
-    } catch (err) {
-      console.error("❌ TranscriptChat Error:", err);
-      const fail = `❌ Failed to generate transcript: ${err.message}`;
-      if (isSlash && (interaction.deferred || interaction.replied))
-        await interaction.editReply({ content: fail });
-      else if (isSlash)
-        await interaction.reply({ content: fail, flags: 64 });
-      else await message.reply(fail);
+
+      // 🧹 Delete local file after upload
+      setTimeout(() => fs.unlink(filePath).catch(() => {}), 20000);
+    } catch (error) {
+      console.error("TranscriptChat Error:", error);
+      const msg = "❌ Failed to create transcript. Please try again later.";
+      if (interactionOrMessage.reply) {
+        try {
+          await interactionOrMessage.reply(msg);
+        } catch {
+          await interactionOrMessage.followUp(msg);
+        }
+      }
     }
   },
 };
-
-function sanitize(name) {
-  return name.replace(/[^a-z0-9_\-]/gi, "_").slice(0, 64);
-}
