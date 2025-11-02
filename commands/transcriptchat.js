@@ -8,8 +8,8 @@ const { createTranscript } = require("discord-html-transcripts");
 const { uploadTranscript } = require("../utils/transcriptUploader");
 const { Readable } = require("stream");
 
-const CHUNK_SIZE = 1000; // 💾 messages per chunk
-const MAX_MESSAGES = 10000; // total limit safeguard
+const CHUNK_SIZE = 1000;
+const MAX_MESSAGES = 10000;
 
 module.exports = {
   name: "transcriptchat",
@@ -18,7 +18,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
     .setDescription("📜 Generate and upload a transcript of the current channel (supports large channels)")
-    .addChannelOption((opt) =>
+    .addChannelOption(opt =>
       opt
         .setName("channel")
         .setDescription("Select a text channel")
@@ -53,12 +53,15 @@ module.exports = {
       else return message.reply(msg);
     }
 
-    // Initial notice
     if (isSlash) {
       await interaction.deferReply({ flags: 64 }).catch(() => {});
-      await interaction.editReply(`⏳ Starting transcript for ${targetChannel} (images: ${includeImages ? "✅" : "❌"})...`);
+      await interaction.editReply(
+        `⏳ Starting transcript for ${targetChannel} (images: ${includeImages ? "✅" : "❌"})...`
+      );
     } else {
-      await message.reply(`⏳ Starting transcript for ${targetChannel} (images: ${includeImages ? "✅" : "❌"})...`);
+      await message.reply(
+        `⏳ Starting transcript for ${targetChannel} (images: ${includeImages ? "✅" : "❌"})...`
+      );
     }
 
     let before = null;
@@ -68,20 +71,24 @@ module.exports = {
 
     try {
       while (processed < MAX_MESSAGES) {
-        // fetch messages
-        const fetched = await targetChannel.messages.fetch({ limit: CHUNK_SIZE, before }).catch(() => null);
+        // Fetch messages manually to create partial transcripts
+        const fetched = await targetChannel.messages.fetch({
+          limit: CHUNK_SIZE,
+          before,
+        }).catch(() => null);
         if (!fetched || fetched.size === 0) break;
 
-        const messagesArr = Array.from(fetched.values());
-        before = messagesArr[messagesArr.length - 1].id;
+        const messagesArr = Array.from(fetched.values()).reverse();
+        before = messagesArr[0].id;
         processed += messagesArr.length;
 
-        // generate transcript chunk
+        // Create a custom transcript for fetched messages
         const buffer = await createTranscript(targetChannel, {
-          limit: messagesArr.length,
+          limit: -1, // we already have the message list
           returnBuffer: true,
-          fileName: `${targetChannel.name}-part-${part}.html`,
+          fileName: `${sanitize(targetChannel.name)}-part-${part}.html`,
           saveImages: includeImages,
+          messages: messagesArr, // <—— this is crucial
           poweredBy: false,
         });
 
@@ -99,23 +106,25 @@ module.exports = {
           count: messagesArr.length,
         });
 
-        if (isSlash) {
-          await interaction.editReply({
-            content: `📄 Processed ${processed} messages... (Part ${part}: ${upload.success ? "✅" : "❌"})`,
-          });
-        } else {
-          await message.channel.send(`📄 Processed ${processed} messages... (Part ${part}: ${upload.success ? "✅" : "❌"})`);
-        }
+        const status = `📄 Processed ${processed} messages... (Part ${part}: ${
+          upload.success ? "✅" : "❌"
+        })`;
+        if (isSlash)
+          await interaction.editReply({ content: status });
+        else message.channel.send(status);
 
         part++;
-        await new Promise((r) => setTimeout(r, 800)); // small delay
+        await new Promise((r) => setTimeout(r, 800));
       }
 
-      // ✅ Final summary
       const embed = new EmbedBuilder()
         .setTitle("📜 Transcript Summary")
         .setColor("Aqua")
-        .setDescription(`Channel: ${targetChannel}\nProcessed: ${processed} messages\nImages: ${includeImages ? "✅" : "❌"}`)
+        .setDescription(
+          `Channel: ${targetChannel}\nProcessed: ${processed} messages\nImages: ${
+            includeImages ? "✅" : "❌"
+          }`
+        )
         .addFields(
           { name: "Parts", value: `${results.length}`, inline: true },
           { name: "Requested by", value: `${user}`, inline: true }
