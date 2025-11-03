@@ -1,75 +1,61 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const axios = require("axios");
+
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY; // set this in Render environment
 
 module.exports = {
   name: "show",
-  description: "Fetch images from Pexels.",
-  aliases: ["image", "img", "pexels"],
+  description: "Fetch images from Pexels with pagination!",
+  options: [
+    {
+      name: "query",
+      description: "Search term (e.g., nature, cars, anime)",
+      type: 3,
+      required: true,
+    },
+  ],
 
-  data: new SlashCommandBuilder()
-    .setName("show")
-    .setDescription("Show images from Pexels.")
-    .addStringOption(option =>
-      option.setName("query")
-        .setDescription("Search term (e.g. nature, cars, space)")
-        .setRequired(true)
-    ),
-
-  async execute(interactionOrMessage, args = [], client) {
+  async execute({ client, message, interaction, args, isPrefix, safeReply }) {
     try {
-      // 🧠 Detect command type
-      const isSlash = interactionOrMessage.isChatInputCommand?.() || interactionOrMessage.commandName;
-
-      const query = isSlash
-        ? interactionOrMessage.options.getString("query")
-        : args.length > 0
-          ? args.join(" ")
-          : null;
+      const query = isPrefix
+        ? args.join(" ")
+        : interaction.options.getString("query");
 
       if (!query) {
-        const content = "❌ Please provide a search term!";
-        if (isSlash) return interactionOrMessage.reply({ content, flags: 64 });
-        else return interactionOrMessage.channel.send(content);
+        const reply = { content: "❌ Please provide a search term!", ephemeral: true };
+        return isPrefix ? message.reply(reply.content) : safeReply(reply);
       }
 
       let page = 1;
-      const perPage = 1;
+      const perPage = 1; // show 1 image at a time
 
       const fetchImages = async (pageNum) => {
-        try {
-          const res = await axios.get("https://api.pexels.com/v1/search", {
-            headers: { Authorization: process.env.PEXELS_API_KEY },
-            params: { query, per_page: perPage, page: pageNum },
-          });
-          return res.data.photos || [];
-        } catch (err) {
-          console.error("Pexels API Error:", err.response?.data || err.message);
-          return [];
-        }
+        const res = await axios.get("https://api.pexels.com/v1/search", {
+          headers: { Authorization: PEXELS_API_KEY },
+          params: { query, per_page: perPage, page: pageNum },
+        });
+        return res.data.photos || [];
       };
 
-      // 🕓 Initial reply
-      const sent = isSlash
-        ? await interactionOrMessage.reply({ content: "🔍 Searching...", fetchReply: true })
-        : await interactionOrMessage.channel.send("🔍 Searching...");
+      let photos = await fetchImages(page);
+      if (!photos.length)
+        return isPrefix
+          ? message.reply("⚠️ No images found!")
+          : safeReply({ content: "⚠️ No images found!", ephemeral: true });
 
-      let results = await fetchImages(page);
-      if (!results.length)
-        return sent.edit("❌ No images found for that search.");
-
-      const sendEmbed = async (photo) => {
+      const sendImage = async () => {
+        const photo = photos[0];
         const embed = new EmbedBuilder()
-          .setColor("Random")
-          .setTitle(`📸 ${query.toUpperCase()}`)
-          .setDescription(`Photographer: **${photo.photographer}**`)
+          .setTitle(`📸 ${query} — Page ${page}`)
           .setImage(photo.src.large2x)
-          .setFooter({ text: `Page ${page}` });
+          .setColor("Random")
+          .setFooter({ text: `Photographer: ${photo.photographer}` });
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("prev")
             .setLabel("⬅️ Previous")
-            .setStyle(ButtonStyle.Secondary)
+            .setStyle(ButtonStyle.Primary)
             .setDisabled(page === 1),
           new ButtonBuilder()
             .setCustomId("next")
@@ -77,35 +63,60 @@ module.exports = {
             .setStyle(ButtonStyle.Primary)
         );
 
-        await sent.edit({ content: "", embeds: [embed], components: [row] });
+        if (isPrefix)
+          return message.channel.send({ embeds: [embed], components: [row] });
+        else
+          return safeReply({ embeds: [embed], components: [row] });
       };
 
-      await sendEmbed(results[0]);
+      const sentMsg = await sendImage();
 
-      const collector = sent.createMessageComponentCollector({ time: 120000 });
+      // Create collector for buttons
+      const collector = (sentMsg.createMessageComponentCollector
+        ? sentMsg.createMessageComponentCollector({ time: 120000 })
+        : sentMsg); // fallback
 
       collector.on("collect", async (btn) => {
-        const userId = isSlash ? interactionOrMessage.user.id : interactionOrMessage.author.id;
-        if (btn.user.id !== userId)
-          return btn.reply({ content: "⚠️ This isn’t your session!", flags: 64 });
+        if (btn.user.id !== (interaction?.user?.id || message.author.id))
+          return btn.reply({ content: "Not your session!", ephemeral: true });
 
         if (btn.customId === "next") page++;
         else if (btn.customId === "prev" && page > 1) page--;
 
-        const newResults = await fetchImages(page);
-        if (newResults.length) await sendEmbed(newResults[0]);
-        await btn.deferUpdate();
+        photos = await fetchImages(page);
+        if (!photos.length) return btn.reply({ content: "⚠️ No more images!", ephemeral: true });
+
+        const photo = photos[0];
+        const newEmbed = new EmbedBuilder()
+          .setTitle(`📸 ${query} — Page ${page}`)
+          .setImage(photo.src.large2x)
+          .setColor("Random")
+          .setFooter({ text: `Photographer: ${photo.photographer}` });
+
+        const newRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("prev")
+            .setLabel("⬅️ Previous")
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page === 1),
+          new ButtonBuilder()
+            .setCustomId("next")
+            .setLabel("➡️ Next")
+            .setStyle(ButtonStyle.Primary)
+        );
+
+        await btn.update({ embeds: [newEmbed], components: [newRow] });
       });
 
       collector.on("end", async () => {
-        const disabledRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("prev").setLabel("⬅️ Previous").setStyle(ButtonStyle.Secondary).setDisabled(true),
-          new ButtonBuilder().setCustomId("next").setLabel("➡️ Next").setStyle(ButtonStyle.Primary).setDisabled(true)
-        );
-        await sent.edit({ components: [disabledRow] }).catch(() => {});
+        try {
+          await sentMsg.edit({ components: [] }).catch(() => {});
+        } catch {}
       });
     } catch (err) {
-      console.error("Error in /show command:", err);
+      console.error("❌ Show command error:", err);
+      if (isPrefix) message.reply("⚠️ Something went wrong fetching images!");
+      else safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
     }
   },
 };
