@@ -9,33 +9,51 @@ module.exports = {
     .setName("show")
     .setDescription("Show beautiful images from Pexels.")
     .addStringOption(option =>
-      option.setName("query").setDescription("Search term (e.g. nature, cars, space)").setRequired(true)
+      option
+        .setName("query")
+        .setDescription("Search term (e.g. nature, cars, space)")
+        .setRequired(true)
     ),
 
-  async execute(messageOrInteraction, args) {
-    const isSlash = !!messageOrInteraction.isCommand;
-    const query = isSlash ? messageOrInteraction.options.getString("query") : args.join(" ");
-    const channel = isSlash ? messageOrInteraction : messageOrInteraction.channel;
+  async execute(messageOrInteraction, args = []) {
+    const isSlash = !!messageOrInteraction.isChatInputCommand;
+    const query = isSlash
+      ? messageOrInteraction.options.getString("query")
+      : args.length > 0
+        ? args.join(" ")
+        : null;
 
-    if (!query) return channel.reply("❌ Please provide a search term!");
+    if (!query) {
+      const content = "❌ Please provide a search term!";
+      return isSlash
+        ? messageOrInteraction.reply({ content, flags: 64 }) // ephemeral fix
+        : messageOrInteraction.reply(content);
+    }
+
+    const channel = isSlash ? messageOrInteraction : messageOrInteraction.channel;
 
     let page = 1;
     const perPage = 1;
 
     async function fetchImages(pageNum) {
-      const res = await axios.get("https://api.pexels.com/v1/search", {
-        headers: { Authorization: process.env.PEXELS_API_KEY },
-        params: { query, per_page: perPage, page: pageNum },
-      });
-      return res.data.photos || [];
+      try {
+        const res = await axios.get("https://api.pexels.com/v1/search", {
+          headers: { Authorization: process.env.PEXELS_API_KEY },
+          params: { query, per_page: perPage, page: pageNum },
+        });
+        return res.data.photos || [];
+      } catch (err) {
+        console.error("Pexels API Error:", err.response?.data || err.message);
+        return [];
+      }
     }
 
-    const sent = await (isSlash ? messageOrInteraction.reply({ content: "🔍 Searching...", fetchReply: true }) : channel.send("🔍 Searching..."));
+    const sent = await (isSlash
+      ? messageOrInteraction.reply({ content: "🔍 Searching...", fetchReply: true })
+      : channel.send("🔍 Searching..."));
+
     let results = await fetchImages(page);
-
-    if (!results.length) {
-      return sent.edit("❌ No images found for that search.");
-    }
+    if (!results.length) return sent.edit("❌ No images found for that search.");
 
     const sendEmbed = async (photo) => {
       const embed = new EmbedBuilder()
@@ -46,8 +64,15 @@ module.exports = {
         .setFooter({ text: `Page ${page}` });
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("prev").setLabel("⬅️ Previous").setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
-        new ButtonBuilder().setCustomId("next").setLabel("➡️ Next").setStyle(ButtonStyle.Primary)
+        new ButtonBuilder()
+          .setCustomId("prev")
+          .setLabel("⬅️ Previous")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page === 1),
+        new ButtonBuilder()
+          .setCustomId("next")
+          .setLabel("➡️ Next")
+          .setStyle(ButtonStyle.Primary)
       );
 
       await sent.edit({ content: "", embeds: [embed], components: [row] });
@@ -58,8 +83,9 @@ module.exports = {
     const collector = sent.createMessageComponentCollector({ time: 120000 });
 
     collector.on("collect", async (interaction) => {
-      if (interaction.user.id !== (isSlash ? messageOrInteraction.user.id : messageOrInteraction.author.id))
-        return interaction.reply({ content: "⚠️ This is not your session!", ephemeral: true });
+      const userId = isSlash ? messageOrInteraction.user.id : messageOrInteraction.author.id;
+      if (interaction.user.id !== userId)
+        return interaction.reply({ content: "⚠️ This isn’t your session!", flags: 64 });
 
       if (interaction.customId === "next") page++;
       else if (interaction.customId === "prev" && page > 1) page--;
