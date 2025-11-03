@@ -7,15 +7,15 @@ const path = require("path");
 
 module.exports = {
   name: "transcriptchat",
-  description: "Generates a chat transcript (HTML format) and uploads it to SHADOW Hosting.",
-  usage: "/transcriptchat [#channel] [yes|no images]",
+  description: "Generate and upload a transcript of this or another channel.",
+  usage: "/transcriptchat [#channel] [images yes|no]",
 
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
-    .setDescription("Generate an HTML transcript of this or another channel.")
+    .setDescription("Generate an HTML transcript of a channel.")
     .addChannelOption(option =>
       option.setName("channel")
-        .setDescription("The channel to generate transcript from")
+        .setDescription("Choose channel to generate transcript for.")
         .setRequired(false)
     )
     .addStringOption(option =>
@@ -24,105 +24,124 @@ module.exports = {
         .setRequired(false)
         .addChoices(
           { name: "Yes (Include Images)", value: "yes" },
-          { name: "No (No Images)", value: "no" }
+          { name: "No (Faster)", value: "no" }
         )
     ),
 
   async execute(interactionOrMessage, client) {
-    const isSlash = !!interactionOrMessage.isChatInputCommand; // detect type
-    const interaction = isSlash ? interactionOrMessage : null;
-    const message = isSlash ? null : interactionOrMessage;
-
     try {
-      const user = isSlash ? interaction.user : message.author;
-      const channel = isSlash
-        ? interaction.options.getChannel("channel") || interaction.channel
-        : message.mentions.channels.first() || message.channel;
+      // Detect type
+      const isSlash =
+        interactionOrMessage?.isChatInputCommand?.() ||
+        !!interactionOrMessage?.commandName;
+      const interaction = isSlash ? interactionOrMessage : null;
+      const message = isSlash ? null : interactionOrMessage;
 
-      const includeImages = isSlash
-        ? interaction.options.getString("images") || "yes"
-        : (message.content.includes("noImages") ? "no" : "yes");
+      const user = isSlash ? interaction.user : message?.author;
+      const guild = isSlash ? interaction.guild : message?.guild;
 
-      const withImages = includeImages === "yes";
+      // --- Get channel ---
+      let channel;
+      if (isSlash && interaction.options) {
+        channel =
+          interaction.options.getChannel("channel") ||
+          interaction.channel ||
+          guild?.channels?.cache?.get(interaction.channelId);
+      } else {
+        channel =
+          message?.mentions?.channels?.first() ||
+          message?.channel ||
+          guild?.channels?.cache?.get(message?.channelId);
+      }
 
-      if (!channel.isTextBased()) {
-        const msg = "❌ That channel isn’t text-based!";
+      if (!channel || !channel.isTextBased?.()) {
+        const msg = "❌ That channel isn’t text-based or couldn’t be found.";
         return isSlash
           ? interaction.reply({ content: msg, ephemeral: true })
           : message.reply(msg);
       }
 
+      const includeImages = isSlash
+        ? interaction.options?.getString("images") || "yes"
+        : message?.content?.includes("noImages")
+        ? "no"
+        : "yes";
+      const withImages = includeImages === "yes";
+
+      // Send initial progress
       const progressMsg = isSlash
-        ? await interaction.reply({ content: "🕓 Creating transcript... [░░░░░░░░░░] 0%", fetchReply: true })
+        ? await interaction.reply({
+            content: "🕓 Creating transcript... [░░░░░░░░░░] 0%",
+            fetchReply: true,
+          })
         : await message.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
+
+      const updateProgress = async (p) => {
+        const filled = Math.round(p / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        const text = `🕓 Creating transcript... [${bar}] ${p}%`;
+        if (isSlash) await interaction.editReply(text);
+        else await progressMsg.edit(text);
+      };
 
       const fileName = `${channel.name.replace(/[^a-zA-Z0-9]/g, "_")}_transcript.html`;
       const filePath = path.join(__dirname, "..", "transcripts", fileName);
       await fs.ensureDir(path.dirname(filePath));
 
-      const updateProgress = async (percent) => {
-        const filled = Math.round((percent / 10));
-        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        const text = `🕓 Creating transcript... [${bar}] ${percent}%`;
-        if (isSlash) await interaction.editReply(text);
-        else await progressMsg.edit(text);
-      };
+      await updateProgress(20);
 
-      await updateProgress(10);
-
+      // Create transcript
       const transcript = await discordTranscripts.createTranscript(channel, {
         limit: -1,
         returnType: "buffer",
         fileName,
         saveImages: withImages,
-        footerText: `Generated by ${user.tag} on ${new Date().toLocaleString()}`,
+        footerText: `Generated by ${user.tag} at ${new Date().toLocaleString()}`,
         poweredBy: false,
       });
 
       await fs.writeFile(filePath, transcript);
       await updateProgress(60);
 
-      // Upload to your hosting server
+      // Upload to Galactic Hosting
+      const HOST = "http://us6.galactichosting.net:30028/upload";
       const form = new FormData();
       form.append("file", fs.createReadStream(filePath));
 
-      const HOST = "http://us6.galactichosting.net:30028/upload";
       const res = await axios.post(HOST, form, {
         headers: form.getHeaders(),
         timeout: 60000,
         maxBodyLength: Infinity,
-        maxContentLength: Infinity,
       });
 
       await updateProgress(100);
 
       const hostedURL = res.data?.fileUrl;
       if (hostedURL) {
-        const successMsg = `✅ Transcript created!\n📂 [View Transcript](${hostedURL})`;
+        const msg = `✅ Transcript created!\n📂 [View Transcript](${hostedURL})`;
         isSlash
-          ? await interaction.editReply(successMsg)
-          : await progressMsg.edit(successMsg);
+          ? await interaction.editReply(msg)
+          : await progressMsg.edit(msg);
       } else {
         const attachment = new AttachmentBuilder(filePath, { name: fileName });
-        const successMsg = "✅ Transcript created (local file attached):";
+        const msg = "✅ Transcript created (file attached):";
         isSlash
-          ? await interaction.editReply({ content: successMsg, files: [attachment] })
-          : await progressMsg.edit({ content: successMsg, files: [attachment] });
+          ? await interaction.editReply({ content: msg, files: [attachment] })
+          : await progressMsg.edit({ content: msg, files: [attachment] });
       }
 
-      // Cleanup local file
-      setTimeout(() => fs.unlink(filePath).catch(() => {}), 60000);
-
+      // Cleanup
+      setTimeout(() => fs.unlink(filePath).catch(() => {}), 30 * 60 * 1000);
     } catch (error) {
-      console.error("TranscriptChat Error:", error);
-      const msg = "❌ Failed to create transcript. Please try again later.";
-      if (interactionOrMessage.reply) {
-        try {
-          await interactionOrMessage.reply(msg);
-        } catch {
-          await interactionOrMessage.followUp?.(msg);
+      console.error("❌ TranscriptChat Error:", error);
+      try {
+        const errMsg = `❌ Failed to create transcript: ${error.message}`;
+        if (interactionOrMessage?.reply) {
+          await interactionOrMessage.reply(errMsg);
+        } else if (interactionOrMessage?.editReply) {
+          await interactionOrMessage.editReply(errMsg);
         }
-      }
+      } catch (_) {}
     }
   },
 };
