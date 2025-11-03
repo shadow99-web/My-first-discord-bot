@@ -1,17 +1,14 @@
-const {
-  SlashCommandBuilder,
-  AttachmentBuilder,
-  PermissionFlagsBits
-} = require("discord.js");
+const { SlashCommandBuilder, AttachmentBuilder } = require("discord.js");
 const discordTranscripts = require("discord-html-transcripts");
 const fs = require("fs-extra");
 const axios = require("axios");
 const FormData = require("form-data");
+const path = require("path");
 
 module.exports = {
   name: "transcriptchat",
-  description: "Generates a chat transcript (HTML format) for the channel.",
-  usage: "transcriptchat [#channel] [withImages|noImages]",
+  description: "Generates a chat transcript (HTML format) and uploads it to SHADOW Hosting.",
+  usage: "/transcriptchat [#channel] [yes|no images]",
 
   data: new SlashCommandBuilder()
     .setName("transcriptchat")
@@ -23,60 +20,31 @@ module.exports = {
     )
     .addStringOption(option =>
       option.setName("images")
-        .setDescription("Include images in transcript? (yes/no)")
+        .setDescription("Include images? (yes/no)")
         .setRequired(false)
         .addChoices(
           { name: "Yes (Include Images)", value: "yes" },
-          { name: "No (Faster, No Images)", value: "no" }
+          { name: "No (No Images)", value: "no" }
         )
     ),
 
-  async execute(interactionOrMessage, client) {
-    const isSlash = !!interactionOrMessage.isChatInputCommand;
-    const interaction = isSlash ? interactionOrMessage : null;
-    const message = isSlash ? null : interactionOrMessage;
-
+  async execute(interaction, client) {
     try {
-      const user = isSlash ? interaction.user : message.author;
-      const channel = isSlash
-        ? interaction.options?.getChannel("channel") || interaction.channel
-        : message.mentions.channels.first() || message.channel;
-
-      const includeImages = isSlash
-        ? interaction.options?.getString("images") || "yes"
-        : (message.content.includes("noImages") ? "no" : "yes");
-
+      const user = interaction.user;
+      const channel = interaction.options.getChannel("channel") || interaction.channel;
+      const includeImages = interaction.options.getString("images") || "yes";
       const withImages = includeImages === "yes";
 
       if (!channel.isTextBased()) {
-        const msg = "❌ That channel isn’t text-based!";
-        return isSlash ? interaction.reply({ content: msg, ephemeral: true }) : message.reply(msg);
+        return interaction.reply({ content: "❌ That channel isn’t text-based!", ephemeral: true });
       }
 
-      const progressMsg = isSlash
-        ? await interaction.reply({ content: "🕓 Creating transcript... [░░░░░░░░░░] 0%", fetchReply: true })
-        : await message.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
-
+      await interaction.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
       const fileName = `${channel.name.replace(/[^a-zA-Z0-9]/g, "_")}_transcript.html`;
-      const filePath = `./transcripts/${fileName}`;
-      await fs.ensureDir("./transcripts");
+      const filePath = path.join(__dirname, "..", "transcripts", fileName);
+      await fs.ensureDir(path.dirname(filePath));
 
-      let progress = 0;
-      const updateProgress = async (percent) => {
-        progress = percent;
-        const barLength = 10;
-        const filled = Math.round((percent / 100) * barLength);
-        const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
-        if (isSlash) {
-          await interaction.editReply(`🕓 Creating transcript... [${bar}] ${percent}%`);
-        } else {
-          await progressMsg.edit(`🕓 Creating transcript... [${bar}] ${percent}%`);
-        }
-      };
-
-      await updateProgress(10);
-
-      // 📄 Generate transcript
+      // Step 1: Create transcript
       const transcript = await discordTranscripts.createTranscript(channel, {
         limit: -1,
         returnType: "buffer",
@@ -86,46 +54,37 @@ module.exports = {
         poweredBy: false,
       });
 
-      await updateProgress(60);
-
-      // Save locally
       await fs.writeFile(filePath, transcript);
-      await updateProgress(80);
+      await interaction.editReply("🕓 Creating transcript... [██████░░░░] 60%");
 
-      // 🌐 Upload to your hosting server
+      // Step 2: Upload to your hosting server
       const form = new FormData();
       form.append("file", fs.createReadStream(filePath));
 
-      const upload = await axios.post("http://us6.galactichosting.net:30028/upload", form, {
+      const HOST = "http://us6.galactichosting.net:30028/upload"; // 🌐 your transcript host
+      const res = await axios.post(HOST, form, {
         headers: form.getHeaders(),
-        maxContentLength: Infinity,
+        timeout: 60000,
         maxBodyLength: Infinity,
+        maxContentLength: Infinity,
       });
 
-      const fileUrl = upload.data.fileUrl;
-      await updateProgress(100);
+      await interaction.editReply("🕓 Creating transcript... [██████████] 100%");
 
-      if (fileUrl) {
-        const successMsg = `✅ Transcript created successfully!\n🔗 [View Transcript](${fileUrl})\n🕒 (Auto-deletes in 30 minutes)`;
-        isSlash
-          ? await interaction.editReply(successMsg)
-          : await progressMsg.edit(successMsg);
+      // Step 3: Return hosted URL
+      if (res.data && res.data.fileUrl) {
+        await interaction.editReply(`✅ Transcript created!\n📂 [View Transcript](${res.data.fileUrl})`);
       } else {
-        throw new Error("Upload failed – no file URL returned.");
+        const attachment = new AttachmentBuilder(filePath, { name: fileName });
+        await interaction.editReply({ content: "✅ Transcript created (local file attached):", files: [attachment] });
       }
 
-      // 🧹 Delete local file after upload
-      setTimeout(() => fs.unlink(filePath).catch(() => {}), 20000);
+      // Step 4: Cleanup
+      setTimeout(() => fs.unlink(filePath).catch(() => {}), 60000);
+
     } catch (error) {
       console.error("TranscriptChat Error:", error);
-      const msg = "❌ Failed to create transcript. Please try again later.";
-      if (interactionOrMessage.reply) {
-        try {
-          await interactionOrMessage.reply(msg);
-        } catch {
-          await interactionOrMessage.followUp(msg);
-        }
-      }
+      await interaction.editReply("❌ Failed to create transcript. Please try again later.");
     }
   },
 };
