@@ -1,111 +1,147 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require("discord.js");
 const axios = require("axios");
 
-const PEXELS_API_KEY = process.env.PEXELS_API_KEY; // set this in Render environment
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY; // set in Render / Galactic env
 
 module.exports = {
-  name: "show",
-  description: "Fetch images from Pexels with pagination!",
-  options: [
-    {
-      name: "query",
-      description: "Search term (e.g., nature, cars, anime)",
-      type: 3,
-      required: true,
-    },
-  ],
+  // Slash metadata (so your deploy script picks it up)
+  data: new SlashCommandBuilder()
+    .setName("show")
+    .setDescription("Fetch images from Pexels with pagination")
+    .addStringOption((o) =>
+      o.setName("query").setDescription("Search term (e.g. nature)").setRequired(true)
+    ),
 
-  async execute({ client, message, interaction, args, isPrefix, safeReply }) {
+  // meta for prefix loader (optional)
+  name: "show",
+  description: "Fetch images from Pexels with pagination (prefix + slash)",
+
+  /**
+   * execute(context)
+   * context: { client, message, interaction, args, isPrefix, safeReply }
+   */
+  async execute(context) {
+    const { message, interaction, args, isPrefix } = context;
     try {
-      const query = isPrefix
-        ? args.join(" ")
-        : interaction.options.getString("query");
+      const isSlash = !!interaction;
+      const userId = isSlash ? interaction.user.id : message.author.id;
+
+      // get query
+      const query = isSlash
+        ? interaction.options.getString("query")
+        : args?.join(" ").trim();
 
       if (!query) {
         const reply = { content: "❌ Please provide a search term!", ephemeral: true };
-        return isPrefix ? message.reply(reply.content) : safeReply(reply);
+        if (isSlash) return interaction.reply(reply).catch(() => {});
+        return message.reply(reply.content).catch(() => {});
       }
 
+      // per-page and page state
       let page = 1;
-      const perPage = 1; // show 1 image at a time
+      const perPage = 1;
 
+      // fetch function
       const fetchImages = async (pageNum) => {
         const res = await axios.get("https://api.pexels.com/v1/search", {
           headers: { Authorization: PEXELS_API_KEY },
           params: { query, per_page: perPage, page: pageNum },
+          timeout: 15000,
         });
         return res.data.photos || [];
       };
 
+      // initial fetch
       let photos = await fetchImages(page);
-      if (!photos.length)
-        return isPrefix
-          ? message.reply("⚠️ No images found!")
-          : safeReply({ content: "⚠️ No images found!", ephemeral: true });
+      if (!photos.length) {
+        const no = { content: `⚠️ No images found for \`${query}\`.`, ephemeral: true };
+        if (isSlash) return interaction.reply(no).catch(() => {});
+        return message.reply(no.content).catch(() => {});
+      }
 
-      const sendImage = async () => {
-        const photo = photos[0];
-        const embed = new EmbedBuilder()
-          .setTitle(`📸 ${query} — Page ${page}`)
+      // build embed + buttons
+      const buildEmbed = (photo, pageNum) =>
+        new EmbedBuilder()
+          .setTitle(`✨SHADOW GALLERY ${query} — Page ${pageNum}`)
           .setImage(photo.src.large2x)
           .setColor("Random")
           .setFooter({ text: `Photographer: ${photo.photographer}` });
 
-        const row = new ActionRowBuilder().addComponents(
+      const buildRow = (pageNum) =>
+        new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId("prev")
+            .setCustomId("show_prev")
             .setLabel("⬅️ Previous")
             .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === 1),
+            .setDisabled(pageNum === 1),
           new ButtonBuilder()
-            .setCustomId("next")
+            .setCustomId("show_next")
             .setLabel("➡️ Next")
             .setStyle(ButtonStyle.Primary)
         );
 
-        if (isPrefix)
-          return message.channel.send({ embeds: [embed], components: [row] });
-        else
-          return safeReply({ embeds: [embed], components: [row] });
-      };
+      // send initial message (fetchReply for slash so we get message object)
+      const initialEmbed = buildEmbed(photos[0], page);
+      const initialRow = buildRow(page);
 
-      const sentMsg = await sendImage();
+      let sentMsg;
+      if (isSlash) {
+        // reply with fetchReply so we get the Message object
+        sentMsg = await interaction.reply({
+          embeds: [initialEmbed],
+          components: [initialRow],
+          fetchReply: true,
+        });
+      } else {
+        sentMsg = await message.channel.send({
+          embeds: [initialEmbed],
+          components: [initialRow],
+        });
+      }
 
-      // Create collector for buttons
-      const collector = (sentMsg.createMessageComponentCollector
-        ? sentMsg.createMessageComponentCollector({ time: 120000 })
-        : sentMsg); // fallback
+      // create collector
+      const collector = sentMsg.createMessageComponentCollector({
+        time: 120_000,
+      });
 
       collector.on("collect", async (btn) => {
-        if (btn.user.id !== (interaction?.user?.id || message.author.id))
-          return btn.reply({ content: "Not your session!", ephemeral: true });
+        try {
+          // only allow the command user to control pagination
+          if (btn.user.id !== userId) {
+            return btn.reply({ content: "This is not your session.", ephemeral: true });
+          }
 
-        if (btn.customId === "next") page++;
-        else if (btn.customId === "prev" && page > 1) page--;
+          // update page
+          if (btn.customId === "show_next") page++;
+          else if (btn.customId === "show_prev" && page > 1) page--;
 
-        photos = await fetchImages(page);
-        if (!photos.length) return btn.reply({ content: "⚠️ No more images!", ephemeral: true });
+          // fetch the page
+          photos = await fetchImages(page);
+          if (!photos.length) {
+            // nothing on that page — revert page and inform user
+            if (btn.customId === "show_next") page--;
+            else if (btn.customId === "show_prev" && page < 1) page++;
+            return btn.reply({ content: "⚠️ No more images.", ephemeral: true });
+          }
 
-        const photo = photos[0];
-        const newEmbed = new EmbedBuilder()
-          .setTitle(`📸 ${query} — Page ${page}`)
-          .setImage(photo.src.large2x)
-          .setColor("Random")
-          .setFooter({ text: `Photographer: ${photo.photographer}` });
+          const photo = photos[0];
+          const newEmbed = buildEmbed(photo, page);
+          const newRow = buildRow(page);
 
-        const newRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("prev")
-            .setLabel("⬅️ Previous")
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === 1),
-          new ButtonBuilder()
-            .setCustomId("next")
-            .setLabel("➡️ Next")
-            .setStyle(ButtonStyle.Primary)
-        );
-
-        await btn.update({ embeds: [newEmbed], components: [newRow] });
+          // update message
+          await btn.update({ embeds: [newEmbed], components: [newRow] });
+        } catch (err) {
+          console.error("Collector collect error (show):", err);
+          try {
+            await btn.reply({ content: "⚠️ Something went wrong.", ephemeral: true });
+          } catch {}
+        }
       });
 
       collector.on("end", async () => {
@@ -115,8 +151,15 @@ module.exports = {
       });
     } catch (err) {
       console.error("❌ Show command error:", err);
-      if (isPrefix) message.reply("⚠️ Something went wrong fetching images!");
-      else safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+      if (isPrefix) {
+        try {
+          await message.reply("⚠️ Something went wrong fetching images.").catch(() => {});
+        } catch {}
+      } else {
+        try {
+          await interaction.reply({ content: "⚠️ Something went wrong fetching images.", ephemeral: true }).catch(() => {});
+        } catch {}
+      }
     }
   },
 };
