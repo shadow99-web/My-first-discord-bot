@@ -28,23 +28,48 @@ module.exports = {
         )
     ),
 
-  async execute(interaction, client) {
+  async execute(interactionOrMessage, client) {
+    const isSlash = !!interactionOrMessage.isChatInputCommand; // detect type
+    const interaction = isSlash ? interactionOrMessage : null;
+    const message = isSlash ? null : interactionOrMessage;
+
     try {
-      const user = interaction.user;
-      const channel = interaction.options.getChannel("channel") || interaction.channel;
-      const includeImages = interaction.options.getString("images") || "yes";
+      const user = isSlash ? interaction.user : message.author;
+      const channel = isSlash
+        ? interaction.options.getChannel("channel") || interaction.channel
+        : message.mentions.channels.first() || message.channel;
+
+      const includeImages = isSlash
+        ? interaction.options.getString("images") || "yes"
+        : (message.content.includes("noImages") ? "no" : "yes");
+
       const withImages = includeImages === "yes";
 
       if (!channel.isTextBased()) {
-        return interaction.reply({ content: "❌ That channel isn’t text-based!", ephemeral: true });
+        const msg = "❌ That channel isn’t text-based!";
+        return isSlash
+          ? interaction.reply({ content: msg, ephemeral: true })
+          : message.reply(msg);
       }
 
-      await interaction.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
+      const progressMsg = isSlash
+        ? await interaction.reply({ content: "🕓 Creating transcript... [░░░░░░░░░░] 0%", fetchReply: true })
+        : await message.reply("🕓 Creating transcript... [░░░░░░░░░░] 0%");
+
       const fileName = `${channel.name.replace(/[^a-zA-Z0-9]/g, "_")}_transcript.html`;
       const filePath = path.join(__dirname, "..", "transcripts", fileName);
       await fs.ensureDir(path.dirname(filePath));
 
-      // Step 1: Create transcript
+      const updateProgress = async (percent) => {
+        const filled = Math.round((percent / 10));
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        const text = `🕓 Creating transcript... [${bar}] ${percent}%`;
+        if (isSlash) await interaction.editReply(text);
+        else await progressMsg.edit(text);
+      };
+
+      await updateProgress(10);
+
       const transcript = await discordTranscripts.createTranscript(channel, {
         limit: -1,
         returnType: "buffer",
@@ -55,13 +80,13 @@ module.exports = {
       });
 
       await fs.writeFile(filePath, transcript);
-      await interaction.editReply("🕓 Creating transcript... [██████░░░░] 60%");
+      await updateProgress(60);
 
-      // Step 2: Upload to your hosting server
+      // Upload to your hosting server
       const form = new FormData();
       form.append("file", fs.createReadStream(filePath));
 
-      const HOST = "http://us6.galactichosting.net:30028/upload"; // 🌐 your transcript host
+      const HOST = "http://us6.galactichosting.net:30028/upload";
       const res = await axios.post(HOST, form, {
         headers: form.getHeaders(),
         timeout: 60000,
@@ -69,22 +94,35 @@ module.exports = {
         maxContentLength: Infinity,
       });
 
-      await interaction.editReply("🕓 Creating transcript... [██████████] 100%");
+      await updateProgress(100);
 
-      // Step 3: Return hosted URL
-      if (res.data && res.data.fileUrl) {
-        await interaction.editReply(`✅ Transcript created!\n📂 [View Transcript](${res.data.fileUrl})`);
+      const hostedURL = res.data?.fileUrl;
+      if (hostedURL) {
+        const successMsg = `✅ Transcript created!\n📂 [View Transcript](${hostedURL})`;
+        isSlash
+          ? await interaction.editReply(successMsg)
+          : await progressMsg.edit(successMsg);
       } else {
         const attachment = new AttachmentBuilder(filePath, { name: fileName });
-        await interaction.editReply({ content: "✅ Transcript created (local file attached):", files: [attachment] });
+        const successMsg = "✅ Transcript created (local file attached):";
+        isSlash
+          ? await interaction.editReply({ content: successMsg, files: [attachment] })
+          : await progressMsg.edit({ content: successMsg, files: [attachment] });
       }
 
-      // Step 4: Cleanup
+      // Cleanup local file
       setTimeout(() => fs.unlink(filePath).catch(() => {}), 60000);
 
     } catch (error) {
       console.error("TranscriptChat Error:", error);
-      await interaction.editReply("❌ Failed to create transcript. Please try again later.");
+      const msg = "❌ Failed to create transcript. Please try again later.";
+      if (interactionOrMessage.reply) {
+        try {
+          await interactionOrMessage.reply(msg);
+        } catch {
+          await interactionOrMessage.followUp?.(msg);
+        }
+      }
     }
   },
 };
