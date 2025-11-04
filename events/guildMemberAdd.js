@@ -3,6 +3,7 @@ const canvacord = require("canvacord");
 const WelcomeSettings = require("../models/WelcomeSettings.js");
 const { getGreet, getChannel } = require("../Handlers/greetHandler");
 const { getAutoroleConfig } = require("../Handlers/autoroleHandler");
+const MemberStats = require("../models/MemberStats");
 
 // ✅ Helper: validate URL
 const isValidUrl = (url) => {
