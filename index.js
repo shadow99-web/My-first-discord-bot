@@ -145,6 +145,7 @@ safeRequireEvent("./events/interaction", client, blockHelpers);
 safeRequireEvent("./events/snipe", client);
 safeRequireEvent("./events/guildMemberAdd", client);
 safeRequireEvent("./events/autoMod", client);
+safeRequireEvent("./events/guildMemberRemove.js", client);
 safeRequireEvent("./events/truthdare", client);
 safeRequireEvent("./events/modLogEvents", client);
 safeRequireEvent("./events/voiceStateUpdate", client);
