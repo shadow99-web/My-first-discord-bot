@@ -2,7 +2,7 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
 } = require("discord.js");
-const MemberStats = require("../../models/MemberStats");
+const MemberStats = require("../models/MemberStats");
 const moment = require("moment");
 
 module.exports = {
