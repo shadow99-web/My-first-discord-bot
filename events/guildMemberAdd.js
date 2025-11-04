@@ -119,5 +119,17 @@ module.exports = (client) => {
     } catch (err) {
       console.error("❌ Failed to assign autorole:", err);
     }
+  // =================== 📊 Member Stats (Joins Counter) ===================
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      await MemberStats.updateOne(
+        { guildId, date: today },
+        { $inc: { joins: 1 } },
+        { upsert: true }
+      );
+      console.log(`📈 Recorded join for ${member.guild.name} (${today})`);
+    } catch (err) {
+      console.error("❌ Error saving join stats:", err);
+    }
   });
 };
