@@ -10,16 +10,16 @@ const { fetchRyzumiAPI } = require("../utils/ryzumi");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("display")
-    .setDescription("🔍 Search Pinterest images (Shadow style)")
+    .setName("pin")
+    .setDescription("🔍 Search cool images ")
     .addStringOption(opt =>
       opt.setName("query")
-        .setDescription("Search term for Pinterest images")
+        .setDescription("Search term for  images")
         .setRequired(true)
     ),
 
-  name: "display",
-  description: "🔍 Search Pinterest images (prefix + slash)",
+  name: "pin",
+  description: "🔍 Search  images (prefix + slash)",
   
   async execute(context) {
     const query = context.isPrefix
@@ -48,7 +48,7 @@ module.exports = {
         const item = data[index];
         return new EmbedBuilder()
           .setColor("#E60023")
-          .setTitle(`📍 Pinterest Results for "${query}"`)
+          .setTitle(`📍 Images for "${query}"`)
           .setDescription(`[🔗 View Image](${item.link || item.directLink})`)
           .setImage(item.directLink || item.image)
           .setFooter({ text: `Result ${index + 1} of ${data.length}` })
