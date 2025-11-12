@@ -26,29 +26,59 @@ module.exports = {
       sub.setName("delete").setDescription("Delete your personal VC")
     ),
 
+  // =========================
+  // Slash Command Execution
+  // =========================
   async execute(interaction) {
+    // ✅ Prevents crashes from button/menu events
+    if (!interaction.isChatInputCommand()) return;
+
     const sub = interaction.options.getSubcommand();
-    if (sub === "create") return this.createVC(interaction.member, interaction.guild, interaction);
-    if (sub === "delete") return this.deleteVC(interaction.member, interaction.guild, interaction);
+
+    if (sub === "create")
+      return this.createVC(interaction.member, interaction.guild, interaction);
+
+    if (sub === "delete")
+      return this.deleteVC(interaction.member, interaction.guild, interaction);
   },
 
+  // =========================
+  // Prefix Command Execution
+  // =========================
   async executePrefix(message, args) {
     const sub = args[0];
-    if (!sub) return message.reply("🔴 Use: `!vc create` or `!vc delete`");
+    if (!sub)
+      return message.reply("🔴 Use: `!vc create` or `!vc delete`");
 
-    if (sub === "create") return this.createVC(message.member, message.guild, message);
-    if (sub === "delete") return this.deleteVC(message.member, message.guild, message);
+    if (sub === "create")
+      return this.createVC(
+        message.member,
+        message.guild,
+        message,
+        args.slice(1).join(" ")
+      );
+
+    if (sub === "delete")
+      return this.deleteVC(message.member, message.guild, message);
 
     return message.reply("🔴 Unknown subcommand.");
   },
 
+  // =========================
+  // Create VC
+  // =========================
   async createVC(member, guild, replyTarget, nameArg) {
     const name = nameArg || `${member.user.username}'s VC`;
-    const existing = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
+    const existing = await VoiceChannel.findOne({
+      guildId: guild.id,
+      userId: member.id,
+    });
 
     if (existing) {
       const msg = "🎧 You already own a VC!";
-      return replyTarget.reply ? replyTarget.reply(msg) : replyTarget.followUp(msg);
+      return replyTarget.reply
+        ? replyTarget.reply({ content: msg, flags: 64 })
+        : replyTarget.followUp({ content: msg, flags: 64 });
     }
 
     const channel = await guild.channels.create({
@@ -76,18 +106,34 @@ module.exports = {
       channelId: channel.id,
     });
 
-    if (member.voice.channel) await member.voice.setChannel(channel).catch(() => {});
+    if (member.voice.channel)
+      await member.voice.setChannel(channel).catch(() => {});
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("lock_vc").setLabel("🔒 Lock").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("unlock_vc").setLabel("🔓 Unlock").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("rename_vc").setLabel("🔵 Rename").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("limit_vc").setLabel("👥 Limit").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("delete_vc").setLabel("✖️ Delete").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder()
+        .setCustomId("lock_vc")
+        .setLabel("🔒 Lock")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("unlock_vc")
+        .setLabel("🔓 Unlock")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("rename_vc")
+        .setLabel("🔵 Rename")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("limit_vc")
+        .setLabel("👥 Limit")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("delete_vc")
+        .setLabel("✖️ Delete")
+        .setStyle(ButtonStyle.Danger)
     );
 
     const embed = new EmbedBuilder()
-      .setTitle(`<a:blue_heart:1414309560231002194> SHADOW Voice Control Panel`)
+      .setTitle("<a:blue_heart:1414309560231002194> SHADOW Voice Control Panel")
       .setDescription(`🎧 **Channel Created:** ${channel}`)
       .setColor("Blurple")
       .setFooter({
@@ -102,11 +148,20 @@ module.exports = {
       : replyTarget.followUp({ ...replyObj, flags: 64 });
   },
 
+  // =========================
+  // Delete VC
+  // =========================
   async deleteVC(member, guild, replyTarget) {
-    const vc = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
+    const vc = await VoiceChannel.findOne({
+      guildId: guild.id,
+      userId: member.id,
+    });
+
     if (!vc) {
       const msg = "❌ You don’t own any VC.";
-      return replyTarget.reply ? replyTarget.reply(msg) : replyTarget.followUp(msg);
+      return replyTarget.reply
+        ? replyTarget.reply({ content: msg, flags: 64 })
+        : replyTarget.followUp({ content: msg, flags: 64 });
     }
 
     const channel = guild.channels.cache.get(vc.channelId);
@@ -114,7 +169,9 @@ module.exports = {
 
     await VoiceChannel.deleteOne({ _id: vc._id });
 
-    const msg = `✖️ Your voice channel has been deleted.`;
-    return replyTarget.reply ? replyTarget.reply(msg) : replyTarget.followUp(msg);
+    const msg = "✖️ Your voice channel has been deleted.";
+    return replyTarget.reply
+      ? replyTarget.reply({ content: msg, flags: 64 })
+      : replyTarget.followUp({ content: msg, flags: 64 });
   },
 };
