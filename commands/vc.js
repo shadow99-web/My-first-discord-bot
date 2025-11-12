@@ -1,3 +1,4 @@
+// commands/vc.js
 const {
   SlashCommandBuilder,
   ActionRowBuilder,
@@ -10,141 +11,150 @@ const {
 const VoiceChannel = require("../models/vcSchema");
 
 module.exports = {
-  name: "vc",
+  // Slash metadata so your deploy picks it up
   data: new SlashCommandBuilder()
     .setName("vc")
     .setDescription("🎧 Manage your personal voice channel")
-    .addSubcommand(sub =>
+    .addSubcommand((sub) =>
       sub
         .setName("create")
         .setDescription("Create your own voice channel")
-        .addStringOption(opt =>
-          opt.setName("name").setDescription("VC name").setRequired(false)
-        )
+        .addStringOption((opt) => opt.setName("name").setDescription("VC name").setRequired(false))
     )
-    .addSubcommand(sub =>
-      sub.setName("delete").setDescription("Delete your personal VC")
-    ),
+    .addSubcommand((sub) => sub.setName("delete").setDescription("Delete your personal VC")),
 
-  // ✅ Slash + Prefix unified
-  async execute(interaction, args) {
+  name: "vc",
+  description: "🎧 Manage your personal voice channel (prefix + slash)",
+
+  /**
+   * context object from your event loader:
+   * { client, interaction, message, safeReply, args, isPrefix }
+   */
+  async execute(context) {
+    const { interaction, message, safeReply, args, isPrefix } = context;
+    const isMsg = !!isPrefix;
+
+    // helper to reply using safeReply (slash) or message.reply (prefix)
+    const reply = async (payload) => {
+      try {
+        if (typeof safeReply === "function") return await safeReply(payload);
+        if (isMsg && message?.reply) {
+          // if payload is an object { embeds... } or string
+          if (typeof payload === "string") return await message.reply(payload);
+          return await message.reply(payload);
+        }
+        // fallback: interaction
+        if (interaction?.reply) {
+          return await interaction.reply(payload).catch(() => {});
+        }
+      } catch (e) {
+        console.error("Reply failed:", e);
+      }
+    };
+
     try {
-      const isMessage = !!interaction.content; // true if prefix command
-      const sub = isMessage ? args?.[0] : interaction.options?.getSubcommand?.();
-      const nameArg = isMessage ? args?.slice(1).join(" ") : interaction.options?.getString?.("name");
-
-      const member = isMessage ? interaction.member : interaction.member;
-      const guild = isMessage ? interaction.guild : interaction.guild;
-      const replyTarget = interaction;
+      // resolve subcommand + name argument from both modes
+      const sub = isMsg ? (args?.[0] || "").toLowerCase() : interaction?.options?.getSubcommand?.();
+      const nameArg = isMsg ? args?.slice(1).join(" ").trim() : interaction?.options?.getString?.("name");
 
       if (!sub) {
-        const msg = "❌ Use `/vc create` or `/vc delete` (or `!vc create` / `!vc delete`).";
-        return replyTarget.reply?.(msg);
+        return reply(
+          "❌ Usage: `/vc create [name]` | `/vc delete`  — or prefix: `!vc create [name]` / `!vc delete`"
+        );
       }
 
-      if (sub === "create")
-        return await this.createVC(member, guild, replyTarget, nameArg);
-      if (sub === "delete")
-        return await this.deleteVC(member, guild, replyTarget);
+      if (sub === "create") return await this.createVC({ context, nameArg, reply });
+      if (sub === "delete") return await this.deleteVC({ context, reply });
 
-      return replyTarget.reply?.("❌ Unknown subcommand.");
+      return reply("❌ Unknown subcommand. Use `create` or `delete`.");
     } catch (err) {
-      console.error("❌ Error in /vc:", err);
-      if (interaction.reply) {
-        await interaction.reply({
-          content: "⚠️ Something went wrong while executing this command.",
-          flags: 64,
-        }).catch(() => {});
-      }
+      console.error("❌ Error in vc.execute:", err);
+      await reply({ content: "⚠️ Something went wrong while executing VC command." });
     }
   },
 
-  // ==========================
-  // CREATE VC FUNCTION
-  // ==========================
-  async createVC(member, guild, replyTarget, nameArg) {
-    const name = nameArg || `${member.user.username}'s VC`;
-    const existing = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
+  // payload: { context, nameArg, reply }
+  async createVC({ context, nameArg, reply }) {
+    const { interaction, message, isPrefix } = context;
+    const member = isPrefix ? message.member : interaction.member;
+    const guild = isPrefix ? message.guild : interaction.guild;
+    const displayName = nameArg || `${member.user.username}'s VC`;
 
-    if (existing) {
-      const msg = "🎧 You already own a VC!";
-      return replyTarget.reply?.(msg);
-    }
+    try {
+      const existing = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
+      if (existing && guild.channels.cache.get(existing.channelId)) {
+        return reply("🎧 You already own a VC!");
+      }
 
-    const channel = await guild.channels.create({
-      name,
-      type: ChannelType.GuildVoice,
-      permissionOverwrites: [
-        { id: guild.id, deny: [PermissionFlagsBits.Connect] },
-        {
-          id: member.id,
-          allow: [
-            PermissionFlagsBits.Connect,
-            PermissionFlagsBits.Speak,
-            PermissionFlagsBits.Stream,
-            PermissionFlagsBits.ManageChannels,
-            PermissionFlagsBits.MuteMembers,
-            PermissionFlagsBits.MoveMembers,
-          ],
-        },
-      ],
-    });
-
-    await VoiceChannel.create({
-      guildId: guild.id,
-      userId: member.id,
-      channelId: channel.id,
-    });
-
-    if (member.voice.channel)
-      await member.voice.setChannel(channel).catch(() => {});
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("lock_vc")
-        .setLabel("🔒 Lock")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("unlock_vc")
-        .setLabel("🔓 Unlock")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("rename_vc")
-        .setLabel("🔵 Rename")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("limit_vc")
-        .setLabel("👥 Limit")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("delete_vc")
-        .setLabel("✖️ Delete")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    const embed = new EmbedBuilder()
-      .setTitle(`<a:blue_heart:1414309560231002194> SHADOW Voice Control Panel`)
-      .setDescription(`🎧 **Channel Created:** ${channel}`)
-      .setColor("Blurple")
-      .setFooter({
-        text: `Owned by ${member.user.tag}`,
-        iconURL: member.user.displayAvatarURL(),
+      const channel = await guild.channels.create({
+        name: displayName,
+        type: ChannelType.GuildVoice,
+        permissionOverwrites: [
+          { id: guild.id, deny: [PermissionFlagsBits.Connect] },
+          {
+            id: member.id,
+            allow: [
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+              PermissionFlagsBits.Stream,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.MuteMembers,
+              PermissionFlagsBits.MoveMembers,
+            ],
+          },
+        ],
       });
 
-    return replyTarget.reply?.({ embeds: [embed], components: [row] });
+      await VoiceChannel.create({
+        guildId: guild.id,
+        userId: member.id,
+        channelId: channel.id,
+      });
+
+      // move user if in voice
+      if (member.voice?.channel) {
+        await member.voice.setChannel(channel).catch(() => {});
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`vc_lock_${channel.id}`).setLabel("🔒 Lock").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`vc_unlock_${channel.id}`).setLabel("🔓 Unlock").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`vc_rename_${channel.id}`).setLabel("🔵 Rename").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`vc_limit_${channel.id}`).setLabel("👥 Limit").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`vc_delete_${channel.id}`).setLabel("✖️ Delete").setStyle(ButtonStyle.Danger)
+      );
+
+      const embed = new EmbedBuilder()
+        .setTitle(`<a:blue_heart:1414309560231002194> SHADOW Voice Control Panel`)
+        .setDescription(`🎧 **Channel Created:** ${channel}`)
+        .setColor("Blurple")
+        .setFooter({ text: `Owned by ${member.user.tag}`, iconURL: member.user.displayAvatarURL() });
+
+      return reply({ embeds: [embed], components: [row] });
+    } catch (err) {
+      console.error("❌ createVC error:", err);
+      return reply("⚠️ Failed to create VC. Check permissions & bot intents.");
+    }
   },
 
-  // ==========================
-  // DELETE VC FUNCTION
-  // ==========================
-  async deleteVC(member, guild, replyTarget) {
-    const vc = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
-    if (!vc) return replyTarget.reply?.("❌ You don’t own any VC.");
+  // payload: { context, reply }
+  async deleteVC({ context, reply }) {
+    const { interaction, message, isPrefix } = context;
+    const member = isPrefix ? message.member : interaction.member;
+    const guild = isPrefix ? message.guild : interaction.guild;
 
-    const channel = guild.channels.cache.get(vc.channelId);
-    if (channel) await channel.delete().catch(() => {});
+    try {
+      const vc = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
+      if (!vc) return reply("❌ You don’t own any VC.");
 
-    await VoiceChannel.deleteOne({ _id: vc._id });
-    return replyTarget.reply?.("✖️ Your voice channel has been deleted.");
+      const channel = guild.channels.cache.get(vc.channelId);
+      if (channel) await channel.delete().catch(() => {});
+      await VoiceChannel.deleteOne({ _id: vc._id }).catch(() => {});
+
+      return reply("✖️ Your voice channel has been deleted.");
+    } catch (err) {
+      console.error("❌ deleteVC error:", err);
+      return reply("⚠️ Failed to delete VC.");
+    }
   },
 };
