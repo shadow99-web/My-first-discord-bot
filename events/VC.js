@@ -1,86 +1,159 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
+// events/VC.js
+const {
+  EmbedBuilder,
+  ChannelType,
+  PermissionFlagsBits,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+} = require("discord.js");
 const VoiceChannel = require("../models/vcSchema");
 
-module.exports = async (interaction) => {
-  if (!interaction.isButton()) return;
-  const id = interaction.customId;
-  const vcData = await VoiceChannel.findOne({ guildId: interaction.guild.id, userId: interaction.user.id });
-  if (!vcData) return interaction.reply({ content: "❌ You don’t own a VC.", ephemeral: true });
+module.exports = async (client) => {
+  client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isButton()) return;
+    const { customId, guild, member } = interaction;
 
-  const channel = interaction.guild.channels.cache.get(vcData.channelId);
-  if (!channel) return interaction.reply({ content: "❌ Channel not found!", ephemeral: true });
+    // Only handle vc buttons
+    if (!customId.startsWith("vc_")) return;
 
-  switch (id) {
-    case "lock_vc":
-      await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
-      return interaction.reply({ content: "🔒 Channel locked!", ephemeral: true });
+    const [ , action, channelId ] = customId.split("_");
+    const channel = guild.channels.cache.get(channelId);
+    const vcData = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
 
-    case "unlock_vc":
-      await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true });
-      return interaction.reply({ content: "🔓 Channel unlocked!", ephemeral: true });
-
-    case "rename_vc": {
-      const modal = new ModalBuilder()
-        .setCustomId("renameModal")
-        .setTitle("Rename Your VC")
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("vcName")
-              .setLabel("Enter new VC name")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-          )
-        );
-      await interaction.showModal(modal);
-      break;
+    // Validate ownership
+    if (!vcData || vcData.channelId !== channelId) {
+      return interaction.reply({
+        content: "❌ You don’t own this VC!",
+        ephemeral: true,
+      });
     }
 
-    case "limit_vc": {
-      const modal = new ModalBuilder()
-        .setCustomId("limitModal")
-        .setTitle("Set User Limit")
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("vcLimit")
-              .setLabel("Enter max user limit (1–99)")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-          )
-        );
-      await interaction.showModal(modal);
-      break;
+    try {
+      switch (action) {
+        // 🔒 LOCK VC
+        case "lock": {
+          await channel.permissionOverwrites.edit(guild.id, {
+            Connect: false,
+          });
+          return interaction.reply({
+            content: "🔒 **Locked** your voice channel.",
+            ephemeral: true,
+          });
+        }
+
+        // 🔓 UNLOCK VC
+        case "unlock": {
+          await channel.permissionOverwrites.edit(guild.id, {
+            Connect: true,
+          });
+          return interaction.reply({
+            content: "🔓 **Unlocked** your voice channel.",
+            ephemeral: true,
+          });
+        }
+
+        // 🔵 RENAME VC
+        case "rename": {
+          const modal = new ModalBuilder()
+            .setCustomId(`rename_modal_${channelId}`)
+            .setTitle("🔵 Rename Voice Channel");
+
+          const input = new TextInputBuilder()
+            .setCustomId("new_name")
+            .setLabel("Enter new VC name")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setPlaceholder(`${member.user.username}'s VC`);
+
+          modal.addComponents(new ActionRowBuilder().addComponents(input));
+          return interaction.showModal(modal);
+        }
+
+        // 👥 LIMIT VC
+        case "limit": {
+          const modal = new ModalBuilder()
+            .setCustomId(`limit_modal_${channelId}`)
+            .setTitle("👥 Set User Limit");
+
+          const input = new TextInputBuilder()
+            .setCustomId("new_limit")
+            .setLabel("Enter user limit (0 = unlimited)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setPlaceholder("0-99");
+
+          modal.addComponents(new ActionRowBuilder().addComponents(input));
+          return interaction.showModal(modal);
+        }
+
+        // ✖️ DELETE VC
+        case "delete": {
+          if (channel) await channel.delete().catch(() => {});
+          await VoiceChannel.deleteOne({ guildId: guild.id, userId: member.id });
+
+          return interaction.reply({
+            content: "✖️ Deleted your personal voice channel.",
+            ephemeral: true,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("❌ VC button error:", err);
+      return interaction.reply({
+        content: "⚠️ Something went wrong handling this button.",
+        ephemeral: true,
+      });
+    }
+  });
+
+  // ==========================
+  // Handle MODALS
+  // ==========================
+  client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isModalSubmit()) return;
+    const { customId, guild, member } = interaction;
+
+    // RENAME
+    if (customId.startsWith("rename_modal_")) {
+      const channelId = customId.split("_")[2];
+      const channel = guild.channels.cache.get(channelId);
+      const vcData = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
+
+      if (!vcData || vcData.channelId !== channelId)
+        return interaction.reply({ content: "❌ You don’t own this VC.", ephemeral: true });
+
+      const newName = interaction.fields.getTextInputValue("new_name").trim();
+      if (!newName.length) return interaction.reply({ content: "⚠️ Name can’t be empty.", ephemeral: true });
+
+      await channel.setName(newName).catch(() => {});
+      return interaction.reply({ content: `🔵 Renamed VC to **${newName}**`, ephemeral: true });
     }
 
-    case "delete_vc":
-      await channel.delete().catch(() => {});
-      await VoiceChannel.deleteOne({ _id: vcData._id });
-      return interaction.reply({ content: "💥 Your VC has been deleted.", ephemeral: true });
-  }
-};
+    // LIMIT
+    if (customId.startsWith("limit_modal_")) {
+      const channelId = customId.split("_")[2];
+      const channel = guild.channels.cache.get(channelId);
+      const vcData = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
 
-// Modal submissions
-module.exports.modalHandler = async (interaction) => {
-  if (!interaction.isModalSubmit()) return;
-  const vcData = await VoiceChannel.findOne({ guildId: interaction.guild.id, userId: interaction.user.id });
-  if (!vcData) return;
+      if (!vcData || vcData.channelId !== channelId)
+        return interaction.reply({ content: "❌ You don’t own this VC.", ephemeral: true });
 
-  const channel = interaction.guild.channels.cache.get(vcData.channelId);
-  if (!channel) return;
+      const newLimit = parseInt(interaction.fields.getTextInputValue("new_limit"));
+      if (isNaN(newLimit) || newLimit < 0 || newLimit > 99)
+        return interaction.reply({ content: "⚠️ Please enter a valid number between 0–99.", ephemeral: true });
 
-  if (interaction.customId === "renameModal") {
-    const newName = interaction.fields.getTextInputValue("vcName");
-    await channel.setName(newName);
-    return interaction.reply({ content: `🔵 Renamed VC to **${newName}**`, ephemeral: true });
-  }
+      await channel.setUserLimit(newLimit).catch(() => {});
+      return interaction.reply({
+        content:
+          newLimit === 0
+            ? "👥 User limit removed."
+            : `👥 Set VC user limit to **${newLimit}**.`,
+        ephemeral: true,
+      });
+    }
+  });
 
-  if (interaction.customId === "limitModal") {
-    const limit = parseInt(interaction.fields.getTextInputValue("vcLimit"));
-    if (isNaN(limit) || limit < 1 || limit > 99)
-      return interaction.reply({ content: "❌ Invalid limit!", ephemeral: true });
-
-    await channel.setUserLimit(limit);
-    return interaction.reply({ content: `👥 Set user limit to **${limit}**`, ephemeral: true });
-  }
+  console.log("✅ VC.js loaded and listening for VC controls");
 };
