@@ -26,49 +26,37 @@ module.exports = {
       sub.setName("delete").setDescription("Delete your personal VC")
     ),
 
-  async execute(interaction) {
+  // ✅ Slash + Prefix unified
+  async execute(interaction, args) {
     try {
-      // ✅ Ensure it's a chat input command (slash)
-      if (!interaction.isChatInputCommand()) return;
+      const isMessage = !!interaction.content; // true if prefix command
+      const sub = isMessage ? args?.[0] : interaction.options?.getSubcommand?.();
+      const nameArg = isMessage ? args?.slice(1).join(" ") : interaction.options?.getString?.("name");
 
-      const sub = interaction.options?.getSubcommand?.();
-      if (!sub)
-        return await interaction.reply({
-          content: "❌ Invalid subcommand. Use `/vc create` or `/vc delete`.",
-          flags: 64,
-        });
+      const member = isMessage ? interaction.member : interaction.member;
+      const guild = isMessage ? interaction.guild : interaction.guild;
+      const replyTarget = interaction;
+
+      if (!sub) {
+        const msg = "❌ Use `/vc create` or `/vc delete` (or `!vc create` / `!vc delete`).";
+        return replyTarget.reply?.(msg);
+      }
 
       if (sub === "create")
-        return await this.createVC(interaction.member, interaction.guild, interaction);
+        return await this.createVC(member, guild, replyTarget, nameArg);
       if (sub === "delete")
-        return await this.deleteVC(interaction.member, interaction.guild, interaction);
+        return await this.deleteVC(member, guild, replyTarget);
+
+      return replyTarget.reply?.("❌ Unknown subcommand.");
     } catch (err) {
       console.error("❌ Error in /vc:", err);
-      if (!interaction.replied) {
+      if (interaction.reply) {
         await interaction.reply({
           content: "⚠️ Something went wrong while executing this command.",
           flags: 64,
-        });
+        }).catch(() => {});
       }
     }
-  },
-
-  // ==========================
-  // PREFIX COMMAND HANDLER
-  // ==========================
-  async executePrefix(message, args) {
-    const sub = args[0];
-    const nameArg = args.slice(1).join(" ");
-
-    if (!sub) return message.reply("🔴 Use: `!vc create` or `!vc delete`");
-
-    if (sub === "create")
-      return this.createVC(message.member, message.guild, message, nameArg);
-
-    if (sub === "delete")
-      return this.deleteVC(message.member, message.guild, message);
-
-    return message.reply("🔴 Unknown subcommand.");
   },
 
   // ==========================
@@ -80,9 +68,7 @@ module.exports = {
 
     if (existing) {
       const msg = "🎧 You already own a VC!";
-      return replyTarget.reply
-        ? replyTarget.reply(msg)
-        : replyTarget.followUp?.(msg);
+      return replyTarget.reply?.(msg);
     }
 
     const channel = await guild.channels.create({
@@ -145,11 +131,7 @@ module.exports = {
         iconURL: member.user.displayAvatarURL(),
       });
 
-    const replyObj = { embeds: [embed], components: [row] };
-
-    return replyTarget.reply
-      ? replyTarget.reply(replyObj)
-      : replyTarget.followUp?.({ ...replyObj, flags: 64 });
+    return replyTarget.reply?.({ embeds: [embed], components: [row] });
   },
 
   // ==========================
@@ -157,22 +139,12 @@ module.exports = {
   // ==========================
   async deleteVC(member, guild, replyTarget) {
     const vc = await VoiceChannel.findOne({ guildId: guild.id, userId: member.id });
-
-    if (!vc) {
-      const msg = "❌ You don’t own any VC.";
-      return replyTarget.reply
-        ? replyTarget.reply(msg)
-        : replyTarget.followUp?.(msg);
-    }
+    if (!vc) return replyTarget.reply?.("❌ You don’t own any VC.");
 
     const channel = guild.channels.cache.get(vc.channelId);
     if (channel) await channel.delete().catch(() => {});
 
     await VoiceChannel.deleteOne({ _id: vc._id });
-
-    const msg = `✖️ Your voice channel has been deleted.`;
-    return replyTarget.reply
-      ? replyTarget.reply(msg)
-      : replyTarget.followUp?.(msg);
+    return replyTarget.reply?.("✖️ Your voice channel has been deleted.");
   },
 };
