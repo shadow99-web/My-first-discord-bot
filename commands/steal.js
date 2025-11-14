@@ -7,6 +7,17 @@ const {
     ButtonStyle 
 } = require("discord.js");
 
+// 🎯 Safe name cleaner for Discord emoji/sticker rules
+function cleanName(input) {
+    if (!input) return "emote_item";
+
+    return input
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_") // invalid → underscore
+        .replace(/_+/g, "_") // collapse multiple underscores
+        .slice(0, 32) || "emote_item"; // prevent empty
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("steal")
@@ -16,78 +27,86 @@ module.exports = {
                 .setDescription("Target server ID (optional)")
         ),
 
-    name: "steal", // prefix support
+    name: "steal",
     aliases: ["stealemote", "stealemoji", "stealsticker"],
 
     async execute({ interaction, message, client, args }) {
         const isSlash = !!interaction;
-        const reply = isSlash ? interaction.options.get("server_id") : args[0];
-        const serverId = reply || (isSlash ? null : args[0]);
-        const targetGuild = serverId 
-            ? client.guilds.cache.get(serverId) 
+        const serverId = isSlash 
+            ? interaction.options.getString("server_id")
+            : args[0];
+
+        const targetGuild = serverId
+            ? client.guilds.cache.get(serverId)
             : (interaction ? interaction.guild : message.guild);
 
-        // ⚠️ Permission checks
+        // ❌ Server not found
         if (!targetGuild) {
-            const errMsg = "❌ I can’t find that server or I’m not in it.";
+            const msg = "❌ I can’t find that server or I’m not in it.";
             return isSlash 
-                ? interaction.reply({ content: errMsg, ephemeral: true }) 
-                : message.reply(errMsg);
+                ? interaction.reply({ content: msg, flags: 64 })
+                : message.reply(msg);
         }
 
+        // ❌ Missing permissions
         if (!targetGuild.members.me.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) {
-            const errMsg = "❌ I don’t have permission to manage emojis/stickers in that server.";
+            const msg = "❌ I don’t have permission to manage emojis/stickers in that server.";
             return isSlash 
-                ? interaction.reply({ content: errMsg, ephemeral: true }) 
-                : message.reply(errMsg);
+                ? interaction.reply({ content: msg, flags: 64 })
+                : message.reply(msg);
         }
 
-        // ✅ Must reply to a message
-        const repliedMsg = interaction
-            ? await interaction.channel.messages.fetch(interaction.targetId || interaction.options.getMessage?.("message"))
-            : message.reference
-                ? await message.channel.messages.fetch(message.reference.messageId)
+        // Must reply to a message
+        let repliedMsg;
+        if (isSlash) {
+            const msgId = interaction.targetId;
+            repliedMsg = msgId
+                ? await interaction.channel.messages.fetch(msgId).catch(() => null)
                 : null;
+        } else if (message.reference) {
+            repliedMsg = await message.channel.messages
+                .fetch(message.reference.messageId)
+                .catch(() => null);
+        }
 
         if (!repliedMsg) {
-            const errMsg = "❌ Please reply to a message containing an emoji or sticker!";
+            const msg = "❌ Please reply to a message containing an emoji or sticker!";
             return isSlash 
-                ? interaction.reply({ content: errMsg, ephemeral: true }) 
-                : message.reply(errMsg);
+                ? interaction.reply({ content: msg, flags: 64 })
+                : message.reply(msg);
         }
 
-        let emojiURL, emojiName;
+        let emojiURL, rawName;
 
-        // ✅ Extract emoji from replied message
-        const emojiRegex = /<(a)?:\w+:(\d+)>/;
-        const emojiMatch = emojiRegex.exec(repliedMsg.content);
+        // 🎯 Extract custom emoji
+        const emojiRegex = /<(a)?:([a-zA-Z0-9_]+):(\d+)>/;
+        const match = emojiRegex.exec(repliedMsg.content);
 
-        if (emojiMatch) {
-            const isAnimated = !!emojiMatch[1];
-            const id = emojiMatch[2];
-            emojiURL = `https://cdn.discordapp.com/emojis/${id}.${isAnimated ? "gif" : "png"}?v=1`;
-            emojiName = "stolen_emoji";
+        if (match) {
+            const isAnimated = !!match[1];
+            rawName = match[2];
+            const id = match[3];
+            emojiURL = `https://cdn.discordapp.com/emojis/${id}.${isAnimated ? "gif" : "png"}`;
         }
 
-        // ✅ Extract sticker if exists
+        // 🎯 Extract sticker
         if (!emojiURL && repliedMsg.stickers.size > 0) {
             const sticker = repliedMsg.stickers.first();
             emojiURL = sticker.url;
-            emojiName = sticker.name || "stolen_sticker";
+            rawName = sticker.name;
         }
 
         if (!emojiURL) {
-            const errMsg = "❌ No emoji or sticker found in that message!";
-            return isSlash 
-                ? interaction.reply({ content: errMsg, ephemeral: true }) 
-                : message.reply(errMsg);
+            const msg = "❌ No emoji or sticker found in that message!";
+            return isSlash
+                ? interaction.reply({ content: msg, flags: 64 })
+                : message.reply(msg);
         }
 
-        // ✅ Detect type automatically
-        const isStickerFile = /\.(webp|png)$/i.test(emojiURL);
-        const autoType = isStickerFile ? "sticker" : "emoji";
+        const emojiName = cleanName(rawName);
 
-        // ✅ Add buttons
+        const autoType = emojiURL.endsWith(".webp") ? "sticker" : "emoji";
+
         const buttons = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId("set_as_emoji")
@@ -99,30 +118,28 @@ module.exports = {
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        const previewEmbed = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setColor("Blue")
             .setTitle(`🔍 Detected as ${autoType.toUpperCase()}`)
-            .setDescription("Choose what to do with this file:")
+            .setDescription(`Cleaned name: \`${emojiName}\``)
             .setImage(emojiURL)
-            .setFooter({ text: `Requested by ${isSlash ? interaction.user.tag : message.author.tag}` })
             .setTimestamp();
 
         const sentMsg = isSlash
-            ? await interaction.reply({ embeds: [previewEmbed], components: [buttons], fetchReply: true })
-            : await message.reply({ embeds: [previewEmbed], components: [buttons] });
+            ? await interaction.reply({ embeds: [embed], components: [buttons], fetchReply: true })
+            : await message.reply({ embeds: [embed], components: [buttons] });
 
-        // ✅ Button collector
         const collector = sentMsg.createMessageComponentCollector({ time: 30000 });
 
-        collector.on("collect", async (btnInt) => {
-            if (btnInt.user.id !== (isSlash ? interaction.user.id : message.author.id))
-                return btnInt.reply({ content: "❌ Only the command user can use these buttons!", ephemeral: true });
+        collector.on("collect", async (btn) => {
+            if (btn.user.id !== (isSlash ? interaction.user.id : message.author.id))
+                return btn.reply({ content: "❌ Only the command user can use this!", flags: 64 });
 
-            await btnInt.deferUpdate();
+            await btn.deferUpdate();
 
             try {
-                if (btnInt.customId === "set_as_emoji" || (btnInt.customId !== "set_as_sticker" && autoType === "emoji")) {
-                    const createdEmoji = await targetGuild.emojis.create({
+                if (btn.customId === "set_as_emoji") {
+                    const created = await targetGuild.emojis.create({
                         attachment: emojiURL,
                         name: emojiName,
                     });
@@ -130,38 +147,39 @@ module.exports = {
                     const success = new EmbedBuilder()
                         .setColor("Green")
                         .setTitle("✅ Emoji Added!")
-                        .setDescription(`Added to **${targetGuild.name}** as \`:${createdEmoji.name}:\``)
-                        .setThumbnail(createdEmoji.url)
-                        .setTimestamp();
+                        .setDescription(`Added \`:${created.name}:\` to **${targetGuild.name}**`)
+                        .setThumbnail(created.url);
 
-                    await btnInt.editReply({ embeds: [success], components: [] });
-                } 
-                else {
-                    const sticker = await targetGuild.stickers.create({
-                        file: emojiURL,
-                        name: emojiName,
-                        tags: "stolen",
-                    });
-
-                    const success = new EmbedBuilder()
-                        .setColor("Green")
-                        .setTitle("✅ Sticker Added!")
-                        .setDescription(`Added to **${targetGuild.name}** as **${sticker.name}**`)
-                        .setThumbnail(emojiURL)
-                        .setTimestamp();
-
-                    await btnInt.editReply({ embeds: [success], components: [] });
+                    return btn.editReply({ embeds: [success], components: [] });
                 }
+
+                // Sticker
+                const sticker = await targetGuild.stickers.create({
+                    file: emojiURL,
+                    name: emojiName,
+                    tags: "stolen",
+                });
+
+                const success = new EmbedBuilder()
+                    .setColor("Green")
+                    .setTitle("✅ Sticker Added!")
+                    .setDescription(`Added **${sticker.name}** to **${targetGuild.name}**`)
+                    .setThumbnail(emojiURL);
+
+                return btn.editReply({ embeds: [success], components: [] });
             } catch (err) {
-                console.error("❌ Failed to add:", err);
-                await btnInt.editReply({ content: "⚠️ Failed to add emoji/sticker. Maybe unsupported format or missing permissions?", components: [] });
+                console.error(err);
+                return btn.editReply({
+                    content: "⚠️ Failed to add emoji/sticker. Unsupported format or permissions.",
+                    components: []
+                });
             }
         });
 
-        collector.on("end", async () => {
+        collector.on("end", () => {
             if (sentMsg.editable) {
                 sentMsg.edit({ components: [] }).catch(() => {});
             }
         });
-    },
+    }
 };
