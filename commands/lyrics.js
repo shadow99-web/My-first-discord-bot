@@ -4,200 +4,199 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    PermissionFlagsBits,
 } = require("discord.js");
 const axios = require("axios");
 
-// Your 💙 animated heart emoji name or ID
-const BLUE_HEART = "<a:blueheart:1414309560231002194>"; 
+const BLUE_HEART = "<a:blueheart:1414309560231002194>";
 
-// Genius API (use any API you want)
-const GENIUS_API = "https://somepubliclyricsapi.com/search?q=";
-
-// Clean query
+// Clean search text
 function cleanQuery(q) {
     return q.replace(/\s+/g, " ").trim();
 }
 
-// Fetch lyrics
-async function fetchLyrics(query) {
-    try {
-        const res = await axios.get(GENIUS_API + encodeURIComponent(query));
-        if (!res.data || !res.data.lyrics) return null;
-        return res.data;
-    } catch {
-        return null;
-    }
-}
-
-// Chunk text into pages
-function paginate(text, size = 4000) {
+// Split lyrics into pages
+function paginate(text, size = 1800) {
     const pages = [];
     for (let i = 0; i < text.length; i += size) {
-        pages.push(text.slice(i, i + size));
+        pages.push(text.substring(i, i + size));
     }
     return pages;
 }
 
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("lyrics")
-        .setDescription("Fetch song lyrics")
-        .addStringOption(opt =>
-            opt.setName("song")
-                .setDescription("Song name or URL")
-                .setAutocomplete(true)
-        )
-        .addSubcommand(sc =>
-            sc.setName("nowplaying")
-                .setDescription("Fetch lyrics for the song you're listening to")
-        ),
-
-    name: "lyrics",
-    aliases: ["lyric", "songlyrics"],
-
-    // 🔷 Autocomplete Support
-    async autocomplete(interaction, client) {
-        const focused = interaction.options.getFocused(true).value;
-
-        if (!focused || focused.length < 2) {
-            return interaction.respond([]);
+// Auto-detect artist & title + fetch lyrics
+async function fetchLyrics(query) {
+    try {
+        // ――― Detect YouTube URL title ―――
+        if (query.startsWith("http")) {
+            const info = await axios.get(`https://noembed.com/embed?url=${query}`);
+            if (info?.data?.title) query = info.data.title;
         }
 
-        const query = cleanQuery(focused);
+        let artist = "";
+        let title = "";
 
-        // Example suggestion logic
-        const suggestions = [
-            { name: `${query} - Ed Sheeran`, value: `${query} Ed Sheeran` },
-            { name: `${query} (Acoustic)`, value: `${query} Acoustic` },
-            { name: `${query} Remix`, value: `${query} Remix` },
-        ];
+        // ――― If query contains "-" split into artist - song ―――
+        if (query.includes("-")) {
+            const parts = query.split("-");
+            artist = parts[0].trim();
+            title = parts[1].trim();
+        } else {
+            // ――― Try to guess artist/title via DuckDuckGo ―――
+            const s = await axios.get(
+                `https://api.duckduckgo.com/?q=${encodeURIComponent(query + " song")}&format=json`
+            );
+            const result = s.data?.Heading || query;
 
-        interaction.respond(suggestions.slice(0, 5));
-    },
-
-    async execute({ interaction, message, client, args }) {
-        const isSlash = !!interaction;
-
-        let query;
-
-        // Slash command: /lyrics song:
-        if (isSlash && interaction.options.getSubcommand(false) !== "nowplaying") {
-            query = interaction.options.getString("song");
-        }
-
-        // Prefix command: !lyrics
-        if (!isSlash) {
-            query = args.join(" ");
-        }
-
-        // 🔷 /lyrics nowplaying
-        if (isSlash && interaction.options.getSubcommand(false) === "nowplaying") {
-            query = await detectNowPlaying(interaction, client);
-            if (!query) {
-                return interaction.reply({ content: "❌ No active song detected!", flags: 64 });
+            if (result.includes("-")) {
+                const parts = result.split("-");
+                artist = parts[0].trim();
+                title = parts[1].trim();
+            } else {
+                title = query;
             }
         }
 
-        if (!query) {
-            const msg = "❌ Please provide a song name or URL!";
-            return isSlash ? interaction.reply({ content: msg, flags: 64 }) : message.reply(msg);
-        }
-
-        // Detect if URL → auto extract title
-        query = await handleURL(query);
-
-        await (isSlash
-            ? interaction.reply({ content: "💙 Fetching lyrics...", flags: 64 })
-            : message.reply("💙 Fetching lyrics...")
+        // ――― Fetch lyrics via Lyrics.ovh ―――
+        const lyr = await axios.get(
+            `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`
         );
 
-        const data = await fetchLyrics(query);
+        if (!lyr.data || !lyr.data.lyrics) return null;
 
-        if (!data || !data.lyrics) {
-            return isSlash
-                ? interaction.editReply("❌ Lyrics not found.")
-                : message.reply("❌ Lyrics not found.");
-        }
+        return {
+            title: title || "Unknown",
+            artist: artist || "Unknown",
+            lyrics: lyr.data.lyrics,
+        };
 
-        const pages = paginate(data.lyrics, 2000);
-
-        let page = 0;
-
-        const embed = new EmbedBuilder()
-            .setColor("Blue")
-            .setTitle(`${BLUE_HEART} ${data.title} - ${data.artist}`)
-            .setDescription(pages[page])
-            .setThumbnail(data.thumbnail || null)
-            .setFooter({ text: `Page ${page + 1} / ${pages.length}` });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId("prev")
-                .setEmoji("◀️")
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId("next")
-                .setEmoji("▶️")
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setLabel("YouTube")
-                .setStyle(ButtonStyle.Link)
-                .setURL(data.youtube || "https://youtube.com"),
-            new ButtonBuilder()
-                .setLabel("Spotify")
-                .setStyle(ButtonStyle.Link)
-                .setURL(data.spotify || "https://spotify.com")
-        );
-
-        const msg = isSlash
-            ? await interaction.editReply({ embeds: [embed], components: [row] })
-            : await message.channel.send({ embeds: [embed], components: [row] });
-
-        const collector = msg.createMessageComponentCollector({ time: 60000 });
-
-        collector.on("collect", async btn => {
-            if (btn.customId === "prev") page = page > 0 ? page - 1 : 0;
-            if (btn.customId === "next") page = page < pages.length - 1 ? page + 1 : pages.length - 1;
-
-            embed.setDescription(pages[page]);
-            embed.setFooter({ text: `Page ${page + 1} / ${pages.length}` });
-
-            await btn.update({ embeds: [embed], components: [row] });
-        });
-
-        collector.on("end", () => {
-            msg.edit({ components: [] }).catch(() => {});
-        });
+    } catch (err) {
+        return null;
     }
-};
+}
 
-// 🔷 Detect song from Spotify status or VC music bot
+// Detect song from Spotify / Wavelink
 async function detectNowPlaying(interaction, client) {
     const user = interaction.member;
 
-    // User's Spotify status
     const spotify = user.presence?.activities?.find(a => a.name === "Spotify");
-    if (spotify) {
-        return `${spotify.details} ${spotify.state}`;
-    }
+    if (spotify) return `${spotify.details} - ${spotify.state}`;
 
-    // VC music bot now playing (Lavalink/Wavelink/etc)
     const player = client.music?.players?.get(interaction.guild.id);
     if (player && player.current) return player.current.title;
 
     return null;
 }
 
-// 🔷 Extract song title from YouTube/Spotify URL
-async function handleURL(url) {
-    if (!url.startsWith("http")) return url;
+module.exports = {
+    name: "lyrics",
+    aliases: ["lyric", "songlyrics"],
 
-    // Example: YouTube title fetch for URLs
-    try {
-        const info = await axios.get(`https://noembed.com/embed?url=${url}`);
-        return info.data.title || url;
-    } catch {
-        return url;
-    }
-}
+    data: new SlashCommandBuilder()
+        .setName("lyrics")
+        .setDescription("Fetch song lyrics")
+        .addSubcommand(sub =>
+            sub
+                .setName("search")
+                .setDescription("Search lyrics by song name or URL")
+                .addStringOption(opt =>
+                    opt
+                        .setName("song")
+                        .setDescription("Song name or YouTube/Spotify URL")
+                        .setRequired(true)
+                        .setAutocomplete(true)
+                )
+        )
+        .addSubcommand(sub =>
+            sub
+                .setName("nowplaying")
+                .setDescription("Fetch lyrics of the currently playing song")
+        ),
+
+    // ――― Autocomplete ―――
+    async autocomplete(interaction) {
+        const focused = interaction.options.getFocused(true).value;
+
+        if (!focused || focused.length < 2)
+            return interaction.respond([]);
+
+        const q = cleanQuery(focused);
+
+        return interaction.respond([
+            { name: `${q} (Original)`, value: q },
+            { name: `${q} - Arijit Singh`, value: `${q} - Arijit Singh` },
+            { name: `${q} - Jubin Nautiyal`, value: `${q} - Jubin Nautiyal` },
+            { name: `${q} Remix`, value: `${q} Remix` },
+        ]);
+    },
+
+    async execute({ interaction, client, message, args }) {
+        const isSlash = !!interaction;
+        let query;
+
+        // ――― Slash: /lyrics search ―――
+        if (isSlash && interaction.options.getSubcommand() === "search") {
+            query = interaction.options.getString("song");
+        }
+
+        // ――― Slash: /lyrics nowplaying ―――
+        if (isSlash && interaction.options.getSubcommand() === "nowplaying") {
+            query = await detectNowPlaying(interaction, client);
+            if (!query) return interaction.reply({ content: "❌ No active song detected.", flags: 64 });
+        }
+
+        // ――― Prefix: !lyrics <song> ―――
+        if (!isSlash) query = args.join(" ");
+
+        if (!query)
+            return (isSlash
+                ? interaction.reply({ content: "❌ Provide a song name or URL", flags: 64 })
+                : message.reply("❌ Provide a song name or URL")
+            );
+
+        // ――― Fetching Animation ―――
+        const loading = "💙 Fetching lyrics...";
+        if (isSlash) await interaction.reply({ content: loading, flags: 64 });
+        else await message.reply(loading);
+
+        const data = await fetchLyrics(query);
+        if (!data)
+            return (isSlash
+                ? interaction.editReply("❌ Lyrics not found.")
+                : message.reply("❌ Lyrics not found.")
+            );
+
+        const pages = paginate(data.lyrics);
+        let page = 0;
+
+        const embed = new EmbedBuilder()
+            .setColor("Blue")
+            .setTitle(`${BLUE_HEART} ${data.title} — ${data.artist}`)
+            .setDescription(pages[page])
+            .setFooter({ text: `Page ${page + 1}/${pages.length}` });
+
+        const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("prev").setEmoji("◀️").setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId("next").setEmoji("▶️").setStyle(ButtonStyle.Secondary),
+        );
+
+        const replyMsg = isSlash
+            ? await interaction.editReply({ embeds: [embed], components: [buttons] })
+            : await message.channel.send({ embeds: [embed], components: [buttons] });
+
+        const collector = replyMsg.createMessageComponentCollector({ time: 60000 });
+
+        collector.on("collect", async btn => {
+            if (btn.customId === "prev") page = Math.max(page - 1, 0);
+            if (btn.customId === "next") page = Math.min(page + 1, pages.length - 1);
+
+            embed.setDescription(pages[page]);
+            embed.setFooter({ text: `Page ${page + 1}/${pages.length}` });
+
+            await btn.update({ embeds: [embed], components: [buttons] });
+        });
+
+        collector.on("end", () => {
+            replyMsg.edit({ components: [] }).catch(() => {});
+        });
+    },
+};
