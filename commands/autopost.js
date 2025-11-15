@@ -99,7 +99,7 @@ module.exports = {
         `<a:purple_verified:1439271259190988954> **AutoPost Started**\n` +
         `<a:heart2:1405233750484451338> Query: **${query}**\n` +
         `<a:gold_butterfly:1439270586571558972> Interval: **${intervalMin} minutes**\n` +
-        `<a:ANIMATEDARROWPINK:1407945915712671764> Channel: ${channel}`;
+        `<a:animatedarrowpink:1439271011299360788> Channel: ${channel}`;
 
       return context.isPrefix
         ? context.message.reply(msg)
