@@ -154,6 +154,7 @@ safeRequireEvent("./events/reactionRole.js", client);
 safeRequireEvent("./events/activityRestore.js", client);
 safeRequireEvent("./events/VC.js", client);
 safeRequireEvent("./events/vcstore.js", client);
+safeRequireEvent("./events/autoReact.js", client);
 // ====================
 // 🚀 Deploy commands and login safely
 async function deployCommandsAndLogin() {
