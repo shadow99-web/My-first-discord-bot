@@ -43,6 +43,6 @@ module.exports = {
           console.log("Auto post error:", e);
         }
       }
-    }, 20 * 1000); // checks every 20 seconds
+    }, 20 * 1000); // every 20 seconds
   },
 };
