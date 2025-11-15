@@ -14,7 +14,7 @@ module.exports = {
         .setDescription("Start auto-posting images")
         .addStringOption(o =>
           o.setName("query")
-            .setDescription("Pinterest search term")
+            .setDescription("images u want for to autopost")
             .setRequired(true)
         )
         .addIntegerOption(o =>
