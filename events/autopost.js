@@ -2,7 +2,7 @@ const AutoPin = require("../models/AutoPin");
 const { fetchRyzumiAPI } = require("../utils/ryzumi");
 
 module.exports = {
-  name: "autopost",
+  name: "ready",
   async execute(client) {
     console.log("AutoPin system loaded.");
 
