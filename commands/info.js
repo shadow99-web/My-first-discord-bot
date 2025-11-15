@@ -27,10 +27,10 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setAuthor({ 
-                name: `👑 JEETENDRA ❤ - Legendary Developer`, 
+                name: ` 𝙅𝙀𝙀𝙏𝙀𝙉𝘿𝙍𝘼 ❣️ -     ̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶̶`, 
                 iconURL: user.displayAvatarURL({ dynamic: true }) 
             })
-            .setTitle(`💖 Legendary Bot Information ${blueHeart}`)
+            .setTitle(` 𝙇𝙚𝙜𝙚𝙣𝙙𝙖𝙧𝙮 𝘽𝙤𝙩 𝙄𝙣𝙛𝙤𝙧𝙢𝙖𝙩𝙞𝙤𝙣 ${blueHeart}`)
             .setDescription(
                 `Greetings ${user}!\n\n` +
                 `I am not just a bot, I am a **legendary companion** forged to protect, entertain, and empower communities. ${blueHeart}\n\n` +
@@ -38,13 +38,12 @@ module.exports = {
                 `✨ Special thanks to **${guild.name}** for giving me a home!`
             )
             .addFields(
-                { name: "👑 Developer", value: "JEETENDRA ❤", inline: true },
-                { name: "📜 Library", value: "Discord.js v14", inline: true },
-                { name: "❤‍🩹 Status", value: "Active and Legendary", inline: true },
-                { name: "✨ Uptime", value: uptime, inline: true },
-                { name: "🥂 Servers", value: `${serverCount}`, inline: true },
-                { name: "🤝 Users", value: `${userCount}`, inline: true },
-                { name: "🌍 Server List", value: serverNames || "No servers found" }
+                { name: " <a:kiddrunk:1438915630148358189> 𝘿𝙀𝙑:", value: "JEETENDRA ❤", inline: true },
+                { name: "<:reddot:1430434996707000391> 𝙇𝙄𝘽𝙍𝘼𝙍𝙔:", value: "Discord.js v14", inline: true }, 
+                { name: "<a:762857525694431243:1405233549950586981> 𝙐𝙋𝙏𝙄𝙈𝙀:", value: uptime, inline: true },
+                { name: "<a:Gem:1424787118278049813> 𝙎𝙀𝙍𝙑𝙀𝙍𝙎:", value: `${serverCount}`, inline: true },
+                { name: "<a:vip:1424011747869593673> 𝙐𝙎𝙀𝙍𝙎:", value: `${userCount}`, inline: true }
+                
             )
             .setColor("Blue")
             .setFooter({ 
