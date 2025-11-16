@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 
 const AutoPinSchema = new mongoose.Schema({
-  guildId: String,
-  channelId: String,
-  query: String,
-  interval: Number, // in ms
-  lastPost: Number,
+  guildId: { type: String, required: true },
+  taskId: { type: Number, required: true }, // NEW
+  channelId: { type: String, required: true },
+  query: { type: String, required: true },
+  interval: { type: Number, required: true },
+  lastPost: { type: Number, default: 0 },
 });
 
 module.exports = mongoose.model("AutoPin", AutoPinSchema);
