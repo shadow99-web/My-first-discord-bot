@@ -4,42 +4,56 @@ module.exports = (client) => {
     const AutoPin = require("../models/AutoPin");
     const { fetchRyzumiAPI } = require("../utils/ryzumi");
 
+    // Main autopost loop — runs every 20 seconds
     setInterval(async () => {
-        const tasks = await AutoPin.find();
+        try {
+            // Fetch all tasks
+            const tasks = await AutoPin.find();
+            if (!tasks.length) return;
 
-        for (const task of tasks) {
-            const now = Date.now();
-            if (now - task.lastPost < task.interval) continue;
+            // Run all autoposts *simultaneously*
+            tasks.forEach(async (task) => {
+                try {
+                    const now = Date.now();
 
-            const channel = client.channels.cache.get(task.channelId);
-            if (!channel) continue;
+                    // Not time yet? Skip
+                    if (now - task.lastPost < task.interval) return;
 
-            try {
-                const data = await fetchRyzumiAPI("/search/pinterest", {
-                    query: task.query,
-                });
+                    const channel = client.channels.cache.get(task.channelId);
+                    if (!channel) return;
 
-                if (!data?.length) continue;
+                    // Fetch Pinterest image
+                    const data = await fetchRyzumiAPI("/search/pinterest", {
+                        query: task.query,
+                    });
 
-                const img = data[Math.floor(Math.random() * data.length)];
+                    if (!data || !data.length) return;
 
-                await channel.send({
-                    content: `<a:gold_butterfly:1439270586571558972> **AutoPost:** ${task.query}`,
-                    embeds: [
-                        {
-                            color: 0xe60023,
-                            title: task.query,
-                            image: { url: img.directLink || img.image },
-                            timestamp: new Date(),
-                        },
-                    ],
-                });
+                    const img = data[Math.floor(Math.random() * data.length)];
 
-                task.lastPost = now;
-                await task.save();
-            } catch (e) {
-                console.log("Auto post error:", e);
-            }
+                    // Send autopost
+                    await channel.send({
+                        content: `<a:gold_butterfly:1439270586571558972> ${task.query}`,
+                        embeds: [
+                            {
+                                color: 0xe60023,
+                                title: task.query,
+                                image: { url: img.directLink || img.image },
+                                timestamp: new Date(),
+                            },
+                        ],
+                    });
+
+                    // Update timestamp
+                    task.lastPost = now;
+                    await task.save();
+                } catch (err) {
+                    console.log(`AutoPost error for ${task.guildId}:`, err);
+                }
+            });
+
+        } catch (mainErr) {
+            console.log("AutoPost main loop error:", mainErr);
         }
     }, 20 * 1000); // check every 20 seconds
 };
