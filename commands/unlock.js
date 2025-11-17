@@ -25,7 +25,7 @@ module.exports = {
                     name: channel.guild.name,
                     iconURL: channel.guild.iconURL({ dynamic: true })
                 })
-                .setDescription(`${blueHeart} 🔓 ${channel} has been **unlocked**!`)
+                .setDescription(`${blueHeart}  ${channel} has been **unlocked**!`)
                 .setTimestamp();
 
             if (interaction) {
