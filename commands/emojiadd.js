@@ -61,8 +61,8 @@ module.exports = {
         if (!file) return null;
 
         return file.startsWith("http")
-          ? file
-          : `https://cdn.discordemoji.com/emojis/${file.replace(/^\/+/, "")}`;
+  ? file
+  : `https://discordemoji.com/assets/emoji/${file.replace(/^\/+/, "")}`;
       };
 
       // ==========================
