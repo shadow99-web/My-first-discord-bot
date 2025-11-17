@@ -16,7 +16,7 @@ module.exports = {
             .join("\n") || "No boosters yet";
 
         const embed = new EmbedBuilder()
-            .setTitle(`🚀 ${guild.name} Boost Info`)
+            .setTitle(`<a:Gem:1424787118278049813> ${guild.name} Boost Info`)
             .setColor("Blue")
             .setTimestamp()
             .addFields(
