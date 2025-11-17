@@ -24,7 +24,7 @@ module.exports = {
     let query;
 
     // ==========================
-    // 🔍 Get Query
+    // 🔍 Find Query
     // ==========================
     if (isPrefix) {
       if (!args.length) return message.reply("⚠️ Usage: `!emojiadd <search term>`");
@@ -36,12 +36,11 @@ module.exports = {
 
     try {
       // ==========================
-      // 🌐 Fetch DiscordEmoji.com API
+      // 🌐 Fetch emoji database
       // ==========================
       const resp = await axios.get("https://discordemoji.com/api?request=all");
       const allEmojis = resp.data;
 
-      // Filter 10 results max
       const results = allEmojis
         .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
         .slice(0, 10);
@@ -54,28 +53,26 @@ module.exports = {
       let index = 0;
 
       // ==========================
-      // 🖼 Generate image URL (cdn)
+      // 🖼 Fix CDN path
       // ==========================
       const getUrl = (emoji) => {
         const file = emoji.image || emoji.url || emoji.filename;
         if (!file) return null;
 
         return file.startsWith("http")
-  ? file
-  : `https://discordemoji.com/assets/emoji/${file.replace(/^\/+/, "")}`;
+          ? file
+          : `https://discordemoji.com/assets/emoji/${file.replace(/^\/+/, "")}`;
       };
 
       // ==========================
-      // 📌 Embed Builder
+      // 📌 Embed
       // ==========================
       const getEmbed = () =>
         new EmbedBuilder()
           .setTitle(`😄 Emoji Search: ${query}`)
           .setImage(getUrl(results[index]))
           .setColor("Blurple")
-          .setFooter({
-            text: `Result ${index + 1}/${results.length}`,
-          });
+          .setFooter({ text: `Result ${index + 1}/${results.length}` });
 
       // ==========================
       // 🔘 Buttons
@@ -91,7 +88,7 @@ module.exports = {
         );
 
       // ==========================
-      // 📤 Send Menu
+      // 📤 Send Message
       // ==========================
       const sent = isPrefix
         ? await message.reply({ embeds: [getEmbed()], components: [getButtons()] })
@@ -100,7 +97,7 @@ module.exports = {
       const collector = sent.createMessageComponentCollector({ time: 60_000 });
 
       // ==========================
-      // 🎮 Button Interactions
+      // 🎮 Handle Buttons
       // ==========================
       collector.on("collect", async (btn) => {
         const userId = isPrefix ? message.author.id : interaction.user.id;
@@ -121,15 +118,9 @@ module.exports = {
           try {
             const emojiUrl = getUrl(results[index]);
 
-            // 🔥 403 BYPASS HEADERS
+            // 🚫 NO HEADERS — fixes 403
             const response = await axios.get(emojiUrl, {
               responseType: "arraybuffer",
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-                "Referer": "https://discordemoji.com/",
-                "Origin": "https://discordemoji.com",
-              },
             });
 
             const buffer = Buffer.from(response.data);
@@ -151,10 +142,9 @@ module.exports = {
                 return btn.followUp("❌ Server static emoji slots are full!");
             }
 
-            // Name cleanup
+            // Clean name
             const name = results[index].title.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
-            // Create emoji
             const emoji = await guild.emojis.create({
               attachment: buffer,
               name,
@@ -165,13 +155,11 @@ module.exports = {
             );
           } catch (err) {
             console.error("Emoji save error:", err);
-            return btn.followUp("❌ Failed — CDN blocked download or file missing.");
+            return btn.followUp("❌ Failed — CDN blocked or file missing.");
           }
         }
 
-        // ==========================
-        // 🔄 Update embed on next/prev
-        // ==========================
+        // 🔄 Update embed
         if (!btn.deferred && !btn.replied) await btn.deferUpdate().catch(() => {});
         return btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
       });
@@ -181,7 +169,7 @@ module.exports = {
       });
     } catch (err) {
       console.error("emojiadd command error:", err);
-      const msg = "❌ Failed to fetch or save emoji.";
+      const msg = "❌ Failed to fetch emoji list.";
       return isPrefix ? message.reply(msg) : interaction.editReply(msg);
     }
   },
