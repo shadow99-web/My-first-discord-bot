@@ -23,11 +23,9 @@ module.exports = {
   async execute({ client, interaction, message, args, isPrefix }) {
     let query;
 
-    // ==========================
-    // 🔍 Find Query
-    // ==========================
     if (isPrefix) {
-      if (!args.length) return message.reply("⚠️ Usage: `!emojiadd <search term>`");
+      if (!args.length)
+        return message.reply("⚠️ Usage: `!emojiadd <search term>`");
       query = args.join(" ");
     } else {
       query = interaction.options.getString("query");
@@ -36,14 +34,20 @@ module.exports = {
 
     try {
       // ==========================
-      // 🌐 Fetch emoji database
+      // 🌐 Fetch from Rebootdev API
       // ==========================
-      const resp = await axios.get("https://discordemoji.com/api?request=all");
-      const allEmojis = resp.data;
+      const apiURL = `https://emojis.rebootdev.com/api/search?query=${encodeURIComponent(
+        query
+      )}`;
 
-      const results = allEmojis
-        .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 10);
+      const resp = await axios.get(apiURL, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Accept: "application/json",
+        },
+      });
+
+      const results = resp.data?.slice(0, 10) || [];
 
       if (!results.length) {
         const msg = `⚠️ No emojis found for **${query}**`;
@@ -52,44 +56,39 @@ module.exports = {
 
       let index = 0;
 
-      // ==========================
-      // 🖼 Fix CDN path
-      // ==========================
-      const getUrl = (emoji) => {
-        const file = emoji.image || emoji.url || emoji.filename;
-        if (!file) return null;
-
-        return file.startsWith("http")
-          ? file
-          : `https://discordemoji.com/assets/emoji/${file.replace(/^\/+/, "")}`;
-      };
+      const getUrl = (emoji) => emoji.url;
 
       // ==========================
-      // 📌 Embed
+      // 📌 Create Embed
       // ==========================
       const getEmbed = () =>
         new EmbedBuilder()
-          .setTitle(`😄 Emoji Search: ${query}`)
+          .setTitle(`<:lyf_sussy:1439951940548300870> Emoji Search: ${query}`)
           .setImage(getUrl(results[index]))
           .setColor("Blurple")
-          .setFooter({ text: `Result ${index + 1}/${results.length}` });
+          .setFooter({
+            text: `Result ${index + 1}/${results.length}`,
+          });
 
       // ==========================
       // 🔘 Buttons
       // ==========================
       const getButtons = () =>
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("next").setLabel("▶️").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("prev")
+            .setLabel("◀️")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("next")
+            .setLabel("▶️")
+            .setStyle(ButtonStyle.Secondary),
           new ButtonBuilder()
             .setCustomId("save_emoji")
             .setLabel("💾 Add Emoji")
             .setStyle(ButtonStyle.Success)
         );
 
-      // ==========================
-      // 📤 Send Message
-      // ==========================
       const sent = isPrefix
         ? await message.reply({ embeds: [getEmbed()], components: [getButtons()] })
         : await interaction.editReply({ embeds: [getEmbed()], components: [getButtons()] });
@@ -97,17 +96,20 @@ module.exports = {
       const collector = sent.createMessageComponentCollector({ time: 60_000 });
 
       // ==========================
-      // 🎮 Handle Buttons
+      // 🎮 Button Handling
       // ==========================
       collector.on("collect", async (btn) => {
         const userId = isPrefix ? message.author.id : interaction.user.id;
 
         if (btn.user.id !== userId)
-          return btn.reply({ content: "⛔ That's not your menu!", ephemeral: true });
+          return btn.reply({
+            content: "⛔ That's not your menu!",
+            ephemeral: true,
+          });
 
-        // ↔ Navigation
         if (btn.customId === "next") index = (index + 1) % results.length;
-        else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
+        else if (btn.customId === "prev")
+          index = (index - 1 + results.length) % results.length;
 
         // ==========================
         // 💾 SAVE EMOJI
@@ -118,32 +120,42 @@ module.exports = {
           try {
             const emojiUrl = getUrl(results[index]);
 
-            // 🚫 NO HEADERS — fixes 403
-            const response = await axios.get(emojiUrl, {
+            // Download image
+            const download = await axios.get(emojiUrl, {
               responseType: "arraybuffer",
+              headers: {
+                "User-Agent": "Mozilla/5.0",
+                Accept: "image/png,image/webp,image/gif,image/*,*/*;q=0.8",
+              },
             });
 
-            const buffer = Buffer.from(response.data);
+            const buffer = Buffer.from(download.data);
             const guild = btn.guild;
 
-            // Permission check
             if (!guild.members.me.permissions.has("ManageGuildExpressions"))
-              return btn.followUp("❌ I need **Manage Guild Expressions** permission.");
+              return btn.followUp(
+                "❌ I need **Manage Guild Expressions** permission."
+              );
 
-            // Detect GIF
             const isGif = buffer.toString("ascii", 0, 3) === "GIF";
 
-            // Slot checks
             if (isGif) {
-              if (guild.emojis.cache.filter((e) => e.animated).size >= guild.maximumAnimatedEmojis)
+              if (
+                guild.emojis.cache.filter((e) => e.animated).size >=
+                guild.maximumAnimatedEmojis
+              )
                 return btn.followUp("❌ Server animated emoji slots are full!");
             } else {
-              if (guild.emojis.cache.filter((e) => !e.animated).size >= guild.maximumStaticEmojis)
+              if (
+                guild.emojis.cache.filter((e) => !e.animated).size >=
+                guild.maximumStaticEmojis
+              )
                 return btn.followUp("❌ Server static emoji slots are full!");
             }
 
-            // Clean name
-            const name = results[index].title.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
+            const name = results[index].name
+              .replace(/[^a-zA-Z0-9_]/g, "_")
+              .toLowerCase();
 
             const emoji = await guild.emojis.create({
               attachment: buffer,
@@ -151,17 +163,21 @@ module.exports = {
             });
 
             return btn.followUp(
-              `<a:purple_verified:1439271259190988954> Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`
+              `<a:purple_verified:1439271259190988954> Added emoji: <${emoji.animated ? "a" : ""
+              }:${emoji.name}:${emoji.id}>`
             );
           } catch (err) {
-            console.error("Emoji save error:", err);
-            return btn.followUp("❌ Failed — CDN blocked or file missing.");
+            console.error("SAVE ERROR:", err);
+            return btn.followUp("❌ Failed to download emoji.");
           }
         }
 
-        // 🔄 Update embed
-        if (!btn.deferred && !btn.replied) await btn.deferUpdate().catch(() => {});
-        return btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
+        // Update embed
+        if (!btn.deferred && !btn.replied) await btn.deferUpdate();
+        return btn.editReply({
+          embeds: [getEmbed()],
+          components: [getButtons()],
+        });
       });
 
       collector.on("end", () => {
@@ -169,7 +185,7 @@ module.exports = {
       });
     } catch (err) {
       console.error("emojiadd command error:", err);
-      const msg = "❌ Failed to fetch emoji list.";
+      const msg = "❌ Failed to fetch emojis from API.";
       return isPrefix ? message.reply(msg) : interaction.editReply(msg);
     }
   },
