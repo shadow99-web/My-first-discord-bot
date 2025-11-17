@@ -30,7 +30,7 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor("Blue")
                 .setAuthor({
-                    name: `${user.tag} is now AFK`,
+                    name: `<a:presence_single:1439950517651640415> ${user.tag} is now AFK`,
                     iconURL: user.displayAvatarURL({ dynamic: true })
                 })
                 .setDescription(`${blueHeart} Reason: **${reason}**`)
