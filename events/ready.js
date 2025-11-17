@@ -22,9 +22,13 @@ module.exports = (client) => {
                     const channel = client.channels.cache.get(task.channelId);
                     if (!channel) return;
 
-                    // Fetch Pinterest image
+                    // ⭐ FIX 3: Random Pinterest page for more unique images
+                    const randomPage = Math.floor(Math.random() * 24) + 1;
+
+                    // Fetch Pinterest images with random page
                     const data = await fetchRyzumiAPI("/search/pinterest", {
                         query: task.query,
+                        page: randomPage,  // ⬅ added fix
                     });
 
                     if (!data || !data.length) return;
@@ -47,6 +51,7 @@ module.exports = (client) => {
                     // Update timestamp
                     task.lastPost = now;
                     await task.save();
+
                 } catch (err) {
                     console.log(`AutoPost error for ${task.guildId}:`, err);
                 }
