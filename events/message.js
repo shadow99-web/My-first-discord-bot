@@ -80,7 +80,7 @@ const targetChannel = rankChannelData
   : message.channel;
 
 await targetChannel.send({
-  content: `🌈 ${message.author} leveled up to **Level ${userData.level}**!`,
+  content: `<a:5756_YeetusDeletusDance:1433125435327254698>  ${message.author} leveled up to **Level ${userData.level}**!`,
   files: [{ attachment: rankImage, name: "rank-card.png" }],
 }).catch(() => {});
       
@@ -110,7 +110,7 @@ await targetChannel.send({
         embeds: [
           new EmbedBuilder()
             .setColor("Green")
-            .setDescription("✅ You are no longer AFK."),
+            .setDescription(" <a:5756_YeetusDeletusDance:1433125435327254698> You are no longer AFK."),
         ],
       }).catch(() => {});
     }
@@ -125,8 +125,8 @@ await targetChannel.send({
             embeds: [
               new EmbedBuilder()
                 .setColor("Blue")
-                .setTitle(`${user.tag} is AFK`)
-                .setDescription(`✨ Reason: **${data.reason}**\nSince: ${since}`),
+                .setTitle(`<a:presence_single:1439950517651640415> ${user.tag} is AFK`)
+                .setDescription(`<a:Gem:1424787118278049813> Reason: **${data.reason}**\nSince: ${since}`),
             ],
           }).catch(() => {});
         }
