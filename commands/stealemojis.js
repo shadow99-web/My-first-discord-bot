@@ -20,7 +20,7 @@ module.exports = {
 
     // 🔒 Permissions check
     if (!guild.members.me.permissions.has(PermissionsBitField.Flags.ManageEmojisAndStickers)) {
-      const reply = "❌ I need `Manage Emojis and Stickers` permission!";
+      const reply = "<a:emoji_28:1440036587596415018> I need `Manage Emojis and Stickers` permission!";
       if (interaction) return interaction.reply({ content: reply, ephemeral: true }).catch(() => {});
       if (message) return message.reply(reply).catch(() => {});
     }
@@ -81,7 +81,7 @@ module.exports = {
       .setTitle(`${blueHeart} Emoji Steal Result`)
       .setColor("Blue")
       .setDescription(
-        `${addedEmojis.length ? `✅ Added:\n${addedEmojis.join(" ")}` : ""}\n` +
+        `${addedEmojis.length ? `<a:purple_verified:1439271259190988954> Added:\n${addedEmojis.join(" ")}` : ""}\n` +
         `${failedEmojis.length ? `❌ Failed:\n${failedEmojis.join(" ")}` : ""}`
       )
       .setFooter({ text: `Requested by ${user.tag}` })
