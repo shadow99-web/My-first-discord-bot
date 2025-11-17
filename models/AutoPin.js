@@ -7,6 +7,7 @@ const AutoPinSchema = new mongoose.Schema({
   query: { type: String, required: true },
   interval: { type: Number, required: true },
   lastPost: { type: Number, default: 0 },
+  lastImage: { type: String, default: "" }, 
 });
 
 module.exports = mongoose.model("AutoPin", AutoPinSchema);
