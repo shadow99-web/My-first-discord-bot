@@ -33,5 +33,14 @@ async function resetAutorole(guildId) {
     await doc.save();
     return doc;
 }
+async function getAutoroleConfig(guildId) {
+    return await getAutorole(guildId);
+}
 
-module.exports = { getAutorole, addAutorole, removeAutorole, resetAutorole };
+module.exports = { 
+    getAutorole, 
+    addAutorole, 
+    removeAutorole, 
+    resetAutorole,
+    getAutoroleConfig 
+};
