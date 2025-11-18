@@ -58,15 +58,15 @@ module.exports = {
         // ✅ Badge mapping
         const badgeMap = {
             HypesquadBalance: "<:Hypesquad_Balance:1440334570217017465>",
-            HypesquadBravery: "🦁",
+            HypesquadBravery: "<a:A_HypeSquadB:1440382638719369266>",
             HypesquadBrilliance: "<:hypesquad_brilliance:1440338416591179927>",
-            BugHunterLevel1: "🐛",
-            BugHunterLevel2: "🔧",
+            BugHunterLevel1: "<:bug_green:1440384254419927193>",
+            BugHunterLevel2: "<:bug_gold:1440384270219874389>",
             VerifiedBot: "<a:Valid_Code_Developer:1440333673449783326>",
             Partner: "<:partner:1440339113889890435>",
-            EarlySupporter: "🌟",
+            EarlySupporter: "<a:nitrowumpus:1440383559419428966>",
             ActiveDeveloper: "<:activedev:1440374453942091879>",
-            PremiumEarlySupporter: "💠",
+            PremiumEarlySupporter: "<a:nitrowumpus:1440383559419428966>",
         };
 
         let badges = "None";
