@@ -57,12 +57,12 @@ module.exports = {
 
         // ✅ Badge mapping
         const badgeMap = {
-            HypesquadBalance: "<:HypeSquad_Balance:1378390177558560909>",
+            HypesquadBalance: "<:Hypesquad_Balance:1440334570217017465>",
             HypesquadBravery: "🦁",
             HypesquadBrilliance: "<:hypesquad_brilliance:1440338416591179927>",
             BugHunterLevel1: "🐛",
             BugHunterLevel2: "🔧",
-            VerifiedBot: "<a:Valid_Code_Developer:973845241868193842>",
+            VerifiedBot: "<a:Valid_Code_Developer:1440333673449783326>",
             Partner: "<:partner:1440339113889890435>",
             EarlySupporter: "🌟",
             ActiveDeveloper: "<:activedev:1440374453942091879>",
@@ -89,7 +89,7 @@ module.exports = {
         if (member) {
             const perms = [];
             if (member.permissions.has(PermissionsBitField.Flags.Administrator)) perms.push("<:Staff:1430436159678320762> Administrator");
-            if (member.permissions.has(PermissionsBitField.Flags.ManageGuild)) perms.push("<a:config:978298780027846716> Manage Server");
+            if (member.permissions.has(PermissionsBitField.Flags.ManageGuild)) perms.push("<a:config:1440375326743204032> Manage Server");
             if (member.permissions.has(PermissionsBitField.Flags.ManageRoles)) perms.push("🎭 Manage Roles");
             if (member.permissions.has(PermissionsBitField.Flags.ManageChannels)) perms.push(" Manage Channels");
             if (member.permissions.has(PermissionsBitField.Flags.BanMembers)) perms.push("🔨 Ban Members");
@@ -134,7 +134,7 @@ module.exports = {
                 { name: "<a:emoji_28:1440036587596415018> Timestamps", value: `> **Created:** ${createdAt}\n> **Joined:** ${joinedAt}`, inline: false },
                 { name: "<:SigmaOk:1440329751662170265> Server Info", value: `> **Highest Role:** ${highestRole}\n> **All Roles:** ${roles}\n> **Boosting Since:** ${boostingSince}`, inline: false },
                 { name: "<a:purple_verified:1439271259190988954> Permissions", value: permissions, inline: false },
-                { name: "<a:a_online:973845291797213214>  Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
+                { name: "<a:a_online:1440333669863522485>  Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
             )
             .setFooter({ text: `Requested by ${interaction?.user?.tag || message.author.tag}` })
             .setTimestamp();
