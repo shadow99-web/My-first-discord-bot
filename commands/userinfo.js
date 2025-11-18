@@ -129,12 +129,12 @@ module.exports = {
             .setThumbnail(serverAvatar || avatarURL)
             .setDescription(`${blueHeart} **User Information**`)
             .addFields(
-                { name: "🪪 Basic Info", value: `> **Username:** ${user.username}\n> **Global Name:** ${user.globalName || "None"}\n> **ID:** ${user.id}\n> **Nickname:** ${nickname}\n> **Bot?:** ${user.bot ? "✅ Yes" : "❌ No"}` },
-                { name: "🏅 Badges", value: badges, inline: false },
-                { name: "📅 Timestamps", value: `> **Created:** ${createdAt}\n> **Joined:** ${joinedAt}`, inline: false },
-                { name: "🚀 Server Info", value: `> **Highest Role:** ${highestRole}\n> **All Roles:** ${roles}\n> **Boosting Since:** ${boostingSince}`, inline: false },
-                { name: "🔒 Permissions", value: permissions, inline: false },
-                { name: "🟢 Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
+                { name: "<:SP_monarch:1428421251856076872> Basic Info", value: `> **Username:** ${user.username}\n> **Global Name:** ${user.globalName || "None"}\n> **ID:** ${user.id}\n> **Nickname:** ${nickname}\n> **Bot?:** ${user.bot ? "✅ Yes" : "❌ No"}` },
+                { name: "<a:badges:1440332372947243100> Badges", value: badges, inline: false },
+                { name: "<a:emoji_28:1440036587596415018> Timestamps", value: `> **Created:** ${createdAt}\n> **Joined:** ${joinedAt}`, inline: false },
+                { name: "<:SigmaOk:1440329751662170265> Server Info", value: `> **Highest Role:** ${highestRole}\n> **All Roles:** ${roles}\n> **Boosting Since:** ${boostingSince}`, inline: false },
+                { name: "<a:purple_verified:1439271259190988954> Permissions", value: permissions, inline: false },
+                { name: "<a:a_online:973845291797213214> Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
             )
             .setFooter({ text: `Requested by ${interaction?.user?.tag || message.author.tag}` })
             .setTimestamp();
