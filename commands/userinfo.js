@@ -65,7 +65,7 @@ module.exports = {
             VerifiedBot: "<a:Valid_Code_Developer:973845241868193842>",
             Partner: "<:partner:1440339113889890435>",
             EarlySupporter: "🌟",
-            ActiveDeveloper: "⚡",
+            ActiveDeveloper: "<:activedev:1440374453942091879>",
             PremiumEarlySupporter: "💠",
         };
 
@@ -88,10 +88,10 @@ module.exports = {
         let permissions = "Unavailable (user not in this server)";
         if (member) {
             const perms = [];
-            if (member.permissions.has(PermissionsBitField.Flags.Administrator)) perms.push("🛠️ Administrator");
-            if (member.permissions.has(PermissionsBitField.Flags.ManageGuild)) perms.push("⚙️ Manage Server");
+            if (member.permissions.has(PermissionsBitField.Flags.Administrator)) perms.push("<:Staff:1430436159678320762> Administrator");
+            if (member.permissions.has(PermissionsBitField.Flags.ManageGuild)) perms.push("<a:config:978298780027846716> Manage Server");
             if (member.permissions.has(PermissionsBitField.Flags.ManageRoles)) perms.push("🎭 Manage Roles");
-            if (member.permissions.has(PermissionsBitField.Flags.ManageChannels)) perms.push("📺 Manage Channels");
+            if (member.permissions.has(PermissionsBitField.Flags.ManageChannels)) perms.push(" Manage Channels");
             if (member.permissions.has(PermissionsBitField.Flags.BanMembers)) perms.push("🔨 Ban Members");
             permissions = perms.length ? perms.join(", ") : "No special permissions";
         }
@@ -134,7 +134,7 @@ module.exports = {
                 { name: "<a:emoji_28:1440036587596415018> Timestamps", value: `> **Created:** ${createdAt}\n> **Joined:** ${joinedAt}`, inline: false },
                 { name: "<:SigmaOk:1440329751662170265> Server Info", value: `> **Highest Role:** ${highestRole}\n> **All Roles:** ${roles}\n> **Boosting Since:** ${boostingSince}`, inline: false },
                 { name: "<a:purple_verified:1439271259190988954> Permissions", value: permissions, inline: false },
-                { name: "<a:a_online:973845291797213214> Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
+                { name: "<a:a_online:973845291797213214>  Presence", value: `> **Status:** ${status}\n> **Activities:** ${activities}`, inline: false }
             )
             .setFooter({ text: `Requested by ${interaction?.user?.tag || message.author.tag}` })
             .setTimestamp();
