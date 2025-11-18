@@ -46,7 +46,7 @@ module.exports = (client) => {
       const attachment = new AttachmentBuilder(buffer, { name: "welcome.png" });
 
       await channel.send({
-        content: `🌸 Welcome ${member}!`,
+        content: `<a:HeartsForAll:1417072462499414067> Welcome ${member}!`,
         files: [attachment],
       });
 
