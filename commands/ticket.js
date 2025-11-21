@@ -29,7 +29,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor("Blue")
             .setTitle("<a:Gem:1424787118278049813> Ticket Panel")
-            .setDescription(`Hello <@${user.id}>! Please select a ticket category from the menu below.`);
+            .setDescription(`<a:lyf_golden_stars:1441468729308479601> Need help? Select a category below to create a private ticket.`);
 
         const row = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
@@ -39,20 +39,20 @@ module.exports = {
                     {
                         label: "GENERAL SUPPORT",
                         value: "general_support",
-                        description: "Get help with general questions or issues",
+                        description: "Get help with server or issues",
                         emoji: "<a:blue_heart:1414309560231002194>" // animated emoji IDs can't be directly used in select menus; Discord will convert 💙 to the blue heart if animated in your server
                     },
                     {
-                        label: "APPEAL BAN FOR A MEMBER/MEMBERS",
+                        label: "BAN APPEAL FOR A MEMBER",
                         value: "appeal_ban",
-                        description: "Submit a ban appeal for yourself or another member",
+                        description: "Submit a ban appeal for members/member",
                         emoji: "<a:hehehe:1401554249455898716>"
                     },
                     {
                         label: "APPEAL TO BE STAFF",
                         value: "appeal_staff",
                         description: "Apply to become staff on this server",
-                        emoji: "<a:lyf_kat_rave:1440376954531352677>"
+                        emoji: "<a:lyf_tanish_crown:1441468324277125232>"
                     },
                     {
                         label: "REPORT A MEMBER",
