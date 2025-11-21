@@ -31,22 +31,47 @@ module.exports = (client) => {
                         page: randomPage,  // ⬅ added fix
                     });
 
-                    if (!data || !data.length) return;
+                    // 💠 Unique image picker
+function pickUniqueImage(images, usedImages) {
+    const fresh = images.filter(img => {
+        const url = img.directLink || img.image;
+        return !usedImages.includes(url);
+    });
 
-                    const img = data[Math.floor(Math.random() * data.length)];
+    // If no fresh images → return null
+    return fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : null;
+}
 
-                    // Send autopost
-                    await channel.send({
-                        content: `<a:gold_butterfly:1439270586571558972> ${task.query}`,
-                        embeds: [
-                            {
-                                color: 0xe60023,
-                                title: task.query,
-                                image: { url: img.directLink || img.image },
-                                timestamp: new Date(),
-                            },
-                        ],
-                    });
+// ⭐ PICK UNIQUE IMAGE
+let img = pickUniqueImage(data, task.postedImages);
+
+// Fallback if all images are already used
+if (!img) {
+    img = data[Math.floor(Math.random() * data.length)];
+}
+
+const url = img.directLink || img.image;
+
+// Save image to history
+task.postedImages.push(url);
+
+// Auto-clean (avoid database becoming huge)
+if (task.postedImages.length > task.maxHistory) {
+    task.postedImages = task.postedImages.slice(-task.maxHistory);
+}
+
+// Send autopost
+await channel.send({
+    content: `<a:gold_butterfly:1439270586571558972> ${task.query}`,
+    embeds: [
+        {
+            color: 0xe60023,
+            title: task.query,
+            image: { url },
+            timestamp: new Date(),
+        },
+    ],
+});
 
                     // Update timestamp
                     task.lastPost = now;
