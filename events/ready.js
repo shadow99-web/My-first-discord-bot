@@ -4,76 +4,69 @@ module.exports = (client) => {
     const AutoPin = require("../models/AutoPin");
     const { fetchRyzumiAPI } = require("../utils/ryzumi");
 
+    // 💠 Unique image picker
+    function pickUniqueImage(images, usedImages) {
+        const fresh = images.filter(img => {
+            const url = img.directLink || img.image;
+            return !usedImages.includes(url);
+        });
+
+        return fresh.length
+            ? fresh[Math.floor(Math.random() * fresh.length)]
+            : null;
+    }
+
     // Main autopost loop — runs every 20 seconds
     setInterval(async () => {
         try {
-            // Fetch all tasks
             const tasks = await AutoPin.find();
             if (!tasks.length) return;
 
-            // Run all autoposts *simultaneously*
             tasks.forEach(async (task) => {
                 try {
                     const now = Date.now();
 
-                    // Not time yet? Skip
                     if (now - task.lastPost < task.interval) return;
 
                     const channel = client.channels.cache.get(task.channelId);
                     if (!channel) return;
 
-                    // ⭐ FIX 3: Random Pinterest page for more unique images
                     const randomPage = Math.floor(Math.random() * 5) + 1;
 
-                    // Fetch Pinterest images with random page
                     const data = await fetchRyzumiAPI("/search/pinterest", {
                         query: task.query,
-                        page: randomPage,  // ⬅ added fix
+                        page: randomPage,
                     });
 
-                    // 💠 Unique image picker
-function pickUniqueImage(images, usedImages) {
-    const fresh = images.filter(img => {
-        const url = img.directLink || img.image;
-        return !usedImages.includes(url);
-    });
+                    // Safety check
+                    if (!data || !Array.isArray(data) || data.length === 0) return;
 
-    // If no fresh images → return null
-    return fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : null;
-}
+                    let img = pickUniqueImage(data, task.postedImages);
 
-// ⭐ PICK UNIQUE IMAGE
-let img = pickUniqueImage(data, task.postedImages);
+                    if (!img) {
+                        img = data[Math.floor(Math.random() * data.length)];
+                    }
 
-// Fallback if all images are already used
-if (!img) {
-    img = data[Math.floor(Math.random() * data.length)];
-}
+                    const url = img.directLink || img.image;
 
-const url = img.directLink || img.image;
+                    task.postedImages.push(url);
 
-// Save image to history
-task.postedImages.push(url);
+                    if (task.postedImages.length > task.maxHistory) {
+                        task.postedImages = task.postedImages.slice(-task.maxHistory);
+                    }
 
-// Auto-clean (avoid database becoming huge)
-if (task.postedImages.length > task.maxHistory) {
-    task.postedImages = task.postedImages.slice(-task.maxHistory);
-}
+                    await channel.send({
+                        content: `<a:gold_butterfly:1439270586571558972> ${task.query}`,
+                        embeds: [
+                            {
+                                color: 0xe60023,
+                                title: task.query,
+                                image: { url },
+                                timestamp: new Date(),
+                            },
+                        ],
+                    });
 
-// Send autopost
-await channel.send({
-    content: `<a:gold_butterfly:1439270586571558972> ${task.query}`,
-    embeds: [
-        {
-            color: 0xe60023,
-            title: task.query,
-            image: { url },
-            timestamp: new Date(),
-        },
-    ],
-});
-
-                    // Update timestamp
                     task.lastPost = now;
                     await task.save();
 
@@ -85,5 +78,5 @@ await channel.send({
         } catch (mainErr) {
             console.log("AutoPost main loop error:", mainErr);
         }
-    }, 20 * 1000); // check every 20 seconds
+    }, 20 * 1000);
 };
