@@ -18,9 +18,9 @@ module.exports = {
         
         // Confirm to user
         if (isPrefix) {
-            await message.reply("✅ Ticket panel sent!");
+            await message.reply("<a:purple_verified:1439271259190988954> Ticket panel sent!");
         } else {
-            await interaction.reply({ content: "✅ Ticket panel sent!", ephemeral: true });
+            await interaction.reply({ content: "<a:purple_verified:1439271259190988954> Ticket panel sent!", ephemeral: true });
         }
     },
 
@@ -28,7 +28,7 @@ module.exports = {
     sendTicketPanel: async (channel, user) => {
         const embed = new EmbedBuilder()
             .setColor("Blue")
-            .setTitle("🎫 Ticket Panel")
+            .setTitle("<a:Gem:1424787118278049813> Ticket Panel")
             .setDescription(`Hello <@${user.id}>! Please select a ticket category from the menu below.`);
 
         const row = new ActionRowBuilder().addComponents(
@@ -40,25 +40,25 @@ module.exports = {
                         label: "GENERAL SUPPORT",
                         value: "general_support",
                         description: "Get help with general questions or issues",
-                        emoji: "💙" // animated emoji IDs can't be directly used in select menus; Discord will convert 💙 to the blue heart if animated in your server
+                        emoji: "<a:blue_heart:1414309560231002194>" // animated emoji IDs can't be directly used in select menus; Discord will convert 💙 to the blue heart if animated in your server
                     },
                     {
                         label: "APPEAL BAN FOR A MEMBER/MEMBERS",
                         value: "appeal_ban",
                         description: "Submit a ban appeal for yourself or another member",
-                        emoji: "💙"
+                        emoji: "<a:hehehe:1401554249455898716>"
                     },
                     {
                         label: "APPEAL TO BE STAFF",
                         value: "appeal_staff",
                         description: "Apply to become staff on this server",
-                        emoji: "💙"
+                        emoji: "<a:lyf_kat_rave:1440376954531352677>"
                     },
                     {
                         label: "REPORT A MEMBER",
                         value: "report_member",
                         description: "Report a member for misconduct",
-                        emoji: "💙"
+                        emoji: "<a:alert:1439611767302127788>"
                     }
                 ])
         );
