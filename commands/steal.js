@@ -144,7 +144,7 @@ module.exports = {
 
     const clean = cleanName(rawName);
     const previewEmbed = new EmbedBuilder()
-      .setTitle(`🔍 Steal Preview`)
+      .setTitle(`<a:a_online:1440333669863522485> Steal Preview`)
       .setDescription(`Detected as: **${detectedType.toUpperCase()}**\nName (cleaned): \`${clean}\``)
       .setImage(assetUrl)
       .setFooter({ text: `Requested by ${actor.tag}` })
@@ -194,7 +194,7 @@ module.exports = {
 
           const success = new EmbedBuilder()
             .setColor("Green")
-            .setTitle("✅ Emoji Added!")
+            .setTitle("<a:purple_verified:1439271259190988954> Emoji Added!")
             .setDescription(`Added to **${targetGuild.name}** as \`:${created.name}:\``)
             .setThumbnail(created.imageURL())
             .setTimestamp();
@@ -212,7 +212,7 @@ module.exports = {
 
           const success = new EmbedBuilder()
             .setColor("Green")
-            .setTitle("✅ Sticker Added!")
+            .setTitle("<a:purple_verified:1439271259190988954> Sticker Added!")
             .setDescription(`Added sticker **${sticker.name}** to **${targetGuild.name}**`)
             .setThumbnail(assetUrl)
             .setTimestamp();
