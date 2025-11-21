@@ -23,7 +23,7 @@ module.exports = (client) => {
                     if (!channel) return;
 
                     // ⭐ FIX 3: Random Pinterest page for more unique images
-                    const randomPage = Math.floor(Math.random() * 24) + 1;
+                    const randomPage = Math.floor(Math.random() * 5) + 1;
 
                     // Fetch Pinterest images with random page
                     const data = await fetchRyzumiAPI("/search/pinterest", {
