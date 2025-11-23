@@ -46,10 +46,10 @@ module.exports = {
     // ✨ Create base embed with author avatar + bot footer
     let embed = new EmbedBuilder()
       .setAuthor({
-        name: `${user.username}'s Embed`,
+        name: ` ${user.username} `,
         iconURL: user.displayAvatarURL({ dynamic: true }),
       })
-      .setTitle(`${blueHeart} Custom Embed Builder ${blueHeart}`)
+      .setTitle(` Custom Embed Builder `)
       .setDescription("Use the buttons below to customize this embed.")
       .setColor("#00BFFF")
       .setFooter({
@@ -87,7 +87,7 @@ module.exports = {
 
     const collector = msg.createMessageComponentCollector({
       filter: i => i.user.id === user.id,
-      time: 120000,
+      time: 150000,
     });
 
     collector.on("collect", async i => {
@@ -151,7 +151,7 @@ module.exports = {
       if (i.customId === "color") embed.setColor(value);
       if (i.customId === "image") embed.setImage(value);
 
-      await modalSubmit.reply({ content: "✅ Updated!", ephemeral: true });
+      await modalSubmit.reply({ content: "<a:purple_verified:1439271259190988954> Updated!", ephemeral: true });
       await msg.edit({ embeds: [embed] });
     });
 
