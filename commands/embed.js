@@ -138,7 +138,7 @@ module.exports = {
       const modalSubmit = await i
         .awaitModalSubmit({
           filter: m => m.user.id === user.id,
-          time: 60000,
+          time: 200000,
         })
         .catch(() => null);
 
