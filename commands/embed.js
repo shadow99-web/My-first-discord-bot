@@ -49,7 +49,7 @@ module.exports = {
         name: ` ${user.username} `,
         iconURL: user.displayAvatarURL({ dynamic: true }),
       })
-      .setTitle(` Custom Embed Builder `)
+      .setTitle(`<a:hehehe:1401554249455898716> Custom Embed Builder `)
       .setDescription("Use the buttons below to customize this embed.")
       .setColor("#00BFFF")
       .setFooter({
@@ -146,7 +146,7 @@ module.exports = {
 
       const value = modalSubmit.fields.getTextInputValue("input");
 
-      if (i.customId === "title") embed.setTitle(`${blueHeart} ${value} ${blueHeart}`);
+      if (i.customId === "title") embed.setTitle(` ${value} `);
       if (i.customId === "desc") embed.setDescription(value);
       if (i.customId === "color") embed.setColor(value);
       if (i.customId === "image") embed.setImage(value);
