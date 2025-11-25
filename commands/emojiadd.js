@@ -9,17 +9,19 @@ const axios = require("axios");
 
 module.exports = {
   name: "emojiadd",
-  description: "Search emojis and add one to your server",
+  description: "Search emojis from Emoji.gg and add one to your server",
   data: new SlashCommandBuilder()
     .setName("emojiadd")
-    .setDescription("Search and add an emoji to your server")
+    .setDescription("Search and add an emoji from Emoji.gg to your server")
     .addStringOption((option) =>
-      option.setName("query").setDescription("Emoji search term").setRequired(true)
+      option
+        .setName("query")
+        .setDescription("Enter the emoji search term")
+        .setRequired(true)
     ),
 
   async execute({ client, interaction, message, args, isPrefix }) {
     let query;
-
     if (isPrefix) {
       if (!args.length) return message.reply("⚠️ Usage: `!emojiadd <search term>`");
       query = args.join(" ");
@@ -29,33 +31,42 @@ module.exports = {
     }
 
     try {
-      // --- Fetch from working API ---
-      const resp = await axios.get(`https://discordemoji.com/api?search=${encodeURIComponent(query)}`);
-      const results = resp.data.slice(0, 10);
+      const resp = await axios.get("https://emoji.gg/api/");
+      const allEmojis = resp.data;
 
-      if (!results.length) {
-        const msg = `⚠️ No emojis found for **${query}**`;
-        return isPrefix ? message.reply(msg) : interaction.editReply(msg);
-      }
+      // Filter emojis by query
+      const results = allEmojis
+        .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 10);
+
+      if (!results.length)
+        return isPrefix
+          ? message.reply(`⚠️ No emojis found for **${query}**`)
+          : interaction.editReply(`⚠️ No emojis found for **${query}**`);
 
       let index = 0;
 
-      // --- Build CDN URL ---
-      const getUrl = (emoji) => {
-        // If API provides direct URL
-        if (emoji.image.startsWith("http")) return emoji.image;
+      // Helper: get full image URL
+     const getUrl = (emoji) => {
+  const possible = emoji.url || emoji.image || emoji.filename;
+  if (!possible) return null;
 
-        // Fallback to discordemoji CDN
-        return `https://discordemoji.com/assets/emoji/${emoji.image}`;
-      };
+  // If already a valid full URL (e.g., starts with http or cdn)
+  if (/^https?:\/\//.test(possible)) return possible;
 
+  // Otherwise, build the proper base path
+  return `https://emoji.gg/assets/emoji/${possible.replace(/^\/+/, "")}`;
+};
+
+      // Embed builder
       const getEmbed = () =>
         new EmbedBuilder()
-          .setTitle(`😀 Emoji Search: ${query}`)
+          .setTitle(`😄 Emoji Search: ${query}`)
           .setImage(getUrl(results[index]))
-          .setColor("Blurple")
-          .setFooter({ text: `Result ${index + 1}/${results.length}` });
+          .setFooter({ text: `Result ${index + 1}/${results.length}` })
+          .setColor("Blurple");
 
+      // Buttons
       const getButtons = () =>
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
@@ -74,65 +85,52 @@ module.exports = {
 
       collector.on("collect", async (btn) => {
         const userId = isPrefix ? message.author.id : interaction.user.id;
-
         if (btn.user.id !== userId)
-          return btn.reply({ content: "⛔ Not your menu!", ephemeral: true });
+          return btn.reply({ content: "⛔ That’s not your menu!", ephemeral: true });
 
         if (btn.customId === "next") index = (index + 1) % results.length;
         else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
 
-        // --- Save Emoji ---
+        // Save emoji
         else if (btn.customId === "save_emoji") {
           await btn.deferReply({ ephemeral: true }).catch(() => {});
-
           try {
             const emojiUrl = getUrl(results[index]);
+            const response = await axios.get(emojiUrl, { responseType: "arraybuffer" });
+            const buffer = Buffer.from(response.data);
+            const name = results[index].slug || results[index].title.replace(/\s+/g, "_");
 
-            const response = await axios.get(emojiUrl, {
-              responseType: "arraybuffer",
-              headers: { "User-Agent": "Mozilla/5.0 DiscordBot" },
+            const emoji = await btn.guild.emojis.create({
+              attachment: buffer,
+              name,
             });
 
-            const buffer = Buffer.from(response.data);
-            const guild = btn.guild;
-
-            if (!guild.members.me.permissions.has("ManageGuildExpressions"))
-              return btn.followUp("❌ I need **Manage Guild Expressions** permission.");
-
-            const isGif = buffer.toString("ascii", 0, 3) === "GIF";
-
-            if (isGif) {
-              if (guild.emojis.cache.filter((e) => e.animated).size >= guild.maximumAnimatedEmojis)
-                return btn.followUp("❌ Animated emoji slots are full!");
-            } else {
-              if (guild.emojis.cache.filter((e) => !e.animated).size >= guild.maximumStaticEmojis)
-                return btn.followUp("❌ Static emoji slots are full!");
-            }
-
-            const name = results[index].title.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
-
-            const emoji = await guild.emojis.create({ attachment: buffer, name });
-
-            await btn.followUp(
-              `<a:purple_verified:1439271259190988954> Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`
-            );
-          } catch (err) {
-            console.error(err);
-            return btn.followUp("❌ Failed — image blocked or invalid.");
+            await btn.followUp({
+              content: `✅ Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`,
+            });
+          } catch (e) {
+            console.error("Error saving emoji:", e);
+            await btn.followUp({
+              content: "❌ Failed to save — check bot permissions or emoji slot limits.",
+            });
           }
-
           return;
         }
 
-        if (!btn.deferred && !btn.replied) await btn.deferUpdate().catch(() => {});
-        await btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
+        // Update embed safely
+        if (["next", "prev"].includes(btn.customId)) {
+          if (!btn.deferred && !btn.replied)
+            await btn.deferUpdate().catch(() => {});
+          await btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
+        }
       });
 
       collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
     } catch (err) {
       console.error("emojiadd command error:", err);
       const msg = "❌ Failed to fetch or save emoji.";
-      return isPrefix ? message.reply(msg) : interaction.editReply(msg);
+      if (isPrefix) message.reply(msg).catch(() => {});
+      else interaction.editReply(msg).catch(() => {});
     }
   },
 };
