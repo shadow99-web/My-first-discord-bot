@@ -9,19 +9,17 @@ const axios = require("axios");
 
 module.exports = {
   name: "emojiadd",
-  description: "Search emojis from Emoji.gg and add one to your server",
+  description: "Search emojis and add one to your server",
   data: new SlashCommandBuilder()
     .setName("emojiadd")
-    .setDescription("Search and add an emoji from Emoji.gg to your server")
+    .setDescription("Search and add an emoji to your server")
     .addStringOption((option) =>
-      option
-        .setName("query")
-        .setDescription("Enter the emoji search term")
-        .setRequired(true)
+      option.setName("query").setDescription("Emoji search term").setRequired(true)
     ),
 
   async execute({ client, interaction, message, args, isPrefix }) {
     let query;
+
     if (isPrefix) {
       if (!args.length) return message.reply("⚠️ Usage: `!emojiadd <search term>`");
       query = args.join(" ");
@@ -31,44 +29,33 @@ module.exports = {
     }
 
     try {
-      const resp = await axios.get("https://emoji.gg/api/");
-      const allEmojis = resp.data;
+      // --- Fetch from working API ---
+      const resp = await axios.get(`https://discordemoji.com/api?search=${encodeURIComponent(query)}`);
+      const results = resp.data.slice(0, 10);
 
-      // Filter emojis by query
-      const results = allEmojis
-        .filter((e) => e.title.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 10);
-
-      if (!results.length)
-        return isPrefix
-          ? message.reply(`⚠️ No emojis found for **${query}**`)
-          : interaction.editReply(`⚠️ No emojis found for **${query}**`);
+      if (!results.length) {
+        const msg = `⚠️ No emojis found for **${query}**`;
+        return isPrefix ? message.reply(msg) : interaction.editReply(msg);
+      }
 
       let index = 0;
 
-      // Helper: get full image URL
-     const getUrl = (emoji) => {
-  // Emoji.gg raw image location
-  const file = emoji.url || emoji.image || emoji.filename;
-  if (!file) return null;
+      // --- Build CDN URL ---
+      const getUrl = (emoji) => {
+        // If API provides direct URL
+        if (emoji.image.startsWith("http")) return emoji.image;
 
-  // Fix: emoji.gg sometimes returns relative paths
-  const clean = file.startsWith("http")
-    ? file
-    : `https://cdn3.emoji.gg/emoji/${file.replace(/^\/+/, "")}`;
+        // Fallback to discordemoji CDN
+        return `https://discordemoji.com/assets/emoji/${emoji.image}`;
+      };
 
-  return clean;
-};
-
-      // Embed builder
       const getEmbed = () =>
         new EmbedBuilder()
-          .setTitle(`😄 Emoji Search: ${query}`)
+          .setTitle(`😀 Emoji Search: ${query}`)
           .setImage(getUrl(results[index]))
-          .setFooter({ text: `Result ${index + 1}/${results.length}` })
-          .setColor("Blurple");
+          .setColor("Blurple")
+          .setFooter({ text: `Result ${index + 1}/${results.length}` });
 
-      // Buttons
       const getButtons = () =>
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("prev").setLabel("◀️").setStyle(ButtonStyle.Secondary),
@@ -87,83 +74,65 @@ module.exports = {
 
       collector.on("collect", async (btn) => {
         const userId = isPrefix ? message.author.id : interaction.user.id;
+
         if (btn.user.id !== userId)
-          return btn.reply({ content: "⛔ That’s not your menu!", ephemeral: true });
+          return btn.reply({ content: "⛔ Not your menu!", ephemeral: true });
 
         if (btn.customId === "next") index = (index + 1) % results.length;
         else if (btn.customId === "prev") index = (index - 1 + results.length) % results.length;
 
-        // Save emoji
+        // --- Save Emoji ---
         else if (btn.customId === "save_emoji") {
-  await btn.deferReply({ ephemeral: true }).catch(() => {});
+          await btn.deferReply({ ephemeral: true }).catch(() => {});
 
-  try {
-    const emojiUrl = getUrl(results[index]);
+          try {
+            const emojiUrl = getUrl(results[index]);
 
-    // 🔥 FIX: Some emoji.gg URLs give 403. Force user-agent header.
-    const response = await axios.get(emojiUrl, {
-      responseType: "arraybuffer",
-      headers: {
-        "User-Agent": "Mozilla/5.0 DiscordBot",
-        "Accept": "image/*",
-      },
-    });
+            const response = await axios.get(emojiUrl, {
+              responseType: "arraybuffer",
+              headers: { "User-Agent": "Mozilla/5.0 DiscordBot" },
+            });
 
-    const buffer = Buffer.from(response.data);
-    const guild = btn.guild;
+            const buffer = Buffer.from(response.data);
+            const guild = btn.guild;
 
-    // ⚠️ Check bot permission
-    if (!guild.members.me.permissions.has("ManageExpressions")) {
-      return btn.followUp("❌ I need **Manage Expressions** permission.");
-    }
+            if (!guild.members.me.permissions.has("ManageGuildExpressions"))
+              return btn.followUp("❌ I need **Manage Guild Expressions** permission.");
 
-    // ⚠️ Check emoji slot capacity
-    const totalEmojis = guild.emojis.cache.size;
-    const maxStatic = guild.maximumStaticEmojis;
-    const maxAnimated = guild.maximumAnimatedEmojis;
+            const isGif = buffer.toString("ascii", 0, 3) === "GIF";
 
-    if (buffer[0] === 0x47 /* GIF header: "GIF" */) {
-      if (guild.emojis.cache.filter(e => e.animated).size >= maxAnimated)
-        return btn.followUp("❌ Server animated emoji slots are full!");
-    } else {
-      if (guild.emojis.cache.filter(e => !e.animated).size >= maxStatic)
-        return btn.followUp("❌ Server static emoji slots are full!");
-    }
+            if (isGif) {
+              if (guild.emojis.cache.filter((e) => e.animated).size >= guild.maximumAnimatedEmojis)
+                return btn.followUp("❌ Animated emoji slots are full!");
+            } else {
+              if (guild.emojis.cache.filter((e) => !e.animated).size >= guild.maximumStaticEmojis)
+                return btn.followUp("❌ Static emoji slots are full!");
+            }
 
-    const name =
-      results[index].slug ||
-      results[index].title.replace(/\s+/g, "_").toLowerCase();
+            const name = results[index].title.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
 
-    const emoji = await guild.emojis.create({
-      attachment: buffer,
-      name,
-    });
+            const emoji = await guild.emojis.create({ attachment: buffer, name });
 
-    await btn.followUp({
-      content: `<a:purple_verified:1439271259190988954> Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`,
-    });
+            await btn.followUp(
+              `<a:purple_verified:1439271259190988954> Added emoji: <${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`
+            );
+          } catch (err) {
+            console.error(err);
+            return btn.followUp("❌ Failed — image blocked or invalid.");
+          }
 
-  } catch (e) {
-    console.error("Emoji save error:", e);
-    await btn.followUp("❌ Failed — CDN blocked or invalid image.");
-  }
-
-  return;
+          return;
         }
-        // Update embed safely
-        if (["next", "prev"].includes(btn.customId)) {
-          if (!btn.deferred && !btn.replied)
-            await btn.deferUpdate().catch(() => {});
-          await btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
-        }
+
+        if (!btn.deferred && !btn.replied) await btn.deferUpdate().catch(() => {});
+        await btn.editReply({ embeds: [getEmbed()], components: [getButtons()] });
       });
 
       collector.on("end", () => sent.edit({ components: [] }).catch(() => {}));
     } catch (err) {
       console.error("emojiadd command error:", err);
       const msg = "❌ Failed to fetch or save emoji.";
-      if (isPrefix) message.reply(msg).catch(() => {});
-      else interaction.editReply(msg).catch(() => {});
+      return isPrefix ? message.reply(msg) : interaction.editReply(msg);
     }
   },
 };
