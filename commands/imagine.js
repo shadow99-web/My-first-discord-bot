@@ -80,11 +80,14 @@ module.exports = {
 
     // 📌 Embed
     const embed = new EmbedBuilder()
-      .setTitle("🎨 AI Image Generated")
-      .setDescription(`📝 **Prompt:** ${prompt}\n🎨 **Style:** ${style}`)
+      .setTitle("<a:blue_heart:1414309560231002194> AI Image Generated")
+      .setDescription(`<a:lyf_golden_stars:1441468729308479601> **Prompt:** ${prompt}\n<a:blue_heart:1414309560231002194> **Style:** ${style}`)
       .setImage(imageUrl)
       .setColor("Aqua")
-      .setFooter({ text: "Using Pollinations AI (fallback enabled)" });
+      .setFooter({
+        text: client.user.username,
+        iconURL: client.user.displayAvatarURL(),
+      });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -108,7 +111,7 @@ module.exports = {
         return btn.reply({ content: "⛔ Not your image!", ephemeral: true });
 
       if (btn.customId === "delete") {
-        await btn.reply({ content: "⚡ Image deleted!", ephemeral: true });
+        await btn.reply({ content: "<a:purple_verified:1439271259190988954> Image deleted!", ephemeral: true });
         await reply.delete().catch(() => {});
       }
     });
