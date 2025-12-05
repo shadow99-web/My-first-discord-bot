@@ -50,7 +50,7 @@ module.exports = {
           { upsert: true }
         );
 
-        return safeReply(`❤️ Users reaching **Level ${level}** will receive ${role}.`);
+        return safeReply(`<a:lyf_golden_stars:1441468729308479601> Users reaching **Level ${level}** will receive ${role}.`);
       }
 
       // --- REMOVE ---
@@ -60,7 +60,7 @@ module.exports = {
 
         await LevelReward.deleteOne({ guildId, level });
 
-        return safeReply(`💖 Removed reward for Level ${level}.`);
+        return safeReply(`<a:purple_verified:1439271259190988954> Removed reward for Level ${level}.`);
       }
 
       // --- LIST ---
@@ -72,7 +72,7 @@ module.exports = {
           .map(r => `• Level ${r.level} → <@&${r.roleId}>`)
           .join("\n");
 
-        return safeReply("🙌 Level Rewards:\n" + list);
+        return safeReply("<:lyf_sussy:1439951940548300870> Level Rewards:\n" + list);
       }
 
       return safeReply("Unknown subcommand.");
@@ -93,7 +93,7 @@ module.exports = {
       );
 
       return safeReply({
-        content: `❤️ Users reaching **Level ${level}** will now receive ${role}.`,
+        content: `<a:lyf_golden_stars:1441468729308479601> Users reaching **Level ${level}** will now receive ${role}.`,
         flags: 64,
       });
     }
@@ -104,7 +104,7 @@ module.exports = {
       await LevelReward.deleteOne({ guildId, level });
 
       return safeReply({
-        content: `💖 Removed level reward for **Level ${level}**.`,
+        content: `<a:purple_verified:1439271259190988954> Removed level reward for **Level ${level}**.`,
         flags: 64,
       });
     }
@@ -125,7 +125,7 @@ module.exports = {
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle("🙌 Level Role Rewards")
+        .setTitle("<:lyf_sussy:1439951940548300870> Level Role Rewards")
         .setDescription(desc)
         .setColor("Gold");
 
