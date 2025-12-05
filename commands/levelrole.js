@@ -1,8 +1,4 @@
-const { 
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder
-} = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
 const LevelReward = require("../models/LevelReward");
 
 module.exports = {
@@ -29,24 +25,63 @@ module.exports = {
         )
     )
     .addSubcommand(sub =>
-      sub
-        .setName("list")
-        .setDescription("List all level rewards")
-    )
+      sub.setName("list").setDescription("List all level rewards"))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 
-  async execute(interaction) {
-    if (!interaction.guild) {
-      return interaction.reply({
-        content: "❌ This command can only be used in a server.",
-        flags: 64, // EPHEMERAL
-      });
+  async execute({ interaction, message, args, isPrefix, safeReply }) {
+    const guild = interaction?.guild || message.guild;
+    const guildId = guild.id;
+
+    // ========== PREFIX MODE ==========
+    if (isPrefix) {
+      const sub = args[0];
+      if (!sub) return safeReply("Usage: levelrole <set/remove/list>");
+
+      // --- SET ---
+      if (sub === "set") {
+        const level = parseInt(args[1]);
+        const role = message.mentions.roles.first();
+        if (!level || !role)
+          return safeReply("Usage: levelrole set <level> @role");
+
+        await LevelReward.findOneAndUpdate(
+          { guildId, level },
+          { roleId: role.id },
+          { upsert: true }
+        );
+
+        return safeReply(`❤️ Users reaching **Level ${level}** will receive ${role}.`);
+      }
+
+      // --- REMOVE ---
+      if (sub === "remove") {
+        const level = parseInt(args[1]);
+        if (!level) return safeReply("Usage: levelrole remove <level>");
+
+        await LevelReward.deleteOne({ guildId, level });
+
+        return safeReply(`💖 Removed reward for Level ${level}.`);
+      }
+
+      // --- LIST ---
+      if (sub === "list") {
+        const rewards = await LevelReward.find({ guildId });
+        if (!rewards.length) return safeReply("No level rewards set.");
+
+        const list = rewards
+          .map(r => `• Level ${r.level} → <@&${r.roleId}>`)
+          .join("\n");
+
+        return safeReply("🙌 Level Rewards:\n" + list);
+      }
+
+      return safeReply("Unknown subcommand.");
     }
 
-    const guildId = interaction.guild.id;
+    // ========== SLASH MODE ==========
     const sub = interaction.options.getSubcommand();
 
-    // SET REWARD
+    // --- SET ---
     if (sub === "set") {
       const level = interaction.options.getInteger("level");
       const role = interaction.options.getRole("role");
@@ -57,48 +92,44 @@ module.exports = {
         { upsert: true }
       );
 
-      return interaction.reply({
-        content: `🎉 Users reaching **Level ${level}** will now receive the role ${role}.`,
-        flags: 64, // EPHEMERAL
+      return safeReply({
+        content: `❤️ Users reaching **Level ${level}** will now receive ${role}.`,
+        flags: 64,
       });
     }
 
-    // REMOVE REWARD
+    // --- REMOVE ---
     if (sub === "remove") {
       const level = interaction.options.getInteger("level");
-
       await LevelReward.deleteOne({ guildId, level });
 
-      return interaction.reply({
-        content: `🗑️ Removed reward for **Level ${level}**.`,
-        flags: 64, // EPHEMERAL
+      return safeReply({
+        content: `💖 Removed level reward for **Level ${level}**.`,
+        flags: 64,
       });
     }
 
-    // LIST REWARDS
+    // --- LIST ---
     if (sub === "list") {
       const rewards = await LevelReward.find({ guildId });
 
       if (!rewards.length) {
-        return interaction.reply({
-          content: "📭 No level rewards set.",
-          flags: 64, // EPHEMERAL
+        return safeReply({
+          content: "No level rewards set yet.",
+          flags: 64,
         });
       }
 
       const desc = rewards
-        .map(r => `• **Level ${r.level}** → <@&${r.roleId}>`)
+        .map(r => `• Level ${r.level} → <@&${r.roleId}>`)
         .join("\n");
 
       const embed = new EmbedBuilder()
-        .setTitle("🎯 Level Role Rewards")
+        .setTitle("🙌 Level Role Rewards")
         .setDescription(desc)
         .setColor("Gold");
 
-      return interaction.reply({
-        embeds: [embed],
-        flags: 64, // EPHEMERAL
-      });
+      return safeReply({ embeds: [embed] });
     }
   },
 };
