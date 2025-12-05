@@ -94,7 +94,7 @@ await targetChannel.send({
             embeds: [
               new EmbedBuilder()
                 .setColor("Aqua")
-                .setDescription(`🏅 ${message.author} earned the role ${role} for reaching Level ${userData.level}!`),
+                .setDescription(`<a:A_HypeSquadBravery:1440382638719369266> ${message.author} earned the role ${role} for reaching Level ${userData.level}!`),
             ],
           }).catch(() => {});
         }
