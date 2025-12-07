@@ -18,7 +18,10 @@ module.exports = {
             .setDescription(`Click the button below to invite **${botName}** to your server!`)
             .setColor("Blue")
             .setTimestamp()
-            .setFooter({ text: `Requested by ${isPrefix ? message.author.tag : interaction.user.tag}` });
+            .setFooter({
+        text: client.user.username,
+        iconURL: client.user.displayAvatarURL(),
+      });
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
