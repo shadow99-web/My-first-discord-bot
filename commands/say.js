@@ -1,6 +1,4 @@
-const {
-    SlashCommandBuilder
-} = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
 
 module.exports = {
     prefixName: "say",
@@ -19,37 +17,39 @@ module.exports = {
                     { name: "Normal", value: "normal" },
                     { name: "Stealth", value: "stealth" }
                 )
-                .setRequired(false)
         )
         .addChannelOption(opt =>
             opt.setName("channel")
                 .setDescription("Where to send it")
-                .setRequired(false)
         )
         .addUserOption(opt =>
             opt.setName("user")
                 .setDescription("User to impersonate (safely)")
-                .setRequired(false)
         ),
 
     async execute({ message, interaction, isPrefix, client }) {
 
-        // -------------------- PREFIX MODE --------------------
+        // ---------------------------------------------------
+        // PREFIX
+        // ---------------------------------------------------
         if (isPrefix) {
             const args = message.content.split(" ").slice(1);
 
             const stealth = args[0] === "--stealth";
             if (stealth) args.shift();
 
-            const text = args.join(" ");
+            const text = args.join(" ").trim();
             if (!text) return message.reply("❌ Provide text.");
 
             const channel = message.channel;
 
-            const name = `${message.author.username} `;
+            // USE DISPLAY NAME (NICKNAME)
+            const name = message.member?.displayName || message.author.username;
             const avatar = message.author.displayAvatarURL();
 
-            let webhook = (await channel.fetchWebhooks()).find(w => w.name === "Shadow-Say");
+            let webhook =
+                (await channel.fetchWebhooks()).find(w => w.name === "Shadow-Say");
+
             if (!webhook) {
                 webhook = await channel.createWebhook({
                     name: "Shadow-Say",
@@ -60,28 +60,44 @@ module.exports = {
             await webhook.send({
                 content: text,
                 username: name,
-                avatarURL: avatar
+                avatarURL: avatar,
+                allowedMentions: { parse: [] }
             });
 
             if (!stealth) return message.react("✅");
-            return; // STEALTH MODE → no reply
+            return;
         }
 
-        // -------------------- SLASH MODE --------------------
-        const text = interaction.options.getString("text");
+        // ---------------------------------------------------
+        // SLASH COMMAND
+        // ---------------------------------------------------
+        const text = interaction.options.getString("text").trim();
         const mode = interaction.options.getString("mode") || "normal";
         const channel = interaction.options.getChannel("channel") || interaction.channel;
         const user = interaction.options.getUser("user");
 
+        // FIX EMPTY MESSAGE ISSUE
+        if (!text) {
+            return interaction.reply({
+                content: "❌ Message cannot be empty.",
+                ephemeral: true
+            });
+        }
+
+        // USE DISPLAY NAME IF A USER IS SELECTED
         let name = "Shadow";
         let avatar = client.user.displayAvatarURL();
 
         if (user) {
-            name = `${user.username} `;
+            const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+
+            name = member?.displayName || user.username;
             avatar = user.displayAvatarURL({ dynamic: true });
         }
 
-        let webhook = (await channel.fetchWebhooks()).find(w => w.name === "Shadow-Say");
+        let webhook =
+            (await channel.fetchWebhooks()).find(w => w.name === "Shadow-Say");
+
         if (!webhook) {
             webhook = await channel.createWebhook({
                 name: "Shadow-Say",
@@ -89,23 +105,24 @@ module.exports = {
             });
         }
 
+        // STEALTH REPLY FIX — send a real message
         if (mode !== "stealth") {
             await interaction.reply({
-                content: " Message sent.",
-                flags: 64
+                content: "✅ Message sent.",
+                ephemeral: true
             });
         } else {
-            // STEALTH MODE → acknowledge silently
             await interaction.reply({
-                content: " ",
-                flags: 64
+                content: "✔",
+                ephemeral: true
             });
         }
 
         return webhook.send({
             content: text,
             username: name,
-            avatarURL: avatar
+            avatarURL: avatar,
+            allowedMentions: { parse: [] }
         });
     }
 };
