@@ -148,7 +148,6 @@ safeRequireEvent("./events/autoMod", client);
 safeRequireEvent("./events/guildMemberRemove.js", client);
 safeRequireEvent("./events/truthdare", client);
 safeRequireEvent("./events/modLogEvents", client);
-safeRequireEvent("./events/voiceStateUpdate", client);
 safeRequireEvent("./events/antinukeHandler", client);
 safeRequireEvent("./events/reactionRole.js", client);
 safeRequireEvent("./events/activityRestore.js", client);
@@ -156,6 +155,9 @@ safeRequireEvent("./events/VC.js", client);
 safeRequireEvent("./events/vcstore.js", client);
 safeRequireEvent("./events/autoReact.js", client);
 safeRequireEvent("./events/ready.js", client);
+client.on("voiceStateUpdate", (oldState, newState) => {
+    require("./events/voiceStateUpdate")(oldState, newState);
+});
 // ====================
 // 🚀 Deploy commands and login safely
 async function deployCommandsAndLogin() {
