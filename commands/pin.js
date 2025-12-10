@@ -11,32 +11,34 @@ const { fetchRyzumiAPI } = require("../utils/ryzumi");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("pin")
-    .setDescription("🔍 Search cool images ")
+    .setDescription("🔍 Search cool images")
     .addStringOption(opt =>
-      opt.setName("query")
-        .setDescription("Search term for  images")
+      opt
+        .setName("query")
+        .setDescription("Search term for images")
         .setRequired(true)
     ),
 
   name: "pin",
-  description: "🔍 Search  images (prefix + slash)",
-  
-  async execute(context) {
-    const query = context.isPrefix
-      ? context.args.join(" ")
-      : context.interaction.options.getString("query");
+  description: "🔍 Search images (prefix + slash)",
 
-    const user = context.isPrefix ? context.message.author : context.interaction.user;
+  async execute(context) {
+    const { isPrefix, message, interaction, safeReply } = context;
+
+    const query = isPrefix
+      ? context.args.join(" ")
+      : interaction.options.getString("query");
+
+    const user = isPrefix ? message.author : interaction.user;
 
     if (!query) {
-      const msg = "❌ Please provide something to search.";
-      return context.isPrefix
-        ? context.message.reply(msg)
-        : context.interaction.reply({ content: msg, ephemeral: true });
+      return isPrefix
+        ? message.reply("❌ Please provide something to search.")
+        : safeReply({ content: "❌ Please provide something to search.", ephemeral: true });
     }
 
     try {
-      if (!context.isPrefix) await context.interaction.deferReply();
+      if (!isPrefix) await interaction.deferReply();
 
       const data = await fetchRyzumiAPI("/search/pinterest", { query });
       if (!data || !Array.isArray(data) || data.length === 0)
@@ -69,18 +71,22 @@ module.exports = {
 
       const row = new ActionRowBuilder().addComponents(prev, next);
 
-      const reply = context.isPrefix
-        ? await context.message.reply({ embeds: [makeEmbed()], components: [row] })
-        : await context.interaction.editReply({ embeds: [makeEmbed()], components: [row] });
+      // ---------------------------
+      // FIXED: Uses safeReply
+      // ---------------------------
 
-      const collector = reply.createMessageComponentCollector({
+      const replyMsg = isPrefix
+        ? await message.reply({ embeds: [makeEmbed()], components: [row] })
+        : await interaction.editReply({ embeds: [makeEmbed()], components: [row] });
+
+      const collector = replyMsg.createMessageComponentCollector({
         componentType: ComponentType.Button,
         time: 150000,
       });
 
       collector.on("collect", async i => {
         if (i.user.id !== user.id)
-          return i.reply({ content: "These buttons aren’t for you!", ephemeral: true });
+          return i.reply({ content: "These buttons aren't for you!", ephemeral: true });
 
         await i.deferUpdate();
 
@@ -90,7 +96,7 @@ module.exports = {
         prev.setDisabled(index === 0);
         next.setDisabled(index === data.length - 1);
 
-        await reply.edit({
+        await replyMsg.edit({
           embeds: [makeEmbed()],
           components: [new ActionRowBuilder().addComponents(prev, next)],
         });
@@ -101,16 +107,17 @@ module.exports = {
           prev.setDisabled(true),
           next.setDisabled(true)
         );
-        await reply.edit({ components: [disabled] }).catch(() => {});
+        await replyMsg.edit({ components: [disabled] }).catch(() => {});
       });
 
     } catch (err) {
       console.error("❌ Pinterest Fetch Error:", err);
-      const msg = "⚠️ Could not fetch Pinterest results right now.";
-      if (context.isPrefix)
-        await context.message.reply(msg);
-      else if (!context.interaction.replied)
-        await context.interaction.reply({ content: msg, ephemeral: true });
+
+      const msg = "✋TRY AGAIN AFTER 1 min.";
+
+      return isPrefix
+        ? message.reply(msg).catch(() => {})
+        : safeReply({ content: msg, ephemeral: true });
     }
   },
 };
