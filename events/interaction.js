@@ -18,41 +18,38 @@ module.exports = (client, blockHelpers) => {
 
       // ---------- Slash Commands ----------
       if (interaction.isChatInputCommand()) {
-        const command = client.commands.get(interaction.commandName);
-        if (!command) return safeReply({ content: "❌ Command not found.", ephemeral: true });
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
 
-        const guildId = interaction.guildId;
-        const userId = interaction.user.id;
-
-        // Block check
-        if (blockHelpers?.isBlocked?.(userId, guildId, interaction.commandName)) {
-          return safeReply({
-            embeds: [
-              new EmbedBuilder()
-                .setColor("Red")
-                .setTitle("🚫 Command Blocked")
-                .setDescription(`You are blocked from using \`${interaction.commandName}\``),
-            ],
-            ephemeral: true,
-          });
-        }
-
-        try {
-          // Command should use safeReply only
-          await command.execute({
-            client,
-            interaction,
-            safeReply,
-            args: [],
-            isPrefix: false,
-          });
-        } catch (err) {
-          console.error(`❌ Error in command ${interaction.commandName}:`, err);
-          await safeReply({ content: "⚠️ Something went wrong while executing the command!", ephemeral: true });
-        }
-        return;
+  const safeReply = async (options) => {
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        return await interaction.reply(options);
+      } else if (interaction.deferred && !interaction.replied) {
+        return await interaction.editReply(options);
+      } else {
+        return await interaction.followUp(options);
       }
+    } catch (e) {
+      console.error("safeReply error:", e);
+    }
+  };
 
+  try {
+    await command.execute({
+      client,
+      interaction,
+      safeReply,
+      args: [],
+      isPrefix: false,
+    });
+  } catch (err) {
+    console.error(`❌ Error in command ${interaction.commandName}:`, err);
+    safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+  }
+
+  return;
+      }
       // ---------- Context Menus ----------
       if (interaction.isUserContextMenuCommand() || interaction.isMessageContextMenuCommand()) {
         const command = client.commands.get(interaction.commandName);
