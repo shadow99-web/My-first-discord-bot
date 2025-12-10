@@ -155,9 +155,10 @@ safeRequireEvent("./events/VC.js", client);
 safeRequireEvent("./events/vcstore.js", client);
 safeRequireEvent("./events/autoReact.js", client);
 safeRequireEvent("./events/ready.js", client);
-client.on("voiceStateUpdate", (oldState, newState) => {
-    require("./events/voiceStateUpdate")(oldState, newState);
-});
+const voiceStateHandler = require("./events/voiceStateUpdate");
+client.on("voiceStateUpdate", (oldState, newState) =>
+    voiceStateHandler(client, oldState, newState)
+);
 // ====================
 // 🚀 Deploy commands and login safely
 async function deployCommandsAndLogin() {
