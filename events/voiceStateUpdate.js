@@ -1,8 +1,10 @@
 const VCStats = require("../models/vcStatsSchema.js");
 
-module.exports = async (client, oldState, newState) => {
-  const user = newState.member?.user || oldState.member?.user;
-  const guild = newState.guild || oldState.guild;
+module.exports = async (oldState, newState) => {
+
+  const user = newState?.member?.user || oldState?.member?.user;
+  const guild = newState?.guild || oldState?.guild;
+
   if (!user || user.bot) return;
 
   try {
