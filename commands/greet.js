@@ -106,7 +106,10 @@ module.exports = {
                     if (interaction) return interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
                 }
 
-                let preview = g.text || "";
+                let preview =
+  typeof g.text === "string" && g.text.trim().length > 0
+    ? g.text
+    : "👋 Welcome to the server!";
                 preview = preview
                     .replace(/{user}/gi, user?.toString() || "")
                     .replace(/{server}/gi, guild?.name || "")
