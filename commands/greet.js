@@ -106,20 +106,24 @@ module.exports = {
                     if (interaction) return interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
                 }
 
-                let preview =
-  typeof g.text === "string" && g.text.trim().length > 0
-    ? g.text
-    : "👋 Welcome to the server!";
-                preview = preview
-                    .replace(/{user}/gi, user?.toString() || "")
-                    .replace(/{server}/gi, guild?.name || "")
-                    .replace(/{count}/gi, guild?.memberCount?.toString() || "");
+                
+                    
 
                 const embed = new EmbedBuilder()
-                    .setColor("Blue")
-                    .setTitle(" Current Greet Message (Preview)")
-                    .setDescription(preview)
-                    .setFooter({ text: `Added by ${g.author}` });
+  .setColor("Blue")
+  .setTitle("🌸 Current Greet Message (Preview)")
+  .setFooter({ text: `Added by ${g.author}` });
+
+if (g.text && g.text.trim().length > 0) {
+  embed.setDescription(
+    g.text
+      .replace(/{user}/gi, user?.toString() || "User")
+      .replace(/{server}/gi, guild?.name || "Server")
+      .replace(/{count}/gi, guild?.memberCount?.toString() || "0")
+  );
+} else {
+  embed.setDescription("📎 Greet message contains only an attachment.");
+}
 
                 if (g.attachment) {
                     if (/\.(jpg|jpeg|png|gif|webp)$/i.test(g.attachment)) embed.setImage(g.attachment);
