@@ -81,7 +81,7 @@ module.exports = {
                 await addGreet(guild.id, { text, attachment: file?.url || null, author: user.tag });
                 const embed = new EmbedBuilder()
                     .setColor("Green")
-                    .setTitle("✅ Greet Added")
+                    .setTitle("<a:purple_verified:1439271259190988954> Greet Added")
                     .setDescription(text || "(attachment only)")
                     .setFooter({ text: `Added by ${user.tag}` });
 
@@ -92,7 +92,7 @@ module.exports = {
             // ----- REMOVE -----
             if (sub === "remove") {
                 const ok = await removeGreet(guild.id);
-                const reply = ok ? "✅ Greet removed." : "❌ No greet set.";
+                const reply = ok ? "<a:purple_verified:1439271259190988954> Greet removed." : "❌ No greet set.";
                 if (isPrefix && message) return message.reply(reply);
                 if (interaction) return interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
             }
@@ -117,7 +117,7 @@ module.exports = {
 
                 const embed = new EmbedBuilder()
                     .setColor("Blue")
-                    .setTitle("🌸 Current Greet Message (Preview)")
+                    .setTitle(" Current Greet Message (Preview)")
                     .setDescription(preview)
                     .setFooter({ text: `Added by ${g.author}` });
 
@@ -143,7 +143,7 @@ module.exports = {
                 await setChannel(guild.id, channel.id);
                 const embed = new EmbedBuilder()
                     .setColor("Purple")
-                    .setTitle("✅ Greet Channel Set")
+                    .setTitle("<a:purple_verified:1439271259190988954> Greet Channel Set")
                     .setDescription(`All greet messages will now be sent in ${channel}`)
                     .setFooter({ text: `Set by ${user.tag}` });
 
