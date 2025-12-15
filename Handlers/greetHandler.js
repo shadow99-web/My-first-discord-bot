@@ -12,12 +12,8 @@ async function addGreet(guildId, greetData) {
 
 // ➖ Remove greet message
 async function removeGreet(guildId) {
-    const doc = await Greet.findOneAndUpdate(
-        { guildId },
-        { $unset: { greet: "" } },
-        { new: true }
-    );
-    return !!doc;
+    const res = await Greet.deleteOne({ guildId });
+    return res.deletedCount > 0;
 }
 
 // 🔍 Get greet message
