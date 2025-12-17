@@ -10,6 +10,8 @@ const LevelReward = require("../models/LevelReward");
 const canvacord = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
+const { getNoPrefix } = require("../handlers/noPrefixHandler");
+const { PermissionFlagsBits } = require("discord.js");
 
 module.exports = function (client, getPrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
@@ -170,25 +172,51 @@ try {
       console.error("❌ Autoresponse failed:", err);
     }
 
-    // ---------- Prefix Commands ----------
+// ---------- Prefix + NoPrefix Commands ----------
 try {
-  // Always safe – prevents undefined errors
   const prefixes = getPrefixes?.() || {};
   const guildPrefix = prefixes[message.guild.id] || defaultPrefix || "!";
 
-  // Ignore messages without prefix
-  if (!message.content.startsWith(guildPrefix)) return;
+  const content = message.content.trim();
+  const isPrefixed = content.startsWith(guildPrefix);
 
-  // Slice command + args
-  const args = message.content.slice(guildPrefix.length).trim().split(/ +/);
-  const commandName = args.shift()?.toLowerCase();
+  // 🔹 Get NoPrefix status
+  const noPrefixEnabled = await getNoPrefix(message.guild.id);
+
+  let commandName;
+  let args;
+
+  // ================= PREFIX COMMAND =================
+  if (isPrefixed) {
+    args = content.slice(guildPrefix.length).trim().split(/ +/);
+    commandName = args.shift()?.toLowerCase();
+  }
+
+  // ================= NO PREFIX COMMAND =================
+  else if (noPrefixEnabled) {
+    // Admin / Owner only
+    if (
+      !message.member.permissions.has(PermissionFlagsBits.Administrator) &&
+      message.guild.ownerId !== message.author.id
+    ) {
+      return; // silently ignore
+    }
+
+    args = content.split(/ +/);
+    commandName = args.shift()?.toLowerCase();
+  }
+
+  // ❌ Neither prefix nor noprefix
+  else {
+    return;
+  }
+
   if (!commandName) return;
 
-  // Fetch command
   const command = client.commands.get(commandName);
   if (!command) return;
 
-  // Optional: Block system check
+  // Optional block system
   if (
     blockHelpers?.isBlocked &&
     blockHelpers.isBlocked(message.guild.id, message.author.id, commandName)
@@ -196,21 +224,20 @@ try {
     return message.reply("🚫 You are blocked from using this command.");
   }
 
-  // Execute command
-  if (typeof command.execute === "function") {
-    await command.execute({
-      client,
-      message,
-      interaction: null,
-      args,
-      isPrefix: true,
-    });
-  } else {
-    await message.reply("❌ This command cannot be used with a prefix.").catch(() => {});
-  }
+  // Execute
+  await command.execute({
+    client,
+    message,
+    interaction: null,
+    args,
+    isPrefix: isPrefixed,
+  });
+
 } catch (err) {
-  console.error("❌ Prefix Command Error:", err);
-  await message.reply("⚠️ Something went wrong executing this prefix command.").catch(() => {});
+  console.error("❌ Command Error:", err);
+  await message
+    .reply("⚠️ Something went wrong executing this command.")
+    .catch(() => {});
 }
   });
 };
