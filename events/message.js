@@ -225,13 +225,40 @@ try {
   }
 
   // Execute
-  await command.execute({
-    client,
-    message,
-    interaction: null,
-    args,
-    isPrefix: isPrefixed,
-  });
+  const fakeInteraction = {
+  guild: message.guild,
+  user: message.author,
+  member: message.member,
+  channel: message.channel,
+  replied: false,
+  deferred: false,
+
+  deferReply: async () => {},
+  reply: async (payload) => {
+    fakeInteraction.replied = true;
+    return message.reply(payload);
+  },
+  editReply: async (payload) => {
+    return message.reply(payload);
+  },
+};
+
+const safeReply = async (payload) => {
+  if (fakeInteraction.replied) {
+    return message.channel.send(payload);
+  }
+  fakeInteraction.replied = true;
+  return message.reply(payload);
+};
+
+await command.execute({
+  client,
+  message,
+  interaction: fakeInteraction, // ✅ NOT null anymore
+  safeReply,                     // ✅ PROVIDED
+  args,
+  isPrefix: true,
+});
 
 } catch (err) {
   console.error("❌ Command Error:", err);
