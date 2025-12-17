@@ -4,7 +4,7 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { setNoPrefix, getNoPrefix } = require("../handlers/noPrefixHandler");
+const { setNoPrefix, getNoPrefix } = require("../Handlers/noPrefixHandler");
 
 module.exports = {
   name: "noprefix",
