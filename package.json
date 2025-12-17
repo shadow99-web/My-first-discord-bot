@@ -38,6 +38,7 @@
     "sharp": "^0.33.2",
     "gif-frames": "^1.0.1",
      "set-interval-async": "^2.0.2", 
+    "@anthropic-ai/sdk": "^0.24.1",
     "gifencoder": "^2.0.1", 
     "canvacord": "5.4.8", 
     "pinterest-dl": "^1.0.0", 
