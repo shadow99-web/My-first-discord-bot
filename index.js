@@ -103,8 +103,12 @@ try {
     for (const file of commandFiles) {
         try {
             const command = require(`./commands/${file}`);
-            const commandName = command.data?.name || command.name;
-
+            const commandName =
+  command.name ||
+  command.data?.name ||
+  file.replace(".js", "");
+            command.name = commandName;
+            
             if (commandName && typeof command.execute === "function") {
                 client.commands.set(commandName, command);
 
