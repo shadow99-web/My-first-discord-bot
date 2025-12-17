@@ -3,8 +3,12 @@ const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
 const ChatBotConfig = require("../models/chatbot");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const Anthropic = require("@anthropic-ai/sdk");
+
+const anthropic = new Anthropic({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
 const Level = require("../models/Level");
 const LevelReward = require("../models/LevelReward");
 const canvacord = require("canvacord");
@@ -143,9 +147,19 @@ try {
     await message.channel.sendTyping();
 
     try {
-      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const result = await model.generateContent(message.content);
-      const replyText = result.response.text() || "🤖 ...";
+      const msg = await anthropic.messages.create({
+  model: "claude-3-5-sonnet-20240620", // or opus
+  max_tokens: 500,
+  messages: [
+    {
+      role: "user",
+      content: message.content,
+    },
+  ],
+});
+
+const replyText =
+  msg.content?.[0]?.text || "🤖 ...";
 
       const chunks = replyText.match(/[\s\S]{1,1900}/g) || [];
       for (const chunk of chunks) {
