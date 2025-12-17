@@ -10,7 +10,7 @@ const LevelReward = require("../models/LevelReward");
 const canvacord = require("canvacord");
 const RankChannel = require("../models/RankChannel");
 const RankSettings = require("../models/RankSettings");
-const { getNoPrefix } = require("../handlers/noPrefixHandler");
+const { getNoPrefix } = require("../Handlers/noPrefixHandler");
 const { PermissionFlagsBits } = require("discord.js");
 
 module.exports = function (client, getPrefixes, blockHelpers) {
