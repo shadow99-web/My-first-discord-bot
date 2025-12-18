@@ -64,7 +64,8 @@ module.exports = {
     const { interaction, message, client, args, safeReply } = context;
     const isSlash = !!interaction;
     const actor = isSlash ? interaction.user : message.author;
-    const serverId = isSlash ? interaction.options.getString("server_id") : args?.[0];
+    const serverId =
+  interaction?.options?.getString?.("server_id") || args?.[0];
     const targetGuild = serverId ? client.guilds.cache.get(serverId) : (isSlash ? interaction.guild : message.guild);
 
     // Basic validations
