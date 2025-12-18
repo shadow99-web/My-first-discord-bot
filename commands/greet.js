@@ -77,8 +77,15 @@ module.exports = {
                     if (isPrefix && message) return message.reply(reply);
                     if (interaction) return interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
                 }
-
-                await addGreet(guild.id, { text, attachment: file?.url || null, author: user.tag });
+await addGreet(guild.id, {
+  text,
+  attachment: file ? {
+    url: file.url,
+    name: file.name,
+    contentType: file.contentType
+  } : null,
+  author: user.tag
+});
                 const embed = new EmbedBuilder()
                     .setColor("Green")
                     .setTitle("<a:purple_verified:1439271259190988954> Greet Added")
@@ -125,15 +132,36 @@ if (g.text && g.text.trim().length > 0) {
   embed.setDescription("📎 Greet message contains only an attachment.");
 }
 
-                if (g.attachment) {
-                    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(g.attachment)) embed.setImage(g.attachment);
-                    if (isPrefix && message) return message.reply({ embeds: [embed], files: g.attachment && !/\.(jpg|jpeg|png|gif|webp)$/i.test(g.attachment) ? [g.attachment] : [] });
-                    if (interaction) return interaction.reply({ embeds: [embed], files: g.attachment && !/\.(jpg|jpeg|png|gif|webp)$/i.test(g.attachment) ? [g.attachment] : [], flags: MessageFlags.Ephemeral });
-                }
+                 // top of file if not added
 
-                if (isPrefix && message) return message.reply({ embeds: [embed] });
-                if (interaction) return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-            }
+let files = [];
+
+if (g.attachment?.url) {
+    const res = await fetch(g.attachment.url);
+    const buffer = await res.buffer();
+
+    const fileName = g.attachment.name || "preview.png";
+
+    files.push({
+        attachment: buffer,
+        name: fileName
+    });
+
+    if (g.attachment.contentType?.startsWith("image")) {
+        embed.setImage("attachment://" + fileName);
+    }
+        }
+                if (isPrefix && message) {
+    return message.reply({ embeds: [embed], files });
+}
+
+if (interaction) {
+    return interaction.reply({
+        embeds: [embed],
+        files,
+        flags: MessageFlags.Ephemeral
+    });
+}
 
             // ----- CHANNEL -----
             if (sub === "channel") {
@@ -156,7 +184,7 @@ if (g.text && g.text.trim().length > 0) {
             }
 
         } catch (err) {
-            console.error("❌ Greet command error:", err);
+            console.error(" Greet command error:", err);
             if (isPrefix && message) return message.reply("⚠️ Error running greet command.").catch(() => {});
             if (interaction && !interaction.replied) return interaction.reply({ content: "⚠️ Error running greet command.", flags: MessageFlags.Ephemeral }).catch(() => {});
         }
