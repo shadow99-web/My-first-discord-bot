@@ -75,7 +75,28 @@ module.exports = (client) => {
           .setDescription(text || "👋 Welcome!")
           .setFooter({ text: `Added by ${greet.author || "Bot"}` });
 
-        await greetChannel.send({ embeds: [embed], files: greet.attachment ? [greet.attachment] : [] });
+        let files = [];
+
+if (greet.attachment?.url) {
+  const res = await fetch(greet.attachment.url);
+  const buffer = await res.buffer();
+
+  const fileName = greet.attachment.name || "greet.png";
+
+  files.push({
+    attachment: buffer,
+    name: fileName
+  });
+
+  if (greet.attachment.contentType?.startsWith("image")) {
+    embed.setImage("attachment://" + fileName);
+  }
+}
+
+await greetChannel.send({
+  embeds: [embed],
+  files
+});
       }
     } catch (err) {
       console.error("❌ Failed to send greet:", err);
