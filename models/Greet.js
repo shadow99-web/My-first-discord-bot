@@ -3,11 +3,19 @@ const mongoose = require("mongoose");
 
 const greetSchema = new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
+
   greet: {
     text: { type: String, default: "" },
-    attachment: { type: String, default: null },
+
+    attachment: {
+      url: { type: String, default: null },
+      name: { type: String, default: null },
+      contentType: { type: String, default: null },
+    },
+
     author: { type: String, default: null },
   },
+
   channel: { type: String, default: null }
 });
 
