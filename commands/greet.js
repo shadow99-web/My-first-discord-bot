@@ -112,6 +112,7 @@ await addGreet(guild.id, {
                     if (isPrefix && message) return message.reply(reply);
                     if (interaction) return interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
                 }
+            }
 
                 
                     
