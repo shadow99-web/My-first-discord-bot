@@ -79,8 +79,8 @@ module.exports = (client) => {
 
 if (greet.attachment?.url) {
   const res = await fetch(greet.attachment.url);
-  const buffer = await res.buffer();
-
+  const arrayBuffer = await res.arrayBuffer();
+const buffer = Buffer.from(arrayBuffer);
   const fileName = greet.attachment.name || "greet.png";
 
   files.push({
