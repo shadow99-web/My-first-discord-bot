@@ -99,20 +99,9 @@ module.exports = {
     let assetUrl = null;
     let rawName = null;
     let detectedType = null; // "emoji" or "sticker" or "attachment"
-    // 1) custom emoji in content OR embeds (mobile Discord fix)
+    // 1️⃣ DESKTOP: <:name:id> or <a:name:id>
 const emojiRegex = /<(a)?:([a-zA-Z0-9_]+):(\d+)>/;
-
-// check message content first
 let emMatch = emojiRegex.exec(repliedMsg.content || "");
-
-// 🔥 NEW: also check embeds (mobile sends emoji here)
-if (!emMatch && repliedMsg.embeds?.length) {
-  const embedText = repliedMsg.embeds
-    .map(e => `${e.description || ""} ${e.title || ""}`)
-    .join(" ");
-
-  emMatch = emojiRegex.exec(embedText);
-}
 
 if (emMatch) {
   const animated = !!emMatch[1];
@@ -122,6 +111,27 @@ if (emMatch) {
   assetUrl = `https://cdn.discordapp.com/emojis/${id}.${ext}`;
   detectedType = "emoji";
 }
+
+// 2️⃣ MOBILE: emoji comes as EMBED IMAGE (NO TEXT)
+if (
+  !assetUrl &&
+  repliedMsg.embeds?.length &&
+  repliedMsg.embeds[0].image?.url &&
+  repliedMsg.embeds[0].image.url.includes("/emojis/")
+) {
+  const url = repliedMsg.embeds[0].image.url;
+
+  // extract emoji ID
+  const idMatch = url.match(/emojis\/(\d+)\./);
+  if (idMatch) {
+    const id = idMatch[1];
+    const animated = url.endsWith(".gif");
+
+    rawName = "stolen_emoji";
+    assetUrl = `https://cdn.discordapp.com/emojis/${id}.${animated ? "gif" : "png"}`;
+    detectedType = "emoji";
+  }
+                                                          }
 
     // 2) sticker
     if (!assetUrl && repliedMsg.stickers && repliedMsg.stickers.size > 0) {
