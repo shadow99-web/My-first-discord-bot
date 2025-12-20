@@ -2,118 +2,131 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("disc
 const RankChannel = require("../models/RankChannel");
 
 module.exports = {
-  name: "setrankupchannel",
+  name: "setrankchannel",
   description: "Set or reset the rank-up message channel.",
-  usage: "!setrankupchannel <#channel> [backgroundURL] or !setrankupchannel reset",
+  usage: "!setrankchannel <#channel> [backgroundURL] | !setrankchannel reset",
 
   // ================================
-  // 💬 Slash Command Builder
+  // 💬 Slash Command
   // ================================
   data: new SlashCommandBuilder()
-    .setName("set-rankup-channel")
+    .setName("setrankchannel")
     .setDescription("Set or reset the rank-up message channel.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
         .setName("set")
-        .setDescription("Set the rank-up channel and optional background image.")
-        .addChannelOption(option =>
-          option
+        .setDescription("Set the rank-up channel and optional background.")
+        .addChannelOption(opt =>
+          opt
             .setName("channel")
-            .setDescription("Select the rank-up channel.")
+            .setDescription("Rank-up channel")
             .setRequired(true)
         )
-        .addStringOption(option =>
-          option
+        .addStringOption(opt =>
+          opt
             .setName("background")
-            .setDescription("Optional background image URL.")
+            .setDescription("Optional background image URL")
             .setRequired(false)
         )
     )
     .addSubcommand(sub =>
       sub
         .setName("reset")
-        .setDescription("Reset the rank-up settings to default.")
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDescription("Reset rank-up channel & background")
+    ),
 
   // ================================
-  // ⚙️ Slash Command Execute
+  // ⚙️ Slash Execute
   // ================================
   async execute({ interaction }) {
+    // 🔥 REQUIRED to prevent timeout
+    await interaction.deferReply({ ephemeral: true });
+
     const sub = interaction.options.getSubcommand();
 
+    // ----- SET -----
     if (sub === "set") {
       const channel = interaction.options.getChannel("channel");
       const background = interaction.options.getString("background");
 
       await RankChannel.findOneAndUpdate(
         { guildId: interaction.guild.id },
-        { channelId: channel.id, background: background || null },
+        {
+          channelId: channel.id,
+          background: background || null,
+        },
         { upsert: true, new: true }
       );
 
       const embed = new EmbedBuilder()
         .setColor("Aqua")
         .setDescription(
-          `✅ Rank-up messages will now appear in ${channel}.${
-            background ? `\n🎨 Custom background set:\n${background}` : ""
-          }`
+          `✅ Rank-up messages will now be sent in ${channel}` +
+          (background ? `\n Background set:\n${background}` : "")
         );
 
-      return interaction.reply({ embeds: [embed], ephemeral: false });
+      return interaction.editReply({ embeds: [embed] });
     }
 
+    // ----- RESET -----
     if (sub === "reset") {
       await RankChannel.findOneAndDelete({ guildId: interaction.guild.id });
 
       const embed = new EmbedBuilder()
         .setColor("Red")
-        .setDescription("🔄 Rank-up settings have been reset to default.");
+        .setDescription("🔄 Rank-up settings have been reset.");
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.editReply({ embeds: [embed] });
     }
   },
 
   // ================================
-  // 🧠 Prefix Command Execute
+  // 🧠 Prefix Execute
   // ================================
   async prefixExecute(message, args) {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return message.reply("❌ You don’t have permission to use this command.");
     }
 
-    const sub = args[0];
+    const sub = args[0]?.toLowerCase();
 
-    if (!sub)
+    if (!sub) {
       return message.reply(
-        `Usage:\n\`${this.usage}\`\nExample:\n!setrankupchannel #general https://imgur.com/bg.png\n!setrankupchannel reset`
+        `Usage:\n\`${this.usage}\`\n\nExamples:\n` +
+        `\`!setrankchannel #general https://imgur.com/bg.png\`\n` +
+        `\`!setrankchannel reset\``
       );
+    }
 
     // ----- RESET -----
-    if (sub.toLowerCase() === "reset") {
+    if (sub === "reset") {
       await RankChannel.findOneAndDelete({ guildId: message.guild.id });
-      return message.reply("🔄 Rank-up settings have been reset to default.");
+      return message.reply("🔄 Rank-up settings have been reset.");
     }
 
     // ----- SET -----
     const channel = message.mentions.channels.first();
-    if (!channel)
+    if (!channel) {
       return message.reply("❌ Please mention a valid channel.");
+    }
 
     const background = args[1] || null;
 
     await RankChannel.findOneAndUpdate(
       { guildId: message.guild.id },
-      { channelId: channel.id, background },
+      {
+        channelId: channel.id,
+        background,
+      },
       { upsert: true, new: true }
     );
 
     const embed = new EmbedBuilder()
       .setColor("Aqua")
       .setDescription(
-        `✅ Rank-up messages will now appear in ${channel}.${
-          background ? `\n🎨 Custom background set:\n${background}` : ""
-        }`
+        `✅ Rank-up messages will now be sent in ${channel}` +
+        (background ? `\n Background set:\n${background}` : "")
       );
 
     return message.reply({ embeds: [embed] });
