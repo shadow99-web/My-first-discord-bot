@@ -99,17 +99,29 @@ module.exports = {
     let assetUrl = null;
     let rawName = null;
     let detectedType = null; // "emoji" or "sticker" or "attachment"
-    // 1) custom emoji in message text: <a:name:id> or <:name:id>
-    const emojiRegex = /<(a)?:([a-zA-Z0-9_]+):(\d+)>/;
-    const emMatch = emojiRegex.exec(repliedMsg.content);
-    if (emMatch) {
-      const animated = !!emMatch[1];
-      rawName = emMatch[2];
-      const id = emMatch[3];
-      const ext = animated ? "gif" : "png";
-      assetUrl = `https://cdn.discordapp.com/emojis/${id}.${ext}`;
-      detectedType = "emoji";
-    }
+    // 1) custom emoji in content OR embeds (mobile Discord fix)
+const emojiRegex = /<(a)?:([a-zA-Z0-9_]+):(\d+)>/;
+
+// check message content first
+let emMatch = emojiRegex.exec(repliedMsg.content || "");
+
+// 🔥 NEW: also check embeds (mobile sends emoji here)
+if (!emMatch && repliedMsg.embeds?.length) {
+  const embedText = repliedMsg.embeds
+    .map(e => `${e.description || ""} ${e.title || ""}`)
+    .join(" ");
+
+  emMatch = emojiRegex.exec(embedText);
+}
+
+if (emMatch) {
+  const animated = !!emMatch[1];
+  rawName = emMatch[2];
+  const id = emMatch[3];
+  const ext = animated ? "gif" : "png";
+  assetUrl = `https://cdn.discordapp.com/emojis/${id}.${ext}`;
+  detectedType = "emoji";
+}
 
     // 2) sticker
     if (!assetUrl && repliedMsg.stickers && repliedMsg.stickers.size > 0) {
