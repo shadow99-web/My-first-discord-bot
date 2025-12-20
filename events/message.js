@@ -3,6 +3,8 @@ const { getResponse } = require("../Handlers/autoresponseHandler");
 const { sendTicketPanel } = require("../Handlers/ticketHandler");
 const { defaultPrefix } = require("../utils/storage");
 const ChatBotConfig = require("../models/chatbot");
+const FakeOptions = require("../utils/fakeOptions");
+
 const Anthropic = require("@anthropic-ai/sdk");
 
 const anthropic = new Anthropic({
@@ -240,40 +242,41 @@ try {
 
   // Execute
   const fakeInteraction = {
-  guild: message.guild,
-  user: message.author,
-  member: message.member,
-  channel: message.channel,
-  replied: false,
-  deferred: false,
+    isFake: true,
+    guild: message.guild,
+    user: message.author,
+    member: message.member,
+    channel: message.channel,
 
-  deferReply: async () => {},
-  reply: async (payload) => {
+    options: new FakeOptions(args, message), // ✅ critical
+
+    replied: false,
+    deferred: false,
+
+    reply: async (payload) => {
+      fakeInteraction.replied = true;
+      return message.reply(payload);
+    },
+    deferReply: async () => {},
+    editReply: async (payload) => message.reply(payload),
+  };
+
+  const safeReply = async (payload) => {
+    if (fakeInteraction.replied) {
+      return message.channel.send(payload);
+    }
     fakeInteraction.replied = true;
     return message.reply(payload);
-  },
-  editReply: async (payload) => {
-    return message.reply(payload);
-  },
-};
+  };
 
-const safeReply = async (payload) => {
-  if (fakeInteraction.replied) {
-    return message.channel.send(payload);
-  }
-  fakeInteraction.replied = true;
-  return message.reply(payload);
-};
-
-await command.execute({
-  client,
-  message,
-  interaction: fakeInteraction, // ✅ NOT null anymore
-  safeReply,                     // ✅ PROVIDED
-  args,
-  isPrefix: true,
-});
-
+  await command.execute({
+    client,
+    message,
+    interaction: fakeInteraction, // ✅ interaction.options EXISTS
+    safeReply,
+    args,
+    isPrefix: true,
+  });
 } catch (err) {
   console.error("❌ Command Error:", err);
   await message
