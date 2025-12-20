@@ -1,17 +1,23 @@
+
 // commands/steal.js
 const {
-  ContextMenuCommandBuilder,
-  ApplicationCommandType,
+  SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  PermissionFlagsBits
+  PermissionFlagsBits,
 } = require("discord.js");
 const axios = require("axios");
 
-function cleanName(input = "emote_item") {
-  return input
+/* ---------------------------------- */
+/* Utils                               */
+/* ---------------------------------- */
+
+// ✅ Safe emoji/sticker name
+function cleanName(input) {
+  if (!input) return "emote_item";
+  return String(input)
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, "_")
     .replace(/_+/g, "_")
@@ -19,64 +25,144 @@ function cleanName(input = "emote_item") {
     .slice(0, 32) || "emote_item";
 }
 
+// ✅ Unified reply helper
+async function safeRespond({ interaction, message, safeReply }, payload) {
+  try {
+    if (interaction && !interaction.isFake) {
+      return interaction.replied || interaction.deferred
+        ? interaction.followUp(payload)
+        : interaction.reply(payload);
+    }
+    if (message) return message.reply(payload);
+  } catch (err) {
+    console.error("❌ safeRespond error:", err);
+  }
+}
+
+// ✅ Download image → buffer
 async function fetchBuffer(url) {
-  const res = await axios.get(url, { responseType: "arraybuffer" });
+  const res = await axios.get(url, { responseType: "arraybuffer", timeout: 15000 });
   return Buffer.from(res.data);
 }
 
+/* ---------------------------------- */
+/* Command                             */
+/* ---------------------------------- */
+
 module.exports = {
-  // ✅ MESSAGE CONTEXT MENU (RIGHT CLICK → APPS → STEAL)
-  data: new ContextMenuCommandBuilder()
-    .setName("Steal")
-    .setType(ApplicationCommandType.Message),
+  data: new SlashCommandBuilder()
+    .setName("steal")
+    .setDescription("Steal an emoji or sticker by replying to a message")
+    .addStringOption(o =>
+      o.setName("server_id").setDescription("Target server ID (optional)")
+    ),
 
   name: "steal",
-  aliases: ["stealemote"],
+  aliases: ["stealemote", "stealemoji", "stealsticker"],
 
+  /**
+   * context = { interaction, message, client, args, safeReply }
+   */
   async execute(context) {
-    const { interaction, message, client } = context;
+    const { interaction, message, client, args, safeReply } = context;
 
-    const targetGuild = interaction?.guild || message.guild;
-    const actor = interaction?.user || message.author;
+    // ✅ IMPORTANT FIX
+    const isSlash = interaction && !interaction.isFake;
+    const actor = isSlash ? interaction.user : message.author;
 
-    if (!targetGuild.members.me.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) {
-      return interaction.reply({ content: "❌ I need **Manage Emojis & Stickers**.", ephemeral: true });
+    const serverId = isSlash
+      ? interaction.options.getString("server_id")
+      : args?.[0];
+
+    const targetGuild =
+      serverId
+        ? client.guilds.cache.get(serverId)
+        : isSlash
+        ? interaction.guild
+        : message.guild;
+
+    /* ---------------------------------- */
+    /* Permission checks                  */
+    /* ---------------------------------- */
+
+    if (!targetGuild) {
+      return safeRespond({ interaction, message, safeReply }, {
+        content: "❌ I can't find that server.",
+        ephemeral: true,
+      });
     }
 
-    // ✅ GET TARGET MESSAGE
-    const repliedMsg = interaction
-      ? interaction.targetMessage
-      : message.reference
-        ? await message.channel.messages.fetch(message.reference.messageId)
-        : null;
+    if (
+      !targetGuild.members.me.permissions.has(
+        PermissionFlagsBits.ManageEmojisAndStickers
+      )
+    ) {
+      return safeRespond({ interaction, message, safeReply }, {
+        content: "❌ I need **Manage Emojis & Stickers** permission.",
+        ephemeral: true,
+      });
+    }
+
+    /* ---------------------------------- */
+    /* 🔥 FETCH REPLIED MESSAGE (FIXED)   */
+    /* ---------------------------------- */
+
+    let repliedMsg = null;
+
+    try {
+      // Slash context menu
+      if (isSlash && interaction.targetId) {
+        repliedMsg = await interaction.channel.messages.fetch(interaction.targetId);
+      }
+      // Prefix / no-prefix / mobile reply
+      else if (message?.reference?.messageId) {
+        repliedMsg = await message.fetchReference();
+      }
+    } catch (err) {
+      console.error("❌ Fetch replied message failed:", err);
+    }
 
     if (!repliedMsg) {
-      return interaction.reply({ content: "❌ Reply to a message or use message context menu.", ephemeral: true });
+      return safeRespond({ interaction, message, safeReply }, {
+        content: "❌ Reply to a message or use **Message Context Menu → Apps → Steal**.",
+        ephemeral: true,
+      });
     }
 
-    let assetUrl, rawName, detectedType;
+    /* ---------------------------------- */
+    /* 🔍 Detect Emoji / Sticker / Image  */
+    /* ---------------------------------- */
 
-    // DESKTOP EMOJI
-    const emojiMatch = repliedMsg.content?.match(/<(a)?:([^:]+):(\d+)>/);
-    if (emojiMatch) {
-      const [, animated, name, id] = emojiMatch;
-      assetUrl = `https://cdn.discordapp.com/emojis/${id}.${animated ? "gif" : "png"}`;
-      rawName = name;
+    let assetUrl = null;
+    let rawName = null;
+    let detectedType = null;
+
+    // 1️⃣ Custom emoji in text (desktop)
+    const emojiRegex = /<(a)?:([a-zA-Z0-9_]+):(\d+)>/;
+    const match = emojiRegex.exec(repliedMsg.content || "");
+
+    if (match) {
+      const animated = !!match[1];
+      rawName = match[2];
+      assetUrl = `https://cdn.discordapp.com/emojis/${match[3]}.${animated ? "gif" : "png"}`;
       detectedType = "emoji";
     }
 
-    // MOBILE EMOJI (EMBED)
-    if (!assetUrl && repliedMsg.embeds?.[0]?.image?.url?.includes("/emojis/")) {
+    // 2️⃣ Mobile emoji (embed image)
+    if (
+      !assetUrl &&
+      repliedMsg.embeds?.[0]?.image?.url?.includes("/emojis/")
+    ) {
       const url = repliedMsg.embeds[0].image.url;
-      const id = url.match(/emojis\/(\d+)\./)?.[1];
+      const id = url.match(/emojis\/(\d+)/)?.[1];
       if (id) {
-        assetUrl = url;
+        assetUrl = `https://cdn.discordapp.com/emojis/${id}.${url.endsWith(".gif") ? "gif" : "png"}`;
         rawName = "stolen_emoji";
         detectedType = "emoji";
       }
     }
 
-    // STICKER
+    // 3️⃣ Sticker
     if (!assetUrl && repliedMsg.stickers?.size) {
       const sticker = repliedMsg.stickers.first();
       assetUrl = sticker.url;
@@ -84,55 +170,79 @@ module.exports = {
       detectedType = "sticker";
     }
 
-    // ATTACHMENT
+    // 4️⃣ Image attachment
     if (!assetUrl && repliedMsg.attachments?.size) {
       const att = repliedMsg.attachments.first();
       if (att.contentType?.startsWith("image")) {
         assetUrl = att.url;
-        rawName = att.name.split(".")[0];
+        rawName = att.name?.split(".")[0];
         detectedType = "attachment";
       }
     }
 
     if (!assetUrl) {
-      return interaction.reply({ content: "❌ No emoji, sticker, or image found.", ephemeral: true });
+      return safeRespond({ interaction, message, safeReply }, {
+        content: "❌ No emoji, sticker, or image found.",
+        ephemeral: true,
+      });
     }
+
+    /* ---------------------------------- */
+    /* Preview                            */
+    /* ---------------------------------- */
 
     const clean = cleanName(rawName);
 
     const embed = new EmbedBuilder()
       .setTitle("🪄 Steal Preview")
-      .setDescription(`Detected: **${detectedType.toUpperCase()}**\nName: \`${clean}\``)
+      .setDescription(`Type: **${detectedType.toUpperCase()}**\nName: \`${clean}\``)
       .setImage(assetUrl)
       .setFooter({ text: `Requested by ${actor.tag}` });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("emoji").setLabel("Add Emoji").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("sticker").setLabel("Add Sticker").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder()
+        .setCustomId("steal_emoji")
+        .setLabel("Add as Emoji")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("steal_sticker")
+        .setLabel("Add as Sticker")
+        .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.reply({ embeds: [embed], components: [row] });
+    const sent = isSlash
+      ? await interaction.reply({ embeds: [embed], components: [row], fetchReply: true })
+      : await message.reply({ embeds: [embed], components: [row] });
 
-    const msg = await interaction.fetchReply();
-    const collector = msg.createMessageComponentCollector({ time: 30000 });
+    /* ---------------------------------- */
+    /* Button collector                   */
+    /* ---------------------------------- */
+
+    const collector = sent.createMessageComponentCollector({ time: 30000 });
 
     collector.on("collect", async btn => {
-      if (btn.user.id !== actor.id) return btn.reply({ content: "❌ Not for you.", ephemeral: true });
+      if (btn.user.id !== actor.id) {
+        return btn.reply({ content: "❌ Only command user can click.", ephemeral: true });
+      }
 
       await btn.deferUpdate();
       const buffer = await fetchBuffer(assetUrl);
 
       try {
-        if (btn.customId === "emoji") {
-          if (buffer.length > 256_000) {
+        if (btn.customId === "steal_emoji") {
+          if (buffer.length > 256 * 1024) {
             return btn.editReply({ content: "⚠️ Emoji too large.", components: [] });
           }
-          const emoji = await targetGuild.emojis.create({ attachment: buffer, name: clean });
-          return btn.editReply({ content: `✅ Added ${emoji}`, components: [] });
+          const e = await targetGuild.emojis.create({ attachment: buffer, name: clean });
+          return btn.editReply({ content: `✅ Emoji added: ${e}`, components: [] });
         }
 
-        if (btn.customId === "sticker") {
-          await targetGuild.stickers.create({ file: buffer, name: clean, tags: "stolen" });
+        if (btn.customId === "steal_sticker") {
+          await targetGuild.stickers.create({
+            file: buffer,
+            name: clean.slice(0, 30),
+            tags: "stolen",
+          });
           return btn.editReply({ content: "✅ Sticker added.", components: [] });
         }
       } catch (err) {
@@ -140,5 +250,5 @@ module.exports = {
         return btn.editReply({ content: "❌ Failed to add.", components: [] });
       }
     });
-  }
+  },
 };
