@@ -88,7 +88,7 @@ const targetChannel = rankChannelData
   : message.channel;
 
 await targetChannel.send({
-  content: `<a:5756_YeetusDeletusDance:1433125435327254698>  ${message.author} leveled up to **Level ${userData.level}**!`,
+  content: `<a:lyf_party:1447282086368251974>  ${message.author} leveled up to **Level ${userData.level} ** GG !!`,
   files: [{ attachment: rankImage, name: "rank-card.png" }],
 }).catch(() => {});
       
