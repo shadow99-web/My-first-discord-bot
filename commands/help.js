@@ -1,3 +1,4 @@
+
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -14,22 +15,34 @@ const SERVER_LINK = "https://discord.gg/Xp27hHZKrk";
 
 module.exports = {
   name: "help",
-  description: "Show the SHADOW help menu",
+  description: "Show the help menu",
   data: new SlashCommandBuilder()
     .setName("help")
     .setDescription("Display the help menu"),
 
-  async execute(context) {
-    const isSlash = !!context.interaction;
-    const user = isSlash ? context.interaction.user : context.message.author;
-    const guild = isSlash ? context.interaction.guild : context.message.guild;
-    const client = isSlash ? context.interaction.client : context.message.client;
+  async execute({ interaction, message, client }) {
+    const isSlash = !!interaction;
 
-    // 🧠 Auto-load commands
+    const user =
+      interaction?.user ||
+      message?.author;
+
+    const guild =
+      interaction?.guild ||
+      message?.guild;
+
+    const botClient =
+      interaction?.client ||
+      message?.client ||
+      client;
+
+    if (!user || !guild || !botClient) return;
+
+    // Load commands
     const commandsPath = path.join(__dirname);
     const commandFiles = fs
       .readdirSync(commandsPath)
-      .filter((file) => file.endsWith(".js") && file !== "help.js");
+      .filter((f) => f.endsWith(".js") && f !== "help.js");
 
     const categories = {};
     for (const file of commandFiles) {
@@ -39,102 +52,76 @@ module.exports = {
       categories[cat].push(cmd.data?.name || cmd.name);
     }
 
-    const totalCommands = commandFiles.length;
-
-    // 🎨 Main Help Embed
     const embed = new EmbedBuilder()
-      .setAuthor({ name: "𝙎𝙃𝘼𝘿𝙊𝙒 Help Menu", iconURL: client.user.displayAvatarURL() })
+      .setAuthor({
+        name: " <:help:1442896031565218074> Help Menu",
+        iconURL: botClient.user.displayAvatarURL(),
+      })
       .setDescription(
-        `> **Prefix Information**\nMy prefix for **${guild.name}** is \`${PREFIX}\`\n` +
-        `You can also mention ${client.user} to use me.\n\n` +
-        `> **Help Info**\nUse \`${PREFIX}command\` or \`/command\` to run any command.\n` +
-        `Currently loaded **${totalCommands} commands** across **${Object.keys(categories).length} categories**.\n\n` +
-        `> **Links:**\n[Support Server](${SERVER_LINK})`
+        `> **Prefix:** \`${PREFIX}\`\n` +
+        `> **Commands:** ${commandFiles.length}\n\n` +
+        `[Support Server](${SERVER_LINK})`
       )
-      .setThumbnail(client.user.displayAvatarURL())
+      .setThumbnail(botClient.user.displayAvatarURL())
       .setColor("Blue")
-      .setFooter({ text: "𝙎𝙃𝘼𝘿𝙊𝙒 • Help Center", iconURL: client.user.displayAvatarURL() })
       .setTimestamp();
 
-    // 🔘 Buttons
     const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
+        .setCustomId("help_home")
         .setLabel("🏠 Home")
-        .setStyle(ButtonStyle.Primary)
-        .setCustomId("help_home"),
+        .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setLabel("📜 Commands List")
+        .setCustomId("help_list")
+        .setLabel(" <a:a_Online:1440333669863522485> Commands")
         .setStyle(ButtonStyle.Secondary)
-        .setCustomId("help_list"),
-      new ButtonBuilder()
-        .setLabel("🔘 Buttons Menu")
-        .setStyle(ButtonStyle.Success)
-        .setCustomId("help_buttons")
     );
 
-    // 🔽 Dropdown (categories)
     const dropdown = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("help_select")
-        .setPlaceholder("Select a category to view commands")
+        .setPlaceholder("Select category")
         .addOptions(
-          Object.keys(categories).map((cat) => ({
-            label: cat,
-            description: `View ${categories[cat].length} commands`,
-            value: cat,
+          Object.keys(categories).map((c) => ({
+            label: c,
+            value: c,
+            description: `${categories[c].length} commands`,
           }))
         )
     );
 
-    const msg = isSlash
-      ? await context.interaction.reply({
-          embeds: [embed],
-          components: [buttons, dropdown],
-          fetchReply: true,
-        })
-      : await context.message.reply({
-          embeds: [embed],
-          components: [buttons, dropdown],
-        });
+    let msg;
+    if (isSlash) {
+      msg = await interaction.reply({
+        embeds: [embed],
+        components: [buttons, dropdown],
+        fetchReply: true,
+      });
+    } else {
+      msg = await message.reply({
+        embeds: [embed],
+        components: [buttons, dropdown],
+      });
+    }
 
-    // 🕹️ Collector for buttons + menu
-    const collector = msg.createMessageComponentCollector({ time: 60_000 });
+    const collector = msg.createMessageComponentCollector({ time: 60000 });
 
     collector.on("collect", async (i) => {
       if (i.user.id !== user.id)
-        return i.reply({ content: "❌ You can’t control this menu!", ephemeral: true });
+        return i.reply({ content: "❌ Not for you", ephemeral: true });
 
-      if (i.customId === "help_home") {
-        await i.update({ embeds: [embed], components: [buttons, dropdown] });
-      } else if (i.customId === "help_list") {
-        const listEmbed = new EmbedBuilder()
-          .setTitle("📜 Commands List")
+      if (i.customId === "help_list") {
+        const list = new EmbedBuilder()
+          .setTitle(" <a:a_Online:1440333669863522485> Commands")
           .setDescription(
             Object.entries(categories)
-              .map(([cat, cmds]) => `**${cat}**\n> ${cmds.join(", ")}`)
+              .map(([k, v]) => `**${k}**\n${v.map(x => `\`${x}\``).join(", ")}`)
               .join("\n\n")
-          )
-          .setColor("Blue")
-          .setFooter({ text: "Use buttons or select menu to navigate." });
-        await i.update({ embeds: [listEmbed], components: [buttons, dropdown] });
-      } else if (i.customId === "help_buttons") {
-        const btnEmbed = new EmbedBuilder()
-          .setTitle("🔘 Buttons Menu Info")
-          .setDescription(
-            "This panel lets you easily navigate between help pages.\n\n" +
-            "🏠 **Home:** Show basic info\n📜 **Commands List:** Show all commands\n🔘 **Buttons Menu:** You’re here!"
-          )
-          .setColor("Blue");
-        await i.update({ embeds: [btnEmbed], components: [buttons, dropdown] });
-      } else if (i.customId === "help_select") {
-        const selected = i.values[0];
-        const cmds = categories[selected];
-        const catEmbed = new EmbedBuilder()
-          .setTitle(`📂 ${selected} Commands`)
-          .setDescription(cmds.map((c) => `• \`${c}\``).join("\n"))
-          .setColor("Blue")
-          .setFooter({ text: `Total: ${cmds.length}` });
-        await i.update({ embeds: [catEmbed], components: [buttons, dropdown] });
+          );
+
+        await i.update({ embeds: [list], components: [buttons, dropdown] });
+      } else {
+        await i.update({ embeds: [embed], components: [buttons, dropdown] });
       }
     });
 
