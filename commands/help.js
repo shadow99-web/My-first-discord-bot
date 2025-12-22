@@ -73,7 +73,7 @@ module.exports = {
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId("help_list")
-        .setLabel(" <a:a_Online:1440333669863522485> Commands")
+        .setLabel(" 💎 Commands")
         .setStyle(ButtonStyle.Secondary)
     );
 
