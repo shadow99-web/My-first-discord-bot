@@ -54,7 +54,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setAuthor({
-        name: " <:help:1442896031565218074> Help Menu",
+        name: "  Help Menu",
         iconURL: botClient.user.displayAvatarURL(),
       })
       .setDescription(
