@@ -1,105 +1,81 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder
-} = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const FBFeed = require("../models/FacebookFeed");
+const axios = require("axios");
 
 module.exports = {
+  name: "fb",
+  description: "Facebook auto-post system",
+
   data: new SlashCommandBuilder()
     .setName("fb")
     .setDescription("Facebook auto-post system")
     .addSubcommand(sub =>
-      sub
-        .setName("add")
-        .setDescription("Add Facebook RSS feed")
-        .addStringOption(o =>
-          o
-            .setName("rss")
-            .setDescription("Facebook RSS link")
+      sub.setName("add")
+        .setDescription("Add a Facebook page to auto-post")
+        .addStringOption(opt =>
+          opt.setName("page")
+            .setDescription("Facebook page ID or username")
             .setRequired(true)
         )
-        .addChannelOption(o =>
-          o
-            .setName("channel")
+        .addChannelOption(opt =>
+          opt.setName("channel")
             .setDescription("Channel to post in")
             .setRequired(true)
         )
     )
     .addSubcommand(sub =>
-      sub
-        .setName("remove")
-        .setDescription("Remove Facebook feed")
+      sub.setName("remove")
+        .setDescription("Remove Facebook feed from server")
     ),
 
-  // ======================
-  // SLASH COMMAND
-  // ======================
-  async execute({ interaction }) {
-    const sub = interaction.options.getSubcommand();
+  async execute({ interaction, message, safeReply, args, isPrefix, client }) {
+    const isSlash = !!interaction;
 
-    if (sub === "add") {
-      const rss = interaction.options.getString("rss");
-      const channel = interaction.options.getChannel("channel");
-
-      await FBFeed.findOneAndUpdate(
-        { guildId: interaction.guild.id },
-        { rssUrl: rss, channelId: channel.id },
-        { upsert: true }
-      );
-
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("Green")
-            .setDescription(`✅ Facebook feed added!\nPosts will be sent to ${channel}`)
-        ],
-        ephemeral: true
-      });
-    }
-
-    if (sub === "remove") {
-      await FBFeed.deleteOne({ guildId: interaction.guild.id });
-
-      return interaction.reply({
-        content: "🗑️ Facebook feed removed.",
-        ephemeral: true
-      });
-    }
-  },
-
-  // ======================
-  // PREFIX COMMAND
-  // ======================
-  async prefixExecute(message, args) {
-    const sub = args[0];
-
+    // Determine subcommand
+    let sub = isSlash ? interaction.options.getSubcommand() : args?.[0];
     if (!sub) {
-      return message.reply(
-        "Usage:\n`!fb add <rss> #channel`\n`!fb remove`"
-      );
+      return safeReply({
+        content: "Usage:\n`!fb add <page> #channel`\n`!fb remove`",
+      });
     }
 
+    // ---------- ADD ----------
     if (sub === "add") {
-      const rss = args[1];
-      const channel = message.mentions.channels.first();
-
-      if (!rss || !channel) {
-        return message.reply("❌ Missing RSS link or channel.");
+      const pageId = isSlash ? interaction.options.getString("page") : args[1];
+      const channel = isSlash ? interaction.options.getChannel("channel") : message.mentions.channels.first();
+      if (!pageId || !channel) {
+        return safeReply({ content: "❌ Missing page ID or channel." });
       }
 
       await FBFeed.findOneAndUpdate(
-        { guildId: message.guild.id },
-        { rssUrl: rss, channelId: channel.id },
+        { guildId: (isSlash ? interaction.guild.id : message.guild.id), pageId },
+        {
+          guildId: isSlash ? interaction.guild.id : message.guild.id,
+          pageId,
+          channelId: channel.id,
+          lastPostId: null
+        },
         { upsert: true }
       );
 
-      return message.reply(`✅ Facebook feed added to ${channel}`);
+      return safeReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Green")
+            .setDescription(`✅ Facebook feed added!\nPosts from **${pageId}** will be sent to ${channel}`)
+        ],
+      });
     }
 
+    // ---------- REMOVE ----------
     if (sub === "remove") {
-      await FBFeed.deleteOne({ guildId: message.guild.id });
-
-      return message.reply("🗑️ Facebook feed removed.");
+      await FBFeed.deleteMany({ guildId: isSlash ? interaction.guild.id : message.guild.id });
+      return safeReply({ content: "🗑️ All Facebook feeds removed for this server." });
     }
+  },
+
+  // ---------- Prefix execution ----------
+  async prefixExecute(message, args, safeReply) {
+    return this.execute({ message, args, isPrefix: true, safeReply });
   }
 };
