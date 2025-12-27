@@ -42,6 +42,7 @@
     "gifencoder": "^2.0.1", 
     "canvacord": "5.4.8", 
     "pinterest-dl": "^1.0.0", 
+    "rss-parser": "^3.13.0",
     "@google/generative-ai": "^0.11.4", 
     "tinify": "^1.7.1", 
     "fluent-ffmpeg": "^2.1.2",
