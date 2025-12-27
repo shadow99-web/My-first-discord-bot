@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");
 
-const fbFeedSchema = new mongoose.Schema({
+const FacebookFeedSchema = new mongoose.Schema({
   guildId: String,
+  pageId: String,
   channelId: String,
-  rssUrl: String,
   lastPostId: String
 });
 
-module.exports = mongoose.model("FacebookFeed", fbFeedSchema);
+module.exports = mongoose.model("FacebookFeed", FacebookFeedSchema);
