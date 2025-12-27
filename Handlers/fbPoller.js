@@ -1,66 +1,54 @@
-const FBFeed = require("../models/FacebookFeed");
-const axios = require("axios");
+const Parser = require("rss-parser");
+const parser = new Parser();
+const FacebookFeed = require("../models/FacebookFeed");
 const { EmbedBuilder } = require("discord.js");
 
-const FB_ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN; // Page or App Token
+async function startPoller(client) {
+  console.log("📡 Facebook RSS Poller started");
 
-async function fetchLatestPost(pageId) {
-  try {
-    const res = await axios.get(`https://graph.facebook.com/v17.0/${pageId}/posts`, {
-      params: {
-        access_token: FB_ACCESS_TOKEN,
-        fields: "id,message,created_time,full_picture,type",
-        limit: 1
+  setInterval(async () => {
+    const feeds = await FacebookFeed.find();
+    if (!feeds.length) return;
+
+    for (const feed of feeds) {
+      try {
+        const data = await parser.parseURL(feed.rssUrl);
+        if (!data.items.length) continue;
+
+        const latest = data.items[0];
+
+        // Skip if already posted
+        if (feed.lastPostLink === latest.link) continue;
+
+        const channel = await client.channels.fetch(feed.channelId).catch(() => null);
+        if (!channel) continue;
+
+        // Extract image from HTML
+        let image = null;
+        const match = latest.content?.match(/<img[^>]+src="([^">]+)"/);
+        if (match) image = match[1];
+
+        const embed = new EmbedBuilder()
+          .setColor("#1877F2")
+          .setTitle("📘 Facebook Post")
+          .setURL(latest.link)
+          .setDescription(
+            latest.contentSnippet?.slice(0, 4000) || "New post"
+          )
+          .setTimestamp(new Date(latest.pubDate));
+
+        if (image) embed.setImage(image);
+
+        await channel.send({ embeds: [embed] });
+
+        feed.lastPostLink = latest.link;
+        await feed.save();
+
+      } catch (err) {
+        console.error("❌ FB RSS Error:", err.message);
       }
-    });
-
-    const posts = res.data.data;
-    if (!posts || !posts.length) return null;
-
-    const post = posts[0];
-
-    // Only allow text + images
-    if (post.type !== "photo" && !post.message) return null;
-
-    return post;
-  } catch (err) {
-    console.error("❌ FB API Error:", err.response?.data || err.message);
-    return null;
-  }
-}
-
-async function pollFeeds(client) {
-  const feeds = await FBFeed.find({});
-  for (const feed of feeds) {
-    const channel = client.channels.cache.get(feed.channelId);
-    if (!channel) continue;
-
-    const post = await fetchLatestPost(feed.pageId);
-    if (!post) continue;
-
-    if (feed.lastPostId === post.id) continue; // already posted
-
-    // Create embed for text + images
-    const embed = new EmbedBuilder()
-      .setTitle(`New post from ${feed.pageId}`)
-      .setURL(`https://facebook.com/${post.id}`)
-      .setColor("Blue")
-      .setTimestamp(new Date(post.created_time));
-
-    if (post.message) embed.setDescription(post.message);
-    if (post.full_picture) embed.setImage(post.full_picture);
-
-    await channel.send({ embeds: [embed] }).catch(() => {});
-
-    // Save last posted ID
-    feed.lastPostId = post.id;
-    await feed.save();
-  }
-}
-
-// Poll every minute
-function startPoller(client, interval = 60_000) {
-  setInterval(() => pollFeeds(client), interval);
+    }
+  }, 10 * 60 * 1000); // 10 minutes
 }
 
 module.exports = { startPoller };
