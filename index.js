@@ -185,6 +185,9 @@ async function deployCommandsAndLogin() {
 
         await client.login(process.env.TOKEN);
         console.log(`🤖 Logged in as ${client.user.tag}`);
+        
+        const { startPoller } = require("./Handlers/fbPoller");
+startPoller(client);
         // ===============
     } catch (err) {
         console.error("❌ Failed to deploy commands or login:", err);
