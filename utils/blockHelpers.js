@@ -7,31 +7,42 @@ const SAFE_COMMANDS = [
   "listblocked",
 ];
 
-async function isAdmin(member) {
+function isAdmin(member) {
   if (!member) return false;
-
-  return member.permissions.has(
-    PermissionFlagsBits.Administrator
-  );
+  return member.permissions?.has(PermissionFlagsBits.Administrator);
 }
 
-async function isBlocked({ guildId, userId, command, member }) {
-  
-    // 🟢 SAFE COMMANDS BYPASS
-  if (SAFE_COMMANDS.includes(command)) return false;
-    // ✅ ADMIN BYPASS
-  if (await isAdmin(member)) return false;
+async function isBlocked(arg1, arg2, arg3) {
+  let guildId, userId, command, member;
 
-  // 🔍 Check global block
+  // 🔹 Slash / interaction style
+  if (typeof arg1 === "object") {
+    ({ guildId, userId, command, member } = arg1);
+  }
+  // 🔹 Prefix / noprefix style
+  else {
+    guildId = arg1;
+    userId = arg2;
+    command = arg3;
+  }
+
+  if (!guildId || !userId || !command) return false;
+
+  // 🟢 SAFE COMMANDS BYPASS
+  if (SAFE_COMMANDS.includes(command)) return false;
+
+  // ✅ ADMIN / OWNER BYPASS
+  if (isAdmin(member)) return false;
+
+  // 🔍 Global block
   const globalBlock = await BlockedUser.findOne({
     guildId,
     userId,
     command: "*",
   });
-
   if (globalBlock) return true;
 
-  // 🔍 Check command-specific block
+  // 🔍 Command-specific block
   const commandBlock = await BlockedUser.findOne({
     guildId,
     userId,
