@@ -232,13 +232,25 @@ try {
   const command = client.commands.get(commandName);
   if (!command) return;
 
-  // Optional block system
-  if (
-    blockHelpers?.isBlocked &&
-    blockHelpers.isBlocked(message.guild.id, message.author.id, commandName)
-  ) {
-    return message.reply("🚫 You are blocked from using this command.");
-  }
+const isBlocked = await blockHelpers.isBlocked({
+  guildId: message.guild.id,
+  userId: message.author.id,
+  command: commandName,
+  member: message.member,
+});
+
+if (isBlocked) {
+  return safeReply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor("Red")
+        .setTitle("🚫 Command Blocked")
+        .setDescription(
+          `You are blocked from using **${commandName}**.`
+        ),
+    ],
+  });
+}
 
   // Execute
   const fakeInteraction = {
