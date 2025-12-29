@@ -90,7 +90,7 @@ client.distube
 // ====================
 // 📦 Load Utilities
 const { getPrefixes, savePrefixes, getAutorole, saveAutorole } = require("./utils/storage");
-const blockHelpers = require("./utils/block");
+const blockHelpers = require("./utils/blockHelpers");
 const { uploadTranscript } = require("./utils/transcriptUploader");
 
 // ====================
