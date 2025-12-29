@@ -2,8 +2,8 @@ const BlockedUser = require("../models/BlockedUser");
 const { PermissionFlagsBits } = require("discord.js");
 
 const SAFE_COMMANDS = [
-  "block",
-  "unblock",
+  "blockcommand",
+  "unblockcommand",
   "listblocked",
 ];
 
