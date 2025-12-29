@@ -17,24 +17,35 @@ module.exports = (client, blockHelpers) => {
     try {
 
       // ---------- Slash Commands ----------
-      if (interaction.isChatInputCommand()) {
+if (interaction.isChatInputCommand()) {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  const safeReply = async (options) => {
-    try {
-      if (!interaction.deferred && !interaction.replied) {
-        return await interaction.reply(options);
-      } else if (interaction.deferred && !interaction.replied) {
-        return await interaction.editReply(options);
-      } else {
-        return await interaction.followUp(options);
-      }
-    } catch (e) {
-      console.error("safeReply error:", e);
-    }
-  };
+  // 🔐 BLOCK CHECK (RIGHT PLACE)
+  if (blockHelpers?.isBlocked) {
+    const blocked = await blockHelpers.isBlocked({
+      guildId: interaction.guild.id,
+      userId: interaction.user.id,
+      command: interaction.commandName,
+      member: interaction.member,
+    });
 
+    if (blocked) {
+      return safeReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Red")
+            .setTitle(" Command Blocked")
+            .setDescription(
+              `You are blocked from using **${interaction.commandName}**.`
+            ),
+        ],
+        ephemeral: true,
+      });
+    }
+  }
+
+  // ✅ EXECUTE COMMAND
   try {
     await command.execute({
       client,
@@ -49,7 +60,7 @@ module.exports = (client, blockHelpers) => {
   }
 
   return;
-      }
+}
       // ---------- Context Menus ----------
       if (interaction.isUserContextMenuCommand() || interaction.isMessageContextMenuCommand()) {
         const command = client.commands.get(interaction.commandName);
