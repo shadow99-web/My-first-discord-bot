@@ -19,7 +19,7 @@ const RankSettings = require("../models/RankSettings");
 const { getNoPrefix } = require("../Handlers/noPrefixHandler");
 const { PermissionFlagsBits } = require("discord.js");
 
-module.exports = function (client, getPrefixes, blockHelpers) {
+module.exports = function (client, getPrefixes, savePrefixes, blockHelpers) {
   client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
