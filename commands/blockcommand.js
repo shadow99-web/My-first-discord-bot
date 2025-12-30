@@ -4,7 +4,7 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 
-const { blockUser } = require("../Helpers/blockHelpers"); // ✅ correct import
+const { blockUser } = require("../utils/blockHelpers"); // ✅ correct import
 
 module.exports = {
   name: "blockcommand",
