@@ -230,8 +230,39 @@ try {
   if (!commandName) return;
 
   const command = client.commands.get(commandName);
-  if (!command) return;
+if (!command) return;
 
+// ================= FAKE INTERACTION =================
+const fakeInteraction = {
+  isFake: true,
+  guild: message.guild,
+  user: message.author,
+  member: message.member,
+  channel: message.channel,
+
+  options: new FakeOptions(args, message),
+
+  replied: false,
+  deferred: false,
+
+  reply: async (payload) => {
+    fakeInteraction.replied = true;
+    return message.reply(payload);
+  },
+  deferReply: async () => {},
+  editReply: async (payload) => message.reply(payload),
+};
+
+// ================= SAFE REPLY =================
+const safeReply = async (payload) => {
+  if (fakeInteraction.replied) {
+    return message.channel.send(payload);
+  }
+  fakeInteraction.replied = true;
+  return message.reply(payload);
+};
+
+// ================= BLOCK CHECK =================
 const isBlocked = await blockHelpers.isBlocked({
   guildId: message.guild.id,
   userId: message.author.id,
@@ -245,55 +276,17 @@ if (isBlocked) {
       new EmbedBuilder()
         .setColor("Red")
         .setTitle("🚫 Command Blocked")
-        .setDescription(
-          `You are blocked from using **${commandName}**.`
-        ),
+        .setDescription(`You are blocked from using **${commandName}**.`),
     ],
   });
 }
 
-  // Execute
-  const fakeInteraction = {
-    isFake: true,
-    guild: message.guild,
-    user: message.author,
-    member: message.member,
-    channel: message.channel,
-
-    options: new FakeOptions(args, message), // ✅ critical
-
-    replied: false,
-    deferred: false,
-
-    reply: async (payload) => {
-      fakeInteraction.replied = true;
-      return message.reply(payload);
-    },
-    deferReply: async () => {},
-    editReply: async (payload) => message.reply(payload),
-  };
-
-  const safeReply = async (payload) => {
-    if (fakeInteraction.replied) {
-      return message.channel.send(payload);
-    }
-    fakeInteraction.replied = true;
-    return message.reply(payload);
-  };
-
-  await command.execute({
-    client,
-    message,
-    interaction: fakeInteraction, // ✅ interaction.options EXISTS
-    safeReply,
-    args,
-    isPrefix: true,
-  });
-} catch (err) {
-  console.error("❌ Command Error:", err);
-  await message
-    .reply("⚠️ Something went wrong executing this command.")
-    .catch(() => {});
-}
-  });
-};
+// ================= EXECUTE COMMAND =================
+await command.execute({
+  client,
+  message,
+  interaction: fakeInteraction,
+  safeReply,
+  args,
+  isPrefix: true,
+});
