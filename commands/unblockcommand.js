@@ -1,45 +1,74 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const { removeBlock } = require("../blockManager"); // ✅ Import from blockManager
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  PermissionFlagsBits,
+} = require("discord.js");
+
+const { unblockUser } = require("../utils/blockHelpers"); // ✅ correct helper
 
 module.exports = {
-    name: "unblockcommand",
-    description: "Unblock a user from a specific command",
-    data: new SlashCommandBuilder()
-        .setName("unblockcommand")
-        .setDescription("Unblock a user from a specific command")
-        .addUserOption(opt => opt.setName("user").setDescription("User to unblock").setRequired(true))
-        .addStringOption(opt => opt.setName("command").setDescription("Command name").setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  name: "unblockcommand",
+  description: "Unblock a user from a specific command",
 
-    async execute(context) {
-        const guild = context.isPrefix ? context.message.guild : context.interaction.guild;
-        const author = context.isPrefix ? context.message.author : context.interaction.user;
+  data: new SlashCommandBuilder()
+    .setName("unblockcommand")
+    .setDescription("Unblock a user from a specific command")
+    .addUserOption(opt =>
+      opt.setName("user")
+        .setDescription("User to unblock")
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("command")
+        .setDescription("Command name or *")
+        .setRequired(true)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-        const user = context.isPrefix
-            ? context.message.mentions.users.first()
-            : context.interaction.options.getUser("user");
+  async execute(context) {
+    const guild = context.isPrefix
+      ? context.message.guild
+      : context.interaction.guild;
 
-        const commandName = context.isPrefix
-            ? context.args[1]?.toLowerCase()
-            : context.interaction.options.getString("command").toLowerCase();
+    const author = context.isPrefix
+      ? context.message.author
+      : context.interaction.user;
 
-        if (!user || !commandName) {
-            return context.isPrefix
-                ? context.message.reply("❌ Usage: `!unblockcommand @user <command>`")
-                : context.interaction.reply({ content: "❌ Please provide both user and command.", ephemeral: true });
-        }
+    const user = context.isPrefix
+      ? context.message.mentions.users.first()
+      : context.interaction.options.getUser("user");
 
-        removeBlock(guild.id, commandName, user.id);
+    const commandName = context.isPrefix
+      ? context.args[1]?.toLowerCase()
+      : context.interaction.options.getString("command")?.toLowerCase();
 
-        const embed = new EmbedBuilder()
-            .setColor("Green")
-            .setTitle("🔓 Command Unblocked")
-            .setDescription(`User ${user} has been **unblocked** for \`${commandName}\`.`)
-            .setFooter({ text: `Unblocked by ${author.tag}` })
-            .setTimestamp();
-
-        context.isPrefix
-            ? context.message.reply({ embeds: [embed] })
-            : context.interaction.reply({ embeds: [embed] });
+    if (!user || !commandName) {
+      return context.isPrefix
+        ? context.message.reply("❌ Usage: `!unblockcommand @user <command>`")
+        : context.interaction.reply({
+            content: "❌ Please provide both user and command.",
+            ephemeral: true,
+          });
     }
+
+    // ✅ UNBLOCK (MongoDB)
+    await unblockUser({
+      guildId: guild.id,
+      userId: user.id,
+      command: commandName,
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor("Green")
+      .setTitle("🔓 Command Unblocked")
+      .setDescription(
+        `${user} has been **unblocked** for \`${commandName}\`.`
+      )
+      .setFooter({ text: `Unblocked by ${author.tag}` })
+      .setTimestamp();
+
+    context.isPrefix
+      ? context.message.reply({ embeds: [embed] })
+      : context.interaction.reply({ embeds: [embed] });
+  },
 };
