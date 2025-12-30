@@ -14,8 +14,8 @@ async function handleTruthDare(interaction, safeReply) {
 
     // Create embed
     const embed = new EmbedBuilder()
-      .setTitle(`♥ ${type.toUpperCase()}`)
-      .setDescription(`${interaction.user} got: ${data.question || data.text}`)
+      .setTitle(`<:k_:1455575860697497612> ${interaction.user.displayAvatarURL()} ${type.toUpperCase()}`)
+      .setDescription(` ${data.question || data.text}`)
       .setColor(type === "truth" ? "Blue" : type === "dare" ? "Red" : "Random")
       .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
       .setTimestamp();
