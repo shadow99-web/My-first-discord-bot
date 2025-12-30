@@ -290,3 +290,11 @@ await command.execute({
   args,
   isPrefix: true,
 });
+} catch (err) {
+  console.error("❌ Command Error:", err);
+  await message
+    .reply("⚠️ Something went wrong executing this command.")
+    .catch(() => {});
+}
+  }); // 🔴 closes client.on("messageCreate")
+};    // 🔴 closes module.exports
