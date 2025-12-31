@@ -34,6 +34,25 @@ module.exports = {
       ? context.message.author
       : context.interaction.user;
 
+// 🔐 USER PERMISSION CHECK (ADMIN / DEV ONLY)
+  const isDev = author.id === process.env.DEV_ID;
+  const isAdmin = context.isPrefix
+    ? guild.members.cache.get(author.id)?.permissions.has(
+        PermissionFlagsBits.Administrator
+      )
+    : context.interaction.memberPermissions?.has(
+        PermissionFlagsBits.Administrator
+      );
+
+  if (!isAdmin && !isDev) {
+    return context.isPrefix
+      ? context.message.reply("<a:a_:1455571086988017705> Only **Admins** can use this command.")
+      : context.interaction.reply({
+          content: "<a:a_:1455571086988017705> Only **Admins** can use this command.",
+          ephemeral: true,
+        });
+  }
+    
     // 🛡 Permission check
     if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return context.isPrefix
@@ -70,6 +89,22 @@ module.exports = {
           });
     }
 
+const alreadyBlocked = await require("../utils/blockHelpers").isBlocked({
+  guildId: guild.id,
+  userId: user.id,
+  command: commandName,
+  member: null,
+});
+
+if (alreadyBlocked) {
+  return context.isPrefix
+    ? context.message.reply("⚠️ This user is already blocked from that command.")
+    : context.interaction.reply({
+        content: "⚠️ This user is already blocked from that command.",
+        ephemeral: true,
+      });
+}
+    
     // ✅ BLOCK USER (MongoDB)
     await blockUser({
       guildId: guild.id,
