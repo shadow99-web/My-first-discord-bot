@@ -16,9 +16,9 @@ module.exports = {
         .setDescription("Your choice (rock, paper, or scissors)")
         .setRequired(true)
         .addChoices(
-          { name: "🪨 Rock", value: "rock" },
-          { name: "📄 Paper", value: "paper" },
-          { name: "✂️ Scissors", value: "scissors" }
+          { name: "<:rock:1456687750572015739> Rock", value: "rock" },
+          { name: "<:paper:1456687994281918567> Paper", value: "paper" },
+          { name: "<:scissors:1456687864178937878> Scissors", value: "scissors" }
         )
     ),
 
@@ -38,9 +38,9 @@ module.exports = {
     if (isSlash) await context.interaction.deferReply();
 
     const emojis = {
-      rock: "🪨",
-      paper: "📄",
-      scissors: "✂️",
+      rock: "<:rock:1456687750572015739>",
+      paper: "<:paper:1456687994281918567>",
+      scissors: "<:scissors:1456687864178937878>",
     };
 
     // Function to determine winner
@@ -63,17 +63,17 @@ module.exports = {
 
     const resultText =
       result === "win"
-        ? "🎉 You Win!"
+        ? " <:flex:1438921687671509163> You Win!"
         : result === "lose"
-        ? "😢 You Lose!"
-        : "🤝 It's a Draw!";
+        ? "<:SkeleWhy:1435682161448587315> You Lose!"
+        : "<:red:1401550684892958720> It's a Draw!";
 
     const embed = new EmbedBuilder()
-      .setTitle("🎮 Rock Paper Scissors")
+      .setTitle("<:k_:1455575860697497612> Rock Paper Scissors")
       .setDescription(
         `**You:** ${emojis[userChoice]} (${userChoice})\n` +
         `**AI:** ${emojis[aiChoice]} (${aiChoice})\n\n` +
-        `🧩 **Result:** ${resultText}`
+        `<a:hearts:1455574437607903458> **Result:** ${resultText}`
       )
       .setColor(result === "win" ? 0x57F287 : result === "lose" ? 0xED4245 : 0xFEE75C)
       .setTimestamp();
@@ -82,15 +82,15 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("rps_rock")
-        .setLabel("🪨 Rock")
+        .setLabel(" Rock")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("rps_paper")
-        .setLabel("📄 Paper")
+        .setLabel(" Paper")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("rps_scissors")
-        .setLabel("✂️ Scissors")
+        .setLabel(" Scissors")
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -113,17 +113,17 @@ module.exports = {
 
       const newText =
         newResult === "win"
-          ? "🎉 You Win!"
+          ? "<:flex:1438921687671509163> You Win!"
           : newResult === "lose"
-          ? "😢 You Lose!"
-          : "🤝 It's a Draw!";
+          ? "<:SkeleWhy:1435682161448587315> You Lose!"
+          : "<:red:1401550684892958720> It's a Draw!";
 
       const newEmbed = new EmbedBuilder()
-        .setTitle("🎮 Rock Paper Scissors")
+        .setTitle("<:k_:1455575860697497612> Rock Paper Scissors")
         .setDescription(
           `**You:** ${emojis[newChoice]} (${newChoice})\n` +
           `**AI:** ${emojis[newAIChoice]} (${newAIChoice})\n\n` +
-          `🧩 **Result:** ${newText}`
+          `<a:hearts:1455574437607903458> **Result:** ${newText}`
         )
         .setColor(
           newResult === "win"
