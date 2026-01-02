@@ -16,9 +16,9 @@ module.exports = {
         .setDescription("Your choice (rock, paper, or scissors)")
         .setRequired(true)
         .addChoices(
-          { name: "<:rock:1456687750572015739> Rock", value: "rock" },
-          { name: "<:paper:1456687994281918567> Paper", value: "paper" },
-          { name: "<:scissors:1456687864178937878> Scissors", value: "scissors" }
+          { name: " Rock", value: "rock" },
+          { name: " Paper", value: "paper" },
+          { name: " Scissors", value: "scissors" }
         )
     ),
 
