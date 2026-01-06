@@ -17,8 +17,14 @@ async function getSticky(channelId) {
   return StickyMessage.findOne({ channelId });
 }
 
+/* ✅ NEW */
+async function listStickies(guildId) {
+  return StickyMessage.find({ guildId });
+}
+
 module.exports = {
   addSticky,
   removeSticky,
   getSticky,
+  listStickies,
 };
