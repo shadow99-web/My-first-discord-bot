@@ -105,7 +105,7 @@ const rankDisabled = rankSettings && rankSettings.enabled === false;
     }
 
     await userData.save();
-
+    }
     /* =======================================================
        🔵 AFK SYSTEM
     ======================================================= */
