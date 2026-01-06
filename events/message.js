@@ -187,7 +187,36 @@ const replyText =
     } catch (err) {
       console.error("❌ Autoresponse failed:", err);
     }
+// ---------- STICKY MESSAGE SYSTEM ----------
+try {
+  const { getSticky } = require("../utils/stickyHelpers");
+  const sticky = await getSticky(message.channel.id);
 
+  // No sticky in this channel
+  if (!sticky) {
+    // continue normally
+  } else if (!message.author.bot) {
+    // Delete previous sticky if exists
+    if (sticky.lastMessageId) {
+      const oldMsg = await message.channel.messages
+        .fetch(sticky.lastMessageId)
+        .catch(() => null);
+
+      if (oldMsg) await oldMsg.delete().catch(() => {});
+    }
+
+    // Send new sticky
+    const sent = await message.channel.send({
+      content: `📌 **Sticky Message**\n${sticky.message}`,
+    });
+
+    // Save new sticky message ID
+    sticky.lastMessageId = sent.id;
+    await sticky.save();
+  }
+} catch (err) {
+  console.error("❌ Sticky system error:", err);
+}
 // ---------- Prefix + NoPrefix Commands ----------
 try {
   const prefixes = getPrefixes?.() || {};
