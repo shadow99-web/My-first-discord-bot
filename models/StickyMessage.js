@@ -1,10 +1,17 @@
+// models/StickyMessage.js
 const mongoose = require("mongoose");
 
-const stickySchema = new mongoose.Schema({
+const StickySchema = new mongoose.Schema({
   guildId: String,
   channelId: String,
   message: String,
   authorId: String,
+
+  // 👇 REQUIRED for repost system
+  lastMessageId: {
+    type: String,
+    default: null,
+  },
 });
 
-module.exports = mongoose.model("StickyMessage", stickySchema);
+module.exports = mongoose.model("StickyMessage", StickySchema);
