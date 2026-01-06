@@ -209,25 +209,41 @@ try {
       const fakeInteraction = {
   isFake: true,
   guild: message.guild,
+  channel: message.channel,
   user: message.author,
   member: message.member,
-  channel: message.channel,
-  options: new FakeOptions(parsedArgs, message),
+  client: message.client,
   replied: false,
+  createdTimestamp: message.createdTimestamp, // needed for ping latency
+  options: new FakeOptions(parsedArgs, message),
 
+  // Reply to the message
   reply: async (payload) => {
     fakeInteraction.replied = true;
     return message.reply(payload);
   },
 
+  // Defer reply (like interaction.deferReply())
   deferReply: async () => {
     fakeInteraction.replied = true;
+    // optional: could send a typing indicator
+    await message.channel.sendTyping();
     return;
   },
 
+  // Edit reply (like interaction.editReply())
   editReply: async (payload) => {
+    // safest: just reply for now
     return message.reply(payload);
   },
+
+  // For ping commands or other that use interaction.fetchReply()
+  fetchReply: async () => {
+    return message;
+  },
+
+  // In case some commands check if it is a DM or guild
+  isCommand: true,
 };
       const isBlocked = await blockHelpers.isBlocked({
         guildId,
