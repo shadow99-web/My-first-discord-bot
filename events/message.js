@@ -207,7 +207,7 @@ try {
 
     // Send new sticky
     const sent = await message.channel.send({
-      content: `📌 **Sticky Message**\n${sticky.message}`,
+      content: `<a:dot:1456901127890141290> **Sticky Message**\n${sticky.message}`,
     });
 
     // Save new sticky message ID
