@@ -207,16 +207,28 @@ try {
       if (!command) return;
 
       const fakeInteraction = {
-        isFake: true,
-        guild: message.guild,
-        user: message.author,
-        member: message.member,
-        channel: message.channel,
-        options: new FakeOptions(parsedArgs, message),
-        replied: false,
-        reply: async (p) => message.reply(p),
-      };
+  isFake: true,
+  guild: message.guild,
+  user: message.author,
+  member: message.member,
+  channel: message.channel,
+  options: new FakeOptions(parsedArgs, message),
+  replied: false,
 
+  reply: async (payload) => {
+    fakeInteraction.replied = true;
+    return message.reply(payload);
+  },
+
+  deferReply: async () => {
+    fakeInteraction.replied = true;
+    return;
+  },
+
+  editReply: async (payload) => {
+    return message.reply(payload);
+  },
+};
       const isBlocked = await blockHelpers.isBlocked({
         guildId,
         userId,
