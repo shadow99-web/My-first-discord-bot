@@ -206,7 +206,7 @@ try {
   }
 
   const sent = await message.channel.send({
-    content: `<a:dot:1456901127890141290> **Sticky Message**\n${sticky.message}`,
+    content: `<a:dot:1456901127890141290> **__Sticky Message__**\n${sticky.message}`,
   });
 
   sticky.lastMessageId = sent.id;
