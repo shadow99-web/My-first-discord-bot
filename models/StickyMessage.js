@@ -1,17 +1,44 @@
 // models/StickyMessage.js
 const mongoose = require("mongoose");
 
-const StickySchema = new mongoose.Schema({
-  guildId: String,
-  channelId: String,
-  message: String,
-  authorId: String,
+const StickySchema = new mongoose.Schema(
+  {
+    guildId: {
+      type: String,
+      required: true,
+      index: true,
+    },
 
-  // 👇 REQUIRED for repost system
-  lastMessageId: {
-    type: String,
-    default: null,
+    channelId: {
+      type: String,
+      required: true,
+      index: true,
+    },
+
+    message: {
+      type: String,
+      required: true,
+    },
+
+    authorId: {
+      type: String,
+      required: true,
+    },
+
+    // 👇 Sticky repost system
+    lastMessageId: {
+      type: String,
+      default: null,
+    },
+
+    lastAuthorId: {
+      type: String,
+      default: null,
+    },
   },
-});
+  {
+    timestamps: true, // optional but recommended
+  }
+);
 
 module.exports = mongoose.model("StickyMessage", StickySchema);
