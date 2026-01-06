@@ -48,8 +48,8 @@ module.exports = function (client, getPrefixes, savePrefixes, blockHelpers) {
       parsedArgs = isPrefixed
         ? content.slice(guildPrefix.length).trim().split(/ +/)
         : content.split(/ +/);
-
-      parsedCommand = parsedArgs.shift()?.toLowerCase();
+const cmd = parsedArgs.shift();
+parsedCommand = cmd ? cmd.toLowerCase() : null;
     }
 
     /* =======================================================
