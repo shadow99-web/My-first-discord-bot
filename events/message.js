@@ -149,7 +149,7 @@ const rankDisabled = rankSettings && rankSettings.enabled === false;
           messages: [{ role: "user", content: message.content }],
         });
         await message.reply(msg.content?.[0]?.text || "🤖 ...");
-        return;
+      
       }
     } catch (e) {
       console.error("❌ Chatbot Error:", e);
@@ -163,7 +163,6 @@ const rankDisabled = rankSettings && rankSettings.enabled === false;
         const response = await getResponse(guildId, message.content);
         if (response) {
           await message.channel.send(response);
-          return;
         }
       }
     } catch {}
@@ -238,9 +237,9 @@ try {
   },
 
   // For ping commands or other that use interaction.fetchReply()
-  fetchReply: async () => {
-    return message;
-  },
+  fetchReply: async () => ({
+  createdTimestamp: Date.now(),
+}),
 
   // In case some commands check if it is a DM or guild
   isCommand: true,
