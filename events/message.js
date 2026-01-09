@@ -77,15 +77,23 @@ const rankDisabled = rankSettings && rankSettings.enabled === false;
       const background =
         rankChannelData?.background || "color:#F2F3F5";
 
-      const rank = new canvacord.Rank()
-        .setAvatar(message.author.displayAvatarURL({ extension: "png", size: 256 }))
-        .setUsername(message.author.tag)
-        .setLevel(userData.level)
-        .setCurrentXP(userData.xp)
-        .setRequiredXP(nextLevelXP)
-        .setRank(0)
-        .setProgressBar("#00FFFF");
+      const discriminator =
+  message.author.discriminator && message.author.discriminator !== "0"
+    ? message.author.discriminator
+    : "0000";
 
+const rank = new canvacord.Rank()
+  .setAvatar(
+    message.author.displayAvatarURL({ extension: "png", size: 256 })
+  )
+  .setUsername(message.author.username || "Unknown")
+  .setDiscriminator(discriminator) // ✅ REQUIRED
+  .setLevel(userData.level)
+  .setCurrentXP(userData.xp)
+  .setRequiredXP(nextLevelXP)
+  .setRank(0)
+  .setProgressBar("#00FFFF");
+    
       if (background.startsWith("http")) {
         rank.setBackground("IMAGE", background);
       } else {
