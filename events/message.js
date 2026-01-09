@@ -79,7 +79,7 @@ const rankDisabled = rankSettings && rankSettings.enabled === false;
 
       const rank = new canvacord.Rank()
         .setAvatar(message.author.displayAvatarURL({ extension: "png", size: 256 }))
-        .setUsername(message.author.username || "Unknown")
+        .setUsername(message.author.tag)
         .setLevel(userData.level)
         .setCurrentXP(userData.xp)
         .setRequiredXP(nextLevelXP)
