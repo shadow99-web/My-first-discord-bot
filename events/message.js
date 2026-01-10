@@ -37,9 +37,18 @@ module.exports = function (client, getPrefixes, savePrefixes, blockHelpers) {
     const isAdmin =
       message.member.permissions.has(PermissionFlagsBits.Administrator) ||
       message.guild.ownerId === message.author.id;
+   
+    const DEV_ID = process.env.DEV_ID;
+const isDeveloper = message.author.id === DEV_ID;
 
-    const isNoPrefix = noPrefixEnabled && isAdmin;
-    const isCommand = isPrefixed || isNoPrefix;
+    const firstWord = content.split(/ +/)[0].toLowerCase();
+
+const canUseNoPrefix =
+  noPrefixEnabled && (isAdmin || isDeveloper);
+
+const isCommand =
+  isPrefixed ||
+  (canUseNoPrefix && client.commands.has(firstWord));
 
     let parsedCommand = null;
     let parsedArgs = null;
