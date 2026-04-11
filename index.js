@@ -10,7 +10,6 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = requir
 const http = require("http");
 const fs = require("fs");
 const mongoose = require("mongoose");
-client.quoteStates = new Map();
 
 // ====================
 // 🔌 Connect MongoDB safely
@@ -61,6 +60,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+client.quoteStates = new Map();
 client.commands = new Collection();
 client.snipes = new Map();
 client.afk = new Map();
