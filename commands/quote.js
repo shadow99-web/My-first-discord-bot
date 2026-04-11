@@ -60,7 +60,7 @@ module.exports = {
       font: "default"
     };
 
-    const buffer = await generateQuote(user, text, state);
+    const buffer = await generateQuote(user, state);
 
 const row1 = new ActionRowBuilder().addComponents(
   new ButtonBuilder().setCustomId("q_invert").setEmoji("☀️").setStyle(ButtonStyle.Secondary),
@@ -86,10 +86,13 @@ const row2 = new ActionRowBuilder().addComponents(
         ])
     );
 
-    const replyFn =
-      interaction && !interaction.isFake
-        ? (data) => interaction.reply(data)
-        : (data) => message.reply(data);
+const replyFn =
+  interaction && !interaction.isFake
+    ? async (data) => {
+        await interaction.reply(data);
+        return await interaction.fetchReply(); // ✅ FIX
+      }
+    : (data) => message.reply(data);
 
 const sent = await replyFn({
   files: [{ attachment: buffer, name: "quote.png" }],
