@@ -50,6 +50,7 @@ module.exports = {
 
     const state = {
       text,
+      userId: user.id,
       invertBg: false,
       sharpen: false,
       flipText: false,
