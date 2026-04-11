@@ -1,11 +1,20 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require("discord.js");
+const { 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  StringSelectMenuBuilder 
+} = require("discord.js");
+
+const { generateQuote } = require("../utils/quoteGenerator");
 
 module.exports = {
   name: "quote",
   async execute({ message, args, client }) {
+
     const text = args.join(" ") || "No text";
 
     const state = {
+      text, // ✅ STORE TEXT
       invertBg: false,
       sharpen: false,
       flipText: false,
@@ -19,19 +28,19 @@ module.exports = {
     const buffer = await generateQuote(message.author, text, state);
 
     const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("invert").setLabel("☀️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("sharpen").setLabel("🎨").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("flip").setLabel("🔄").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("landscape").setLabel("🖼️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("blur").setLabel("💧").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("bright").setLabel("🔆").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("pixel").setLabel("🔳").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("reset").setLabel("🗑️").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("q_invert").setEmoji("☀️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_sharpen").setEmoji("🎨").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_flip").setEmoji("🔄").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_landscape").setEmoji("🖼️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_blur").setEmoji("💧").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_bright").setEmoji("🔆").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_pixel").setEmoji("🔳").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("q_reset").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
     );
 
     const fonts = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
-        .setCustomId("font")
+        .setCustomId("q_font") // ✅ FIXED
         .setPlaceholder("Select a font")
         .addOptions([
           { label: "Default", value: "default" },
@@ -44,6 +53,8 @@ module.exports = {
       files: [{ attachment: buffer, name: "quote.png" }],
       components: [buttons, fonts]
     });
+
+    if (!client.quoteStates) client.quoteStates = new Map();
 
     client.quoteStates.set(sent.id, state);
   }
