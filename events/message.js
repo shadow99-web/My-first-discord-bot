@@ -278,14 +278,21 @@ try {
         });
       }
 
-      await command.execute({
-        client,
-        message,
-        interaction: fakeInteraction,
-        safeReply: (p) => message.reply(p),
-        args: parsedArgs,
-        isPrefix: isPrefixed,
-      });
+await command.execute({
+  client,
+  message,
+  interaction: fakeInteraction,
+  safeReply: (p) => message.reply(p),
+  args: parsedArgs,
+  isPrefix: isPrefixed,
+
+  // ✅ ADD THIS
+  repliedMessage: message.reference
+    ? await message.channel.messages
+        .fetch(message.reference.messageId)
+        .catch(() => null)
+    : null,
+});
     } catch (err) {
       console.error("❌ Command Error:", err);
     }
