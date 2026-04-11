@@ -107,7 +107,10 @@ if (interaction.isButton()) {
         state.pixelate = false;
       }
 
-      const buffer = await generateQuote(interaction.user, state);
+      const originalUser =
+  client.users.cache.get(state.userId) || interaction.user;
+
+const buffer = await generateQuote(originalUser, state);
 
       await interaction.update({
         files: [{ attachment: buffer, name: "quote.png" }]
@@ -154,7 +157,10 @@ if (interaction.isStringSelectMenu()) {
 
       state.font = interaction.values[0];
 
-      const buffer = await generateQuote(interaction.user, state);
+const originalUser =
+  client.users.cache.get(state.userId) || interaction.user;
+
+const buffer = await generateQuote(originalUser, state);
 
       await interaction.update({
         files: [{ attachment: buffer, name: "quote.png" }]
