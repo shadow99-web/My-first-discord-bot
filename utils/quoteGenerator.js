@@ -41,7 +41,8 @@ async function generateQuote(user, state) {
   ctx.textAlign = "center";
 
   const maxWidth = width / 2 - 40;
-  let words = state.text.split(" ");
+  const text = state.text || "No text";
+  let words = text.split(" ");
   let lines = [];
   let current = "";
 
