@@ -2,40 +2,41 @@ const {
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle, 
-  StringSelectMenuBuilder 
+  StringSelectMenuBuilder,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const { generateQuote } = require("../utils/quoteGenerator");
 
 module.exports = {
   name: "quote",
-  description: "Create a quote",
 
-  options: [
-    {
-      name: "text",
-      type: 3, // STRING
-      description: "Text for the quote",
-      required: false
-    }
-  ],
+  // ✅ THIS MAKES IT SLASH COMMAND
+  data: new SlashCommandBuilder()
+    .setName("quote")
+    .setDescription("Create a quote")
+    .addStringOption(option =>
+      option
+        .setName("text")
+        .setDescription("Text for the quote")
+        .setRequired(false)
+    ),
 
   async execute({ message, interaction, args, client, repliedMessage }) {
 
-    // 🎯 GET TEXT (priority system)
     let text;
 
-    // 1. Reply message (prefix)
+    // ✅ 1. Reply message (prefix)
     if (repliedMessage) {
       text = repliedMessage.content;
     }
 
-    // 2. Slash command input
+    // ✅ 2. Slash command
     else if (interaction && !interaction.isFake) {
       text = interaction.options.getString("text");
     }
 
-    // 3. Prefix args
+    // ✅ 3. Prefix args
     else {
       text = args.join(" ");
     }
@@ -83,9 +84,10 @@ module.exports = {
         ])
     );
 
-    const replyFn = interaction && !interaction.isFake
-      ? (data) => interaction.reply(data)
-      : (data) => message.reply(data);
+    const replyFn =
+      interaction && !interaction.isFake
+        ? (data) => interaction.reply(data)
+        : (data) => message.reply(data);
 
     const sent = await replyFn({
       files: [{ attachment: buffer, name: "quote.png" }],
