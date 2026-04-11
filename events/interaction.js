@@ -75,9 +75,46 @@ if (interaction.isChatInputCommand()) {
       }
 
       // ---------- Buttons ----------
-      if (interaction.isButton()) {
+// ---------- Buttons ----------
+if (interaction.isButton()) {
   try {
     const id = interaction.customId;
+
+    // =========================
+    // 🖼️ QUOTE BUTTON SYSTEM
+    // =========================
+    if (id.startsWith("q_")) {
+      const { generateQuote } = require("../utils/quoteGenerator");
+
+      const state = client.quoteStates?.get(interaction.message.id);
+      if (!state) return;
+
+      if (id === "q_invert") state.invertBg = !state.invertBg;
+      if (id === "q_sharpen") state.sharpen = !state.sharpen;
+      if (id === "q_flip") state.flipText = !state.flipText;
+      if (id === "q_landscape") state.landscape = !state.landscape;
+      if (id === "q_blur") state.blur = !state.blur;
+      if (id === "q_bright") state.brightness = !state.brightness;
+      if (id === "q_pixel") state.pixelate = !state.pixelate;
+
+      if (id === "q_reset") {
+        state.invertBg = false;
+        state.sharpen = false;
+        state.flipText = false;
+        state.landscape = false;
+        state.blur = false;
+        state.brightness = false;
+        state.pixelate = false;
+      }
+
+      const buffer = await generateQuote(interaction.user, state);
+
+      await interaction.update({
+        files: [{ attachment: buffer, name: "quote.png" }]
+      });
+
+      return; // VERY IMPORTANT
+    }
 
     // 🎟️ Ticket system
     if (id === "ticket_close_button") {
@@ -85,9 +122,13 @@ if (interaction.isChatInputCommand()) {
       return;
     }
 
-    // ♟️ Chess game buttons
+    // ♟️ Chess buttons
     const chess = client.commands.get("chess");
-    if (chess && ["select", "resign", "cancel"].some((x) => id.startsWith(x)) || id.startsWith("move_")) {
+    if (
+      chess &&
+      (["select", "resign", "cancel"].some((x) => id.startsWith(x)) ||
+        id.startsWith("move_"))
+    ) {
       await chess.handleButton?.(interaction, client);
       return;
     }
@@ -97,17 +138,43 @@ if (interaction.isChatInputCommand()) {
     await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
   }
   return;
-      }
+}
       // ---------- Select Menus ----------
-      if (interaction.isStringSelectMenu()) {
-        try {
-          if (interaction.customId === "ticket_menu") await handleTicketMenu(interaction, safeReply);
-        } catch (err) {
-          console.error("❌ Select menu interaction error:", err);
-          await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
-        }
-        return;
-      }
+if (interaction.isStringSelectMenu()) {
+  try {
+
+    // =========================
+    // 🎨 FONT SELECT (QUOTE)
+    // =========================
+    if (interaction.customId === "q_font") {
+      const { generateQuote } = require("../utils/quoteGenerator");
+
+      const state = client.quoteStates?.get(interaction.message.id);
+      if (!state) return;
+
+      state.font = interaction.values[0];
+
+      const buffer = await generateQuote(interaction.user, state);
+
+      await interaction.update({
+        files: [{ attachment: buffer, name: "quote.png" }]
+      });
+
+      return;
+    }
+
+    // 🎟️ Ticket menu
+    if (interaction.customId === "ticket_menu") {
+      await handleTicketMenu(interaction, safeReply);
+      return;
+    }
+
+  } catch (err) {
+    console.error("❌ Select menu interaction error:", err);
+    await safeReply({ content: "⚠️ Something went wrong!", ephemeral: true });
+  }
+  return;
+}
 
       console.warn("⚠️ Unknown interaction type:", interaction.type);
 
