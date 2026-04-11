@@ -62,17 +62,19 @@ module.exports = {
 
     const buffer = await generateQuote(user, text, state);
 
-    const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("q_invert").setEmoji("☀️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_sharpen").setEmoji("🎨").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_flip").setEmoji("🔄").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_landscape").setEmoji("🖼️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_blur").setEmoji("💧").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_bright").setEmoji("🔆").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_pixel").setEmoji("🔳").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("q_reset").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
-    );
+const row1 = new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId("q_invert").setEmoji("☀️").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("q_sharpen").setEmoji("🎨").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("q_flip").setEmoji("🔄").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("q_landscape").setEmoji("🖼️").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("q_blur").setEmoji("💧").setStyle(ButtonStyle.Secondary)
+);
 
+const row2 = new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId("q_bright").setEmoji("🔆").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("q_pixel").setEmoji("🔳").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("q_reset").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
+);
     const fonts = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("q_font")
@@ -89,10 +91,10 @@ module.exports = {
         ? (data) => interaction.reply(data)
         : (data) => message.reply(data);
 
-    const sent = await replyFn({
-      files: [{ attachment: buffer, name: "quote.png" }],
-      components: [buttons, fonts]
-    });
+const sent = await replyFn({
+  files: [{ attachment: buffer, name: "quote.png" }],
+  components: [row1, row2, fonts] // ✅ FIXED
+});
 
     if (!client.quoteStates) client.quoteStates = new Map();
     client.quoteStates.set(sent.id, state);
